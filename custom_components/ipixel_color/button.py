@@ -86,12 +86,15 @@ class iPIXELUpdateButton(ButtonEntity):
                 _LOGGER.debug("Reconnecting to device for manual update")
                 await self._api.connect()
             
+            # Process escape sequences before sending to display
+            processed_text = text.replace('\\n', '\n').replace('\\t', '\t')
+            
             # Send text to display with current settings
-            success = await self._api.display_text(text, antialias, font_size, font_name, line_spacing)
+            success = await self._api.display_text(processed_text, antialias, font_size, font_name, line_spacing)
             
             if success:
                 _LOGGER.info("Manual display update successful: %s (font: %s, size: %s, antialias: %s, spacing: %spx)", 
-                           text, font_name or "Default", 
+                           processed_text, font_name or "Default", 
                            f"{font_size:.1f}px" if font_size else "Auto", antialias, line_spacing)
             else:
                 _LOGGER.error("Manual display update failed")
@@ -106,8 +109,8 @@ class iPIXELUpdateButton(ButtonEntity):
             entity_id = f"text.{self._name.lower().replace(' ', '_')}_display"
             state = self.hass.states.get(entity_id)
             if state and state.state not in ("unknown", "unavailable", ""):
-                # Process escape sequences (convert \\n to actual newlines)
-                return state.state.replace('\\n', '\n').replace('\\t', '\t')
+                # Return raw text - processing will be done in _update_display
+                return state.state
         except Exception as err:
             _LOGGER.debug("Could not get current text: %s", err)
         return None

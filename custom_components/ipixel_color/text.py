@@ -85,17 +85,17 @@ class iPIXELTextDisplay(TextEntity):
     async def async_set_value(self, value: str) -> None:
         """Set the text to display."""
         try:
-            # Process escape sequences (convert \\n to actual newlines)
-            processed_text = value.replace('\\n', '\n').replace('\\t', '\t')
-            
-            # Always update the current text value
-            self._current_text = processed_text
+            # Store the original text value (preserving \n as typed)
+            self._current_text = value
             
             # Check if auto-update is enabled
             auto_update = await self._get_auto_update_setting()
             if not auto_update:
                 _LOGGER.debug("Auto-update disabled - text stored but not sent to display. Use update button to refresh.")
                 return
+            
+            # Process escape sequences only when sending to display
+            processed_text = value.replace('\\n', '\n').replace('\\t', '\t')
             
             # Auto-update is enabled, proceed with display update
             await self._update_display(processed_text)
@@ -106,8 +106,16 @@ class iPIXELTextDisplay(TextEntity):
         except Exception as err:
             _LOGGER.error("Unexpected error while displaying text: %s", err)
 
-    async def _update_display(self, text: str) -> None:
-        """Update the physical display with text and current settings."""
+    async def _update_display(self, text: str | None = None) -> None:
+        """Update the physical display with text and current settings.
+        
+        Args:
+            text: Pre-processed text to display, or None to use stored text
+        """
+        if text is None:
+            # Use stored text and process escape sequences
+            text = self._current_text.replace('\\n', '\n').replace('\\t', '\t')
+            
         if not self._api.is_connected:
             _LOGGER.debug("Reconnecting to device before displaying text")
             await self._api.connect()

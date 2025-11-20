@@ -278,7 +278,7 @@ def get_optimal_font(draw: ImageDraw.Draw, lines: list[str],
     """
     # Compute theoretical optimal size based on text proportions
     # Start with a baseline font to measure proportions
-    baseline_size = 20.0
+    baseline_size = 100.0
     baseline_font = get_fixed_font(baseline_size, font_name)
     
     # Find the longest line to determine width constraint
