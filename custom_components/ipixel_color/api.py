@@ -253,8 +253,15 @@ class iPIXELAPI:
             data_crc = crc32(png_data) & 0xFFFFFFFF
             
             # 1. Enable DIY mode first (mode 1 = enter and clear current, show new)
-            diy_command = bytes([5, 0, 4, 1, 1])  # Changed to mode 1
-            await self._send_command(diy_command)
+            diy_command = bytes([5, 0, 4, 1, 1])
+            _LOGGER.debug("Sending DIY mode command: %s", diy_command.hex())
+            diy_success = await self._send_command(diy_command)
+            if not diy_success:
+                _LOGGER.error("DIY mode command failed")
+                return False
+            
+            # Small delay to let DIY mode activate
+            await asyncio.sleep(0.1)
             
             # 2. Build payload exactly like ipixel-ctrl
             payload = bytearray()
@@ -265,19 +272,23 @@ class iPIXELAPI:
             payload.append(0x01)  # Buffer number (screen 1)
             payload.extend(png_data)  # PNG data
             
-            # 3. Use common.make_payload equivalent (from ipixel-ctrl/commands/common.py)
+            # 3. Build complete command
             command = bytearray()
             total_length = len(payload) + 4  # +4 for length(2) + command(2)
             command.extend(total_length.to_bytes(2, 'little'))  # Length
             command.extend([0x02, 0x00])  # Command 0x0002
             command.extend(payload)  # Payload
             
+            _LOGGER.debug("Sending PNG command: length=%d, payload_size=%d", 
+                         total_length, len(payload))
+            _LOGGER.debug("PNG header: %s", command[:20].hex())
+            
             success = await self._send_command(bytes(command))
             if success:
-                _LOGGER.info("PNG sent: %s (%dx%d, %d bytes, CRC: 0x%08x)", 
-                           text, width, height, data_size, data_crc)
+                _LOGGER.info("PNG sent: %s (%dx%d, %d bytes, CRC: 0x%08x, cmd_len: %d)", 
+                           text, width, height, data_size, data_crc, len(command))
             else:
-                _LOGGER.error("Failed to send PNG command")
+                _LOGGER.error("PNG command failed to send")
             return success
             
         except Exception as err:
