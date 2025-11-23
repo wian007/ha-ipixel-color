@@ -26,6 +26,7 @@ Once configured, you'll get these entities:
 - `select.{device}_font` - Choose from available fonts
 - `number.{device}_font_size` - Font size (0=auto, supports decimals like 12.5)
 - `number.{device}_line_spacing` - Spacing between lines (0-20px)
+- `number.{device}_brightness` - Display brightness level (1-100)
 - `switch.{device}_antialiasing` - Smooth vs sharp text
 - `switch.{device}_auto_update` - Auto-update on changes
 - `button.{device}_update_display` - Manual refresh
@@ -67,7 +68,7 @@ Temp: {{ states('sensor.temperature') | round(1) }}°C
 | ✅ Custom Fonts | Complete |  
 | ✅ Templates | Complete |
 | ✅ State Persistence | Complete |
-| ❌ Brightness Control | Planned |
+| ✅ Brightness Control | Complete |
 | ❌ Colors/Images | Planned |
 
 ## Technical
