@@ -15,6 +15,7 @@ from .device.commands import (
     make_brightness_command,
 )
 from .device.clock import make_clock_mode_command
+from .device.text import make_text_command
 from .device.info import build_device_info_command, parse_device_response
 from .display.text_renderer import render_text_to_png
 from .exceptions import iPIXELConnectionError
@@ -223,7 +224,74 @@ class iPIXELAPI:
         except Exception as err:
             _LOGGER.error("Error displaying text: %s", err)
             return False
-    
+
+    async def display_text_pypixelcolor(
+        self,
+        text: str,
+        color: str = "ffffff",
+        font: str = "CUSONG",
+        animation: int = 0,
+        speed: int = 80,
+        rainbow_mode: int = 0
+    ) -> bool:
+        """Display text using pypixelcolor.
+
+        Args:
+            text: Text to display (supports emojis)
+            color: Text color in hex format (e.g., 'ffffff')
+            font: Font name ('CUSONG', 'SIMSUN', 'VCR_OSD_MONO') or file path
+            animation: Animation type (0-7)
+            speed: Animation speed (0-100)
+            rainbow_mode: Rainbow mode (0-9)
+
+        Returns:
+            True if text was sent successfully
+        """
+        try:
+            # Get device info for height
+            device_info = await self.get_device_info()
+            device_height = device_info["height"]
+
+            # Generate text commands using pypixelcolor
+            commands = make_text_command(
+                text=text,
+                color=color,
+                font=font,
+                animation=animation,
+                speed=speed,
+                rainbow_mode=rainbow_mode,
+                save_slot=0,
+                device_height=device_height
+            )
+
+            # Send all command frames
+            for i, command in enumerate(commands):
+                _LOGGER.debug(
+                    "Sending pypixelcolor text frame %d/%d: %d bytes",
+                    i + 1,
+                    len(commands),
+                    len(command)
+                )
+                success = await self._bluetooth.send_command(command)
+                if not success:
+                    _LOGGER.error("Failed to send text frame %d/%d", i + 1, len(commands))
+                    return False
+
+            _LOGGER.info(
+                "Pypixelcolor text sent: '%s' (color=%s, font=%s, anim=%d, speed=%d, frames=%d)",
+                text,
+                color,
+                font,
+                animation,
+                speed,
+                len(commands)
+            )
+            return True
+
+        except Exception as err:
+            _LOGGER.error("Error displaying pypixelcolor text: %s", err)
+            return False
+
     def _notification_handler(self, sender: Any, data: bytearray) -> None:
         """Handle notifications from the device."""
         _LOGGER.debug("Notification from %s: %s", sender, data.hex())

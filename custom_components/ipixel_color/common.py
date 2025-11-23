@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.template import Template
-from .const import MODE_TEXT_IMAGE, MODE_CLOCK, MODE_RHYTHM, MODE_FUN
+from .const import MODE_TEXT_IMAGE, MODE_TEXT, MODE_CLOCK
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -59,12 +59,10 @@ async def update_ipixel_display(hass: HomeAssistant, device_name: str, api, text
         # Route to appropriate mode handler
         if mode == MODE_TEXT_IMAGE:
             return await _update_textimage_mode(hass, device_name, api, text)
+        elif mode == MODE_TEXT:
+            return await _update_text_mode(hass, device_name, api, text)
         elif mode == MODE_CLOCK:
             return await _update_clock_mode(hass, device_name, api)
-        elif mode == MODE_RHYTHM:
-            return await _update_rhythm_mode(hass, device_name, api)
-        elif mode == MODE_FUN:
-            return await _update_fun_mode(hass, device_name, api)
         else:
             _LOGGER.warning("Unknown mode: %s, falling back to textimage", mode)
             return await _update_textimage_mode(hass, device_name, api, text)
@@ -179,36 +177,91 @@ async def _update_clock_mode(hass: HomeAssistant, device_name: str, api) -> bool
         return False
 
 
-async def _update_rhythm_mode(hass: HomeAssistant, device_name: str, api) -> bool:
-    """Update display in rhythm mode.
+async def _update_text_mode(hass: HomeAssistant, device_name: str, api, text: str = None) -> bool:
+    """Update display in text mode using pypixelcolor.
 
     Args:
         hass: Home Assistant instance
         device_name: Device name for entity ID lookups
         api: iPIXEL API instance
+        text: Text to display, or None to get from text entity
 
     Returns:
         True if update was successful
     """
-    _LOGGER.info("Rhythm mode selected - will be implemented with pypixelcolor")
-    # TODO: Implement rhythm mode using pypixelcolor.commands.set_rhythm_mode
-    return False
+    try:
+        # Get current text if not provided
+        if text is None:
+            text_entity_id = f"text.{device_name.lower().replace(' ', '_')}_display"
+            text_state = hass.states.get(text_entity_id)
+            if not text_state or text_state.state in ("unknown", "unavailable", ""):
+                _LOGGER.warning("No text to display - skipping update")
+                return False
+            text = text_state.state
 
+        # Get pypixelcolor text settings (reusing existing entities where possible)
 
-async def _update_fun_mode(hass: HomeAssistant, device_name: str, api) -> bool:
-    """Update display in fun mode.
+        # Reuse existing font selector - convert TTF filename to full path
+        font_name = await _get_entity_setting(hass, device_name, "select", "font")
+        if font_name and font_name.endswith(('.ttf', '.otf')):
+            # Custom TTF/OTF font from fonts/ folder
+            from pathlib import Path
+            font_path = Path(__file__).parent / "fonts" / font_name
+            font = str(font_path) if font_path.exists() else "CUSONG"
+        else:
+            # Use pypixelcolor's built-in fonts or default
+            font = "CUSONG"
 
-    Args:
-        hass: Home Assistant instance
-        device_name: Device name for entity ID lookups
-        api: iPIXEL API instance
+        # Color - need new text entity for hex color input
+        color = await _get_entity_setting(hass, device_name, "text", "text_color")
+        if not color:
+            color = "ffffff"  # Default to white
 
-    Returns:
-        True if update was successful
-    """
-    _LOGGER.info("Fun mode selected - will be implemented with pypixelcolor")
-    # TODO: Implement fun mode using pypixelcolor.commands.set_fun_mode
-    return False
+        # Animation - need new number entity
+        animation = await _get_entity_setting(hass, device_name, "number", "text_animation", int)
+        if animation is None:
+            animation = 0  # Default to no animation
+
+        # Speed - need new number entity
+        speed = await _get_entity_setting(hass, device_name, "number", "text_speed", int)
+        if speed is None:
+            speed = 80  # Default speed
+
+        # Rainbow mode - need new number entity
+        rainbow_mode = await _get_entity_setting(hass, device_name, "number", "text_rainbow", int)
+        if rainbow_mode is None:
+            rainbow_mode = 0  # Default to no rainbow
+
+        # Connect if needed
+        if not api.is_connected:
+            _LOGGER.debug("Reconnecting to device for text mode update")
+            await api.connect()
+
+        # Resolve templates and process escape sequences
+        template_resolved = await resolve_template_variables(hass, text)
+        processed_text = template_resolved.replace('\\n', '\n').replace('\\t', '\t')
+
+        # Send text using pypixelcolor
+        success = await api.display_text_pypixelcolor(
+            text=processed_text,
+            color=color,
+            font=font,
+            animation=animation,
+            speed=speed,
+            rainbow_mode=rainbow_mode
+        )
+
+        if success:
+            _LOGGER.info("Text mode update successful: %s (color=#%s, font=%s, anim=%d, speed=%d)",
+                       processed_text, color, font, animation, speed)
+        else:
+            _LOGGER.error("Text mode update failed")
+
+        return success
+
+    except Exception as err:
+        _LOGGER.error("Error in text mode update: %s", err)
+        return False
 
 
 async def _get_entity_setting(hass: HomeAssistant, device_name: str, platform: str, setting: str, value_type=str):
