@@ -161,9 +161,13 @@ class iPIXELAPI:
             self._device_info = {
                 "width": 64,
                 "height": 16,
-                "device_type": "Unknown", 
+                "device_type": 0,
+                "device_type_str": "Unknown",
+                "led_type": 0,
                 "mcu_version": "Unknown",
-                "wifi_version": "Unknown"
+                "wifi_version": "Unknown",
+                "has_wifi": False,
+                "password_flag": 255
             }
             return self._device_info
     
@@ -191,8 +195,7 @@ class iPIXELAPI:
                 image_bytes=png_data,
                 file_extension=".png",
                 resize_method="crop",
-                device_width=width,
-                device_height=height
+                device_info_dict=device_info
             )
 
             # Send all command frames

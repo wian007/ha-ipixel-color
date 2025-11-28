@@ -35,7 +35,7 @@ SENSOR_DESCRIPTIONS = [
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
-        key="device_type",
+        key="device_type_str",
         name="Device Type",
         icon="mdi:chip",
         entity_category=EntityCategory.DIAGNOSTIC,

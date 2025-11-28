@@ -79,36 +79,44 @@ def parse_device_response(response: bytes) -> dict[str, Any]:
     """Parse device info response (from go-ipxl parseDeviceInfo)."""
     if len(response) < 5:
         raise Exception(f"Response too short: got {len(response)} bytes, need at least 5")
-    
+
     _LOGGER.debug("Device response: %s", response.hex())
     _LOGGER.info("Raw device response bytes: %s", [hex(b) for b in response])
-    
+
     # Device type from byte 4
     device_type_byte = response[4]
     _LOGGER.info("Device type byte: %d (0x%02x)", device_type_byte, device_type_byte)
-    
+
     led_type = DEVICE_TYPE_MAP.get(device_type_byte, 0)
     width, height = LED_SIZE_MAP.get(led_type, [64, 64])
-    
+
     device_info = {
         "width": width,
         "height": height,
-        "device_type": f"Type {device_type_byte}",
+        "device_type": device_type_byte,  # Store as int for pypixelcolor compatibility
+        "device_type_str": f"Type {device_type_byte}",  # String version for display
+        "led_type": led_type,
     }
-    
+
     # Parse version info if response is long enough
     if len(response) >= 8:
         # MCU Version (bytes 4-5)
-        mcu_major = response[4]  
+        mcu_major = response[4]
         mcu_minor = response[5]
         device_info["mcu_version"] = f"{mcu_major}.{mcu_minor:02d}"
-        
+
         # WiFi Version (bytes 6-7)
         wifi_major = response[6]
-        wifi_minor = response[7] 
+        wifi_minor = response[7]
         device_info["wifi_version"] = f"{wifi_major}.{wifi_minor:02d}"
     else:
         device_info["mcu_version"] = "Unknown"
         device_info["wifi_version"] = "Unknown"
-        
+
+    # WiFi capability (based on device features - needs more research)
+    device_info["has_wifi"] = False  # Conservative default
+
+    # Password flag (byte 10 if available, 255 = no password)
+    device_info["password_flag"] = response[10] if len(response) >= 11 else 255
+
     return device_info
