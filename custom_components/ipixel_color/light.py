@@ -88,6 +88,10 @@ class iPIXELColorLight(LightEntity, RestoreEntity):
         # Restore last state if available
         last_state = await self.async_get_last_state()
         if last_state is not None:
+            # Restore on/off state
+            self._attr_is_on = last_state.state == "on"
+            _LOGGER.debug("Restored %s state: %s", self._light_name.lower(), last_state.state)
+
             if last_state.attributes.get(ATTR_RGB_COLOR):
                 rgb = last_state.attributes[ATTR_RGB_COLOR]
                 self._attr_rgb_color = tuple(rgb)
@@ -99,8 +103,8 @@ class iPIXELColorLight(LightEntity, RestoreEntity):
 
     @property
     def is_on(self) -> bool:
-        """Return true if light is on (always true for color pickers)."""
-        return True
+        """Return true if light is on."""
+        return self._attr_is_on
 
     @property
     def rgb_color(self) -> tuple[int, int, int]:
@@ -133,17 +137,25 @@ class iPIXELColorLight(LightEntity, RestoreEntity):
             self._attr_brightness = kwargs[ATTR_BRIGHTNESS]
             _LOGGER.debug("%s brightness set to: %d", self._light_name, self._attr_brightness)
 
+        # Always consider it "on" since it's a color picker
+        self._attr_is_on = True
+
+        # Write state immediately so it's available to auto-update
+        self.async_write_ha_state()
+
         # Trigger auto-update if enabled and in appropriate mode
         await self._trigger_auto_update()
 
-        # Always consider it "on" since it's a color picker
-        self._attr_is_on = True
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Turn off the light (will be interpreted as black)."""
+        self._attr_is_on = False
+        _LOGGER.debug("%s turned off (will display as black)", self._light_name)
+
+        # Write state immediately
         self.async_write_ha_state()
 
-    async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn off is not applicable for color pickers."""
-        # Don't actually turn off, just acknowledge the command
-        pass
+        # Trigger auto-update if enabled and in appropriate mode
+        await self._trigger_auto_update()
 
     async def _trigger_auto_update(self) -> None:
         """Trigger display update if auto-update is enabled and in appropriate mode."""
