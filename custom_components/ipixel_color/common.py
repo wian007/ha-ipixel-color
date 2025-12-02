@@ -106,18 +106,44 @@ async def _update_textimage_mode(hass: HomeAssistant, device_name: str, api, tex
         # Get text color from light entity
         text_color_entity_id = f"light.{device_name.lower().replace(' ', '_')}_text_color"
         text_color_state = hass.states.get(text_color_entity_id)
-        if text_color_state and text_color_state.attributes.get("rgb_color"):
-            r, g, b = text_color_state.attributes["rgb_color"]
-            text_color = rgb_to_hex(int(r), int(g), int(b))
+        if text_color_state:
+            # If light is off, interpret as black
+            if text_color_state.state == "off":
+                text_color = "000000"
+            elif text_color_state.attributes.get("rgb_color"):
+                # Get base RGB color
+                r, g, b = text_color_state.attributes["rgb_color"]
+                # Apply brightness (0-255)
+                brightness = text_color_state.attributes.get("brightness", 255)
+                brightness_factor = brightness / 255.0
+                r = int(r * brightness_factor)
+                g = int(g * brightness_factor)
+                b = int(b * brightness_factor)
+                text_color = rgb_to_hex(r, g, b)
+            else:
+                text_color = "ffffff"  # Default to white
         else:
             text_color = "ffffff"  # Default to white
 
         # Get background color from light entity
         bg_color_entity_id = f"light.{device_name.lower().replace(' ', '_')}_background_color"
         bg_color_state = hass.states.get(bg_color_entity_id)
-        if bg_color_state and bg_color_state.attributes.get("rgb_color"):
-            r, g, b = bg_color_state.attributes["rgb_color"]
-            bg_color = rgb_to_hex(int(r), int(g), int(b))
+        if bg_color_state:
+            # If light is off, interpret as black
+            if bg_color_state.state == "off":
+                bg_color = "000000"
+            elif bg_color_state.attributes.get("rgb_color"):
+                # Get base RGB color
+                r, g, b = bg_color_state.attributes["rgb_color"]
+                # Apply brightness (0-255)
+                brightness = bg_color_state.attributes.get("brightness", 255)
+                brightness_factor = brightness / 255.0
+                r = int(r * brightness_factor)
+                g = int(g * brightness_factor)
+                b = int(b * brightness_factor)
+                bg_color = rgb_to_hex(r, g, b)
+            else:
+                bg_color = "000000"  # Default to black
         else:
             bg_color = "000000"  # Default to black
 
@@ -233,9 +259,28 @@ async def _update_text_mode(hass: HomeAssistant, device_name: str, api, text: st
             # Use pypixelcolor's built-in fonts or default
             font = "CUSONG"
 
-        # Color - need new text entity for hex color input
-        color = await _get_entity_setting(hass, device_name, "text", "text_color")
-        if not color:
+        # Get text color from light entity
+        from .color import rgb_to_hex
+
+        text_color_entity_id = f"light.{device_name.lower().replace(' ', '_')}_text_color"
+        text_color_state = hass.states.get(text_color_entity_id)
+        if text_color_state:
+            # If light is off, interpret as black
+            if text_color_state.state == "off":
+                color = "000000"
+            elif text_color_state.attributes.get("rgb_color"):
+                # Get base RGB color
+                r, g, b = text_color_state.attributes["rgb_color"]
+                # Apply brightness (0-255)
+                brightness = text_color_state.attributes.get("brightness", 255)
+                brightness_factor = brightness / 255.0
+                r = int(r * brightness_factor)
+                g = int(g * brightness_factor)
+                b = int(b * brightness_factor)
+                color = rgb_to_hex(r, g, b)
+            else:
+                color = "ffffff"  # Default to white
+        else:
             color = "ffffff"  # Default to white
 
         # Animation - need new number entity

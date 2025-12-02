@@ -5,6 +5,7 @@ import logging
 from typing import Any
 
 from homeassistant.components.light import (
+    ATTR_BRIGHTNESS,
     ATTR_RGB_COLOR,
     ColorMode,
     LightEntity,
@@ -67,8 +68,9 @@ class iPIXELColorLight(LightEntity, RestoreEntity):
         self._device_name = name
         self._attr_name = self._light_name  # Just the light name, device name is redundant
         self._attr_unique_id = f"{address}_{self._entity_suffix}"
-        self._attr_is_on = True  # Always "on" since it's just a color picker
+        self._attr_is_on = True  # Start as "on"
         self._attr_rgb_color = self._default_rgb
+        self._attr_brightness = 255  # Full brightness by default
 
         # Device info for grouping in device registry
         self._attr_device_info = DeviceInfo(
@@ -85,10 +87,15 @@ class iPIXELColorLight(LightEntity, RestoreEntity):
 
         # Restore last state if available
         last_state = await self.async_get_last_state()
-        if last_state is not None and last_state.attributes.get(ATTR_RGB_COLOR):
-            rgb = last_state.attributes[ATTR_RGB_COLOR]
-            self._attr_rgb_color = tuple(rgb)
-            _LOGGER.debug("Restored %s: RGB%s", self._light_name.lower(), self._attr_rgb_color)
+        if last_state is not None:
+            if last_state.attributes.get(ATTR_RGB_COLOR):
+                rgb = last_state.attributes[ATTR_RGB_COLOR]
+                self._attr_rgb_color = tuple(rgb)
+                _LOGGER.debug("Restored %s: RGB%s", self._light_name.lower(), self._attr_rgb_color)
+
+            if last_state.attributes.get(ATTR_BRIGHTNESS):
+                self._attr_brightness = last_state.attributes[ATTR_BRIGHTNESS]
+                _LOGGER.debug("Restored %s brightness: %d", self._light_name.lower(), self._attr_brightness)
 
     @property
     def is_on(self) -> bool:
@@ -99,6 +106,11 @@ class iPIXELColorLight(LightEntity, RestoreEntity):
     def rgb_color(self) -> tuple[int, int, int]:
         """Return the RGB color value."""
         return self._attr_rgb_color
+
+    @property
+    def brightness(self) -> int:
+        """Return the brightness value."""
+        return self._attr_brightness
 
     def get_hex(self) -> str:
         """Get color as hex string (e.g., 'ffffff')."""
@@ -117,8 +129,12 @@ class iPIXELColorLight(LightEntity, RestoreEntity):
             _LOGGER.debug("%s set to: RGB%s (#%s)",
                          self._light_name, self._attr_rgb_color, self.get_hex())
 
-            # Trigger auto-update if enabled and in appropriate mode
-            await self._trigger_auto_update()
+        if ATTR_BRIGHTNESS in kwargs:
+            self._attr_brightness = kwargs[ATTR_BRIGHTNESS]
+            _LOGGER.debug("%s brightness set to: %d", self._light_name, self._attr_brightness)
+
+        # Trigger auto-update if enabled and in appropriate mode
+        await self._trigger_auto_update()
 
         # Always consider it "on" since it's a color picker
         self._attr_is_on = True
