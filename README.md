@@ -1,15 +1,23 @@
 # iPIXEL Color - Home Assistant Integration
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/A4747U9)
+
 A Home Assistant custom integration for iPIXEL Color LED matrix displays via Bluetooth.
+These displays have been recently available as B.K. Light LED Pixel Board from Action and thus get increasing popularity.
 
 ## Features
 
-- **Rich Text Display**: Custom fonts, sizes, multiline text with `\n`
+- **Multiple Display Modes**: Text Image (PIL rendering), Native Text, and Clock modes
+- **RGB Color Support**: Separate text and background colors via RGB light entities
+- **Clock Display**: 9 different clock styles with automatic time synchronization
+- **Rich Text Display**: Custom fonts, sizes, multiline text with `\n`, antialiasing
 - **Template Support**: Use Home Assistant variables like `{{ states('sensor.temperature') }}°C`
 - **Font Management**: Load TTF/OTF fonts from `fonts/` folder
+- **Brightness Control**: Adjustable display brightness (1-100)
 - **Auto/Manual Updates**: Choose automatic updates or manual refresh
 - **State Persistence**: Settings preserved across HA restarts
-- **Auto-discovery**: Finds iPIXEL devices automatically
+- **Bluetooth Proxy Support**: Compatible with Bluetooth proxy devices
+- **Auto-discovery**: Finds iPIXEL devices automatically via Bluetooth
 
 ## Installation
 
@@ -22,15 +30,33 @@ A Home Assistant custom integration for iPIXEL Color LED matrix displays via Blu
 
 Once configured, you'll get these entities:
 
+**Display Control:**
+- `select.{device}_mode` - Display mode (textimage, text, clock)
 - `text.{device}_display` - Enter text with templates and `\n` for newlines
+- `switch.{device}_power` - Turn display on/off
+- `number.{device}_brightness` - Display brightness level (1-100)
+
+**Text Appearance:**
 - `select.{device}_font` - Choose from available fonts
 - `number.{device}_font_size` - Font size (0=auto, supports decimals like 12.5)
 - `number.{device}_line_spacing` - Spacing between lines (0-20px)
-- `number.{device}_brightness` - Display brightness level (1-100)
 - `switch.{device}_antialiasing` - Smooth vs sharp text
+- `light.{device}_text_color` - RGB text color
+- `light.{device}_background_color` - RGB background color
+
+**Clock Mode:**
+- `select.{device}_clock_style` - Clock style (0-8)
+- `switch.{device}_clock_24h_format` - 24-hour time format
+- `switch.{device}_clock_show_date` - Show date below time
+
+**Update Control:**
 - `switch.{device}_auto_update` - Auto-update on changes
 - `button.{device}_update_display` - Manual refresh
-- `switch.{device}_power` - Turn display on/off
+
+**Device Info:**
+- `sensor.{device}_width` - Display width in pixels
+- `sensor.{device}_height` - Display height in pixels
+- `sensor.{device}_device_type` - Device model information
 
 ## Template Examples
 
@@ -42,10 +68,21 @@ Temp: {{ states('sensor.temperature') | round(1) }}°C
 
 ## Quick Start
 
-1. Set text: `"Hello\nWorld"`
-2. Choose font and size (or use auto-sizing)
-3. Toggle auto-update ON or use manual update button
-4. Templates update automatically with sensor changes
+**Text Mode:**
+1. Select mode: `textimage` (for RGB colors) or `text` (native)
+2. Set text: `"Hello\nWorld"`
+3. Choose text and background colors using light entities
+4. Select font and size (or use auto-sizing)
+5. Toggle auto-update ON or use manual update button
+
+**Clock Mode:**
+1. Select mode: `clock`
+2. Choose clock style (0-8)
+3. Set 24-hour format and date display preferences
+4. Time syncs automatically
+
+**Templates:**
+- Templates update automatically with sensor changes when auto-update is ON
 
 ## Font Management
 
@@ -64,16 +101,23 @@ Temp: {{ states('sensor.temperature') | round(1) }}°C
 
 | Feature | Status |
 |---------|--------|
-| ✅ Text Display | Complete |
-| ✅ Custom Fonts | Complete |  
+| ✅ Text Display (3 modes) | Complete |
+| ✅ RGB Colors | Complete |
+| ✅ Clock Mode (9 styles) | Complete |
+| ✅ Custom Fonts | Complete |
 | ✅ Templates | Complete |
 | ✅ State Persistence | Complete |
 | ✅ Brightness Control | Complete |
-| ❌ Colors/Images | Planned |
+| 🔄 GIF Animations | Planned |
+| 🔄 Animated Variable-Width Fonts | Planned |
 
 ## Technical
 
 - Requires: Home Assistant 2024.1+ and HACS
+
+## Acknowledgments
+
+Special thanks to the authors of [pypixelcolor](https://github.com/lucagoc/pypixelcolor) for their excellent library that powers the core functionality of this integration. Their work in reverse-engineering the iPIXEL protocol has been invaluable.
 
 ## License
 
