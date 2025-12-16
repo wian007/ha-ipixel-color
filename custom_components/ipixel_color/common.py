@@ -33,9 +33,9 @@ def get_color_from_light_entity(hass: HomeAssistant, address: str, entity_suffix
     if not state:
         return default
 
-    # If light is off, return None (transparent/no color)
+    # If light is off, return black
     if state.state == "off":
-        return None
+        return "000000"
 
     if state.attributes.get("rgb_color"):
         r, g, b = state.attributes["rgb_color"]
@@ -166,13 +166,9 @@ async def _update_textimage_mode(hass: HomeAssistant, device_name: str, api, tex
 
         # Get color settings from light entities
         text_color = get_color_from_light_entity(hass, api._address, "text_color", default="ffffff")
-        if text_color is None:
-            text_color = "000000"  # Light is off, use black
         _LOGGER.debug("Text color: #%s", text_color)
 
         bg_color = get_color_from_light_entity(hass, api._address, "background_color", default="000000")
-        if bg_color is None:
-            bg_color = "000000"  # Light is off, use black
         _LOGGER.debug("Background color: #%s", bg_color)
 
         # Connect if needed
@@ -289,8 +285,6 @@ async def _update_text_mode(hass: HomeAssistant, device_name: str, api, text: st
 
         # Get text color from light entity
         color = get_color_from_light_entity(hass, api._address, "text_color", default="ffffff")
-        if color is None:
-            color = "000000"  # Light is off, use black
         _LOGGER.debug("Text mode - text color: #%s", color)
 
         # Get background color from light entity
