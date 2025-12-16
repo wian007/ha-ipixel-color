@@ -290,9 +290,11 @@ async def _update_text_mode(hass: HomeAssistant, device_name: str, api, text: st
         # Get text color from light entity
         color = get_color_from_light_entity(hass, api._address, "text_color", default="ffffff")
         if color == "000000":
-            # Use near-black with 1 in the channel matching bg's max value
+            # WORKAROUND the dispaly does not show black text.
+            # We weight the channels since not each color appears as bright as the others.
+            # In this way we choose the channel which should be less obvious.
             bg = bg_color or "000000"
-            r, g, b = int(bg[0:2], 16), int(bg[2:4], 16), int(bg[4:6], 16)
+            r, g, b = int(bg[0:2], 16)*333, int(bg[2:4], 16)*169, int(bg[4:6], 16)*909 
             if g >= r and g >= b:
                 color = "000100"
             elif b >= r:
