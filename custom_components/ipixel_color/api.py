@@ -12,6 +12,11 @@ from .bluetooth.client import BluetoothClient
 from .device.commands import (
     make_power_command,
     make_brightness_command,
+    make_orientation_command,
+    make_rhythm_mode_command,
+    make_fun_mode_command,
+    make_pixel_command,
+    make_clear_command,
 )
 from .device.clock import make_clock_mode_command, make_time_command
 from .device.text import make_text_command
@@ -106,6 +111,165 @@ class iPIXELAPI:
 
         except Exception as err:
             _LOGGER.error("Error syncing time: %s", err)
+            return False
+
+    async def set_orientation(self, orientation: int) -> bool:
+        """Set display orientation.
+
+        Args:
+            orientation: 0=normal, 1=90°, 2=180°, 3=270°
+
+        Returns:
+            True if command was sent successfully
+        """
+        try:
+            command = make_orientation_command(orientation)
+            success = await self._bluetooth.send_command(command)
+
+            if success:
+                _LOGGER.debug("Orientation set to %d", orientation)
+            else:
+                _LOGGER.error("Failed to set orientation to %d", orientation)
+            return success
+
+        except ValueError as err:
+            _LOGGER.error("Invalid orientation value: %s", err)
+            return False
+        except Exception as err:
+            _LOGGER.error("Error setting orientation: %s", err)
+            return False
+
+    async def set_rhythm_mode(self, style: int, speed: int = 4) -> bool:
+        """Set rhythm/music visualizer mode.
+
+        Args:
+            style: Rhythm style 0-4 (5 different visualizer styles)
+            speed: Animation speed 0-7 (8 speed levels)
+
+        Returns:
+            True if command was sent successfully
+        """
+        try:
+            command = make_rhythm_mode_command(style, speed)
+            success = await self._bluetooth.send_command(command)
+
+            if success:
+                _LOGGER.info("Rhythm mode set: style=%d, speed=%d", style, speed)
+            else:
+                _LOGGER.error("Failed to set rhythm mode")
+            return success
+
+        except ValueError as err:
+            _LOGGER.error("Invalid rhythm mode parameters: %s", err)
+            return False
+        except Exception as err:
+            _LOGGER.error("Error setting rhythm mode: %s", err)
+            return False
+
+    async def set_fun_mode(self, enable: bool) -> bool:
+        """Enable or disable fun mode (required for pixel control).
+
+        Args:
+            enable: True to enable fun mode, False to disable
+
+        Returns:
+            True if command was sent successfully
+        """
+        try:
+            command = make_fun_mode_command(enable)
+            success = await self._bluetooth.send_command(command)
+
+            if success:
+                _LOGGER.debug("Fun mode %s", "enabled" if enable else "disabled")
+            else:
+                _LOGGER.error("Failed to set fun mode")
+            return success
+
+        except Exception as err:
+            _LOGGER.error("Error setting fun mode: %s", err)
+            return False
+
+    async def set_pixel(self, x: int, y: int, color: str) -> bool:
+        """Set a single pixel color.
+
+        Note: Fun mode must be enabled first for this to work.
+
+        Args:
+            x: X coordinate (0 to width-1)
+            y: Y coordinate (0 to height-1)
+            color: Hex color string (e.g., 'ff0000' for red)
+
+        Returns:
+            True if command was sent successfully
+        """
+        try:
+            command = make_pixel_command(x, y, color)
+            success = await self._bluetooth.send_command(command)
+
+            if success:
+                _LOGGER.debug("Pixel set at (%d, %d) to #%s", x, y, color)
+            else:
+                _LOGGER.error("Failed to set pixel at (%d, %d)", x, y)
+            return success
+
+        except ValueError as err:
+            _LOGGER.error("Invalid pixel parameters: %s", err)
+            return False
+        except Exception as err:
+            _LOGGER.error("Error setting pixel: %s", err)
+            return False
+
+    async def set_pixels(self, pixels: list[dict]) -> bool:
+        """Set multiple pixels at once.
+
+        Note: Fun mode must be enabled first for this to work.
+
+        Args:
+            pixels: List of dicts with 'x', 'y', and 'color' keys
+
+        Returns:
+            True if all commands were sent successfully
+        """
+        try:
+            all_success = True
+            for pixel in pixels:
+                x = pixel.get('x', 0)
+                y = pixel.get('y', 0)
+                color = pixel.get('color', 'ffffff')
+                success = await self.set_pixel(x, y, color)
+                if not success:
+                    all_success = False
+
+            if all_success:
+                _LOGGER.debug("Set %d pixels successfully", len(pixels))
+            else:
+                _LOGGER.warning("Some pixels failed to set")
+            return all_success
+
+        except Exception as err:
+            _LOGGER.error("Error setting pixels: %s", err)
+            return False
+
+    async def clear_display(self) -> bool:
+        """Clear the display (blank screen).
+
+        This blanks the screen without affecting power state.
+
+        Returns:
+            True if command was sent successfully
+        """
+        try:
+            command = make_clear_command()
+            success = await self._bluetooth.send_command(command)
+
+            if success:
+                _LOGGER.debug("Display cleared")
+            else:
+                _LOGGER.error("Failed to clear display")
+            return success
+
+        except Exception as err:
+            _LOGGER.error("Error clearing display: %s", err)
             return False
 
     async def set_clock_mode(

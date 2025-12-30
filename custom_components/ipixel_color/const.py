@@ -28,15 +28,25 @@ MODE_TEXT_IMAGE = "textimage"
 MODE_TEXT = "text"
 MODE_CLOCK = "clock"
 MODE_GIF = "gif"
+MODE_RHYTHM = "rhythm"
 
 AVAILABLE_MODES = [
     MODE_TEXT_IMAGE,
     MODE_TEXT,
     MODE_CLOCK,
     MODE_GIF,
+    MODE_RHYTHM,
 ]
 
 DEFAULT_MODE = MODE_TEXT_IMAGE
+
+# Orientation options (0=normal, 1=90°, 2=180°, 3=270°)
+AVAILABLE_ORIENTATIONS = ["0", "90", "180", "270"]
+DEFAULT_ORIENTATION = "0"
+
+# Rhythm mode styles (5 visualizer styles)
+AVAILABLE_RHYTHM_STYLES = ["0", "1", "2", "3", "4"]
+DEFAULT_RHYTHM_STYLE = "0"
 
 # Visual effects
 AVAILABLE_EFFECTS = [

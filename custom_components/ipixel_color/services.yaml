@@ -178,3 +178,63 @@ sync_time:
     entity:
       integration: ipixel_color
       domain: switch
+
+set_pixel:
+  name: Set Pixel
+  description: Set a single pixel color at specified coordinates
+  target:
+    entity:
+      integration: ipixel_color
+      domain: switch
+  fields:
+    x:
+      name: X Coordinate
+      description: Horizontal position (0 to width-1)
+      required: true
+      example: 0
+      selector:
+        number:
+          min: 0
+          max: 127
+          mode: box
+    y:
+      name: Y Coordinate
+      description: Vertical position (0 to height-1)
+      required: true
+      example: 0
+      selector:
+        number:
+          min: 0
+          max: 63
+          mode: box
+    color:
+      name: Color
+      description: Hex color value (e.g., 'ff0000' for red)
+      required: true
+      example: "ff0000"
+      selector:
+        text:
+
+set_pixels:
+  name: Set Pixels
+  description: Set multiple pixels at once (batch mode)
+  target:
+    entity:
+      integration: ipixel_color
+      domain: switch
+  fields:
+    pixels:
+      name: Pixels
+      description: List of pixel objects with x, y, and color properties
+      required: true
+      example: '[{"x": 0, "y": 0, "color": "ff0000"}, {"x": 1, "y": 0, "color": "00ff00"}]'
+      selector:
+        object:
+
+clear_pixels:
+  name: Clear Pixels
+  description: Clear the display (blank screen without powering off)
+  target:
+    entity:
+      integration: ipixel_color
+      domain: switch

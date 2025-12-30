@@ -42,6 +42,25 @@
     "switch": {
       "power": {
         "name": "Power"
+      },
+      "fun_mode": {
+        "name": "Fun Mode"
+      },
+      "screen_visible": {
+        "name": "Screen Visible"
+      }
+    },
+    "select": {
+      "orientation": {
+        "name": "Orientation"
+      },
+      "rhythm_style": {
+        "name": "Rhythm Style"
+      }
+    },
+    "number": {
+      "rhythm_speed": {
+        "name": "Rhythm Speed"
       }
     }
   }

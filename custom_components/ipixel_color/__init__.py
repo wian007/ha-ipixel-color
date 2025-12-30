@@ -36,6 +36,9 @@ SERVICE_REMOVE_SCHEDULE = "remove_schedule"
 SERVICE_TRIGGER_SCHEDULE = "trigger_schedule"
 SERVICE_SET_PLAYLIST = "set_playlist"
 SERVICE_SYNC_TIME = "sync_time"
+SERVICE_SET_PIXEL = "set_pixel"
+SERVICE_SET_PIXELS = "set_pixels"
+SERVICE_CLEAR_PIXELS = "clear_pixels"
 
 # Type alias for iPIXEL config entries
 
@@ -184,6 +187,55 @@ async def _async_register_services(
         except Exception as err:
             _LOGGER.error("Error syncing time: %s", err)
 
+    async def handle_set_pixel(call: ServiceCall) -> None:
+        """Handle set_pixel service call."""
+        x = call.data.get("x", 0)
+        y = call.data.get("y", 0)
+        color = call.data.get("color", "ffffff")
+
+        try:
+            # Ensure fun mode is enabled
+            await api.set_fun_mode(True)
+
+            success = await api.set_pixel(x, y, color)
+            if success:
+                _LOGGER.info("Pixel set at (%d, %d) to #%s", x, y, color)
+            else:
+                _LOGGER.error("Failed to set pixel at (%d, %d)", x, y)
+        except Exception as err:
+            _LOGGER.error("Error setting pixel: %s", err)
+
+    async def handle_set_pixels(call: ServiceCall) -> None:
+        """Handle set_pixels service call."""
+        pixels = call.data.get("pixels", [])
+
+        if not pixels:
+            _LOGGER.warning("No pixels provided")
+            return
+
+        try:
+            # Ensure fun mode is enabled
+            await api.set_fun_mode(True)
+
+            success = await api.set_pixels(pixels)
+            if success:
+                _LOGGER.info("Set %d pixels successfully", len(pixels))
+            else:
+                _LOGGER.warning("Some pixels failed to set")
+        except Exception as err:
+            _LOGGER.error("Error setting pixels: %s", err)
+
+    async def handle_clear_pixels(call: ServiceCall) -> None:
+        """Handle clear_pixels service call."""
+        try:
+            success = await api.clear_display()
+            if success:
+                _LOGGER.info("Display cleared")
+            else:
+                _LOGGER.error("Failed to clear display")
+        except Exception as err:
+            _LOGGER.error("Error clearing display: %s", err)
+
     # Register all services if not already registered
     if not hass.services.has_service(DOMAIN, SERVICE_UPLOAD_GIF):
         hass.services.async_register(DOMAIN, SERVICE_UPLOAD_GIF, handle_upload_gif)
@@ -197,6 +249,12 @@ async def _async_register_services(
         hass.services.async_register(DOMAIN, SERVICE_SET_PLAYLIST, handle_set_playlist)
     if not hass.services.has_service(DOMAIN, SERVICE_SYNC_TIME):
         hass.services.async_register(DOMAIN, SERVICE_SYNC_TIME, handle_sync_time)
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_PIXEL):
+        hass.services.async_register(DOMAIN, SERVICE_SET_PIXEL, handle_set_pixel)
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_PIXELS):
+        hass.services.async_register(DOMAIN, SERVICE_SET_PIXELS, handle_set_pixels)
+    if not hass.services.has_service(DOMAIN, SERVICE_CLEAR_PIXELS):
+        hass.services.async_register(DOMAIN, SERVICE_CLEAR_PIXELS, handle_clear_pixels)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

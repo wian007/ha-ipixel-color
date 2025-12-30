@@ -12,7 +12,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .api import iPIXELAPI
-from .const import DOMAIN, CONF_ADDRESS, CONF_NAME
+from .const import DOMAIN, CONF_ADDRESS, CONF_NAME, MODE_RHYTHM
 from .common import get_entity_id_by_unique_id
 
 _LOGGER = logging.getLogger(__name__)
@@ -37,6 +37,7 @@ async def async_setup_entry(
         iPIXELTextSpeed(hass, api, entry, address, name),
         iPIXELTextRainbow(hass, api, entry, address, name),
         iPIXELScheduleInterval(hass, api, entry, address, name),
+        iPIXELRhythmSpeed(hass, api, entry, address, name),
     ])
 
 
@@ -586,6 +587,95 @@ class iPIXELScheduleInterval(NumberEntity, RestoreEntity):
                 _LOGGER.debug("Could not update playlist loop interval: %s", err)
         else:
             _LOGGER.error("Invalid schedule interval: %d (must be 1000-3600000 ms)", interval)
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return True
+
+
+class iPIXELRhythmSpeed(NumberEntity, RestoreEntity):
+    """Representation of an iPIXEL Color rhythm animation speed setting."""
+
+    _attr_mode = NumberMode.SLIDER
+    _attr_native_min_value = 0
+    _attr_native_max_value = 7
+    _attr_native_step = 1
+    _attr_icon = "mdi:speedometer"
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        api: iPIXELAPI,
+        entry: ConfigEntry,
+        address: str,
+        name: str
+    ) -> None:
+        """Initialize the rhythm speed number."""
+        self.hass = hass
+        self._api = api
+        self._entry = entry
+        self._address = address
+        self._name = name
+        self._attr_name = "Rhythm Speed"
+        self._attr_unique_id = f"{address}_rhythm_speed"
+        self._attr_native_value = 4  # Default speed (middle)
+        self._attr_entity_description = "Rhythm visualizer animation speed (0-7)"
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, address)},
+            name=name,
+            manufacturer="iPIXEL",
+            model="LED Matrix Display",
+            sw_version="1.0",
+        )
+
+    async def async_added_to_hass(self) -> None:
+        """Run when entity about to be added to hass."""
+        await super().async_added_to_hass()
+
+        last_state = await self.async_get_last_state()
+        if last_state is not None and last_state.state:
+            try:
+                value = int(float(last_state.state))
+                if 0 <= value <= 7:
+                    self._attr_native_value = value
+                    _LOGGER.debug("Restored rhythm speed: %d", value)
+            except (ValueError, TypeError):
+                pass
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the current rhythm speed value."""
+        return self._attr_native_value
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Set the rhythm speed."""
+        speed = int(value)
+        if 0 <= speed <= 7:
+            self._attr_native_value = speed
+            _LOGGER.debug("Rhythm speed changed to: %d", speed)
+            await self._trigger_auto_update()
+        else:
+            _LOGGER.error("Invalid rhythm speed: %d (must be 0-7)", speed)
+
+    async def _trigger_auto_update(self) -> None:
+        """Trigger display update if in rhythm mode and auto-update is enabled."""
+        try:
+            from .common import update_ipixel_display
+
+            mode_entity_id = get_entity_id_by_unique_id(self.hass, self._address, "mode_select", "select")
+            mode_state = self.hass.states.get(mode_entity_id) if mode_entity_id else None
+
+            if mode_state and mode_state.state == MODE_RHYTHM:
+                auto_update_entity_id = get_entity_id_by_unique_id(self.hass, self._address, "auto_update", "switch")
+                auto_update_state = self.hass.states.get(auto_update_entity_id) if auto_update_entity_id else None
+
+                if auto_update_state and auto_update_state.state == "on":
+                    await update_ipixel_display(self.hass, self._name, self._api)
+                    _LOGGER.debug("Auto-update triggered due to rhythm speed change")
+        except Exception as err:
+            _LOGGER.debug("Could not trigger auto-update: %s", err)
 
     @property
     def available(self) -> bool:

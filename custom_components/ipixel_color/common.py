@@ -5,7 +5,7 @@ import logging
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.template import Template
 from homeassistant.helpers import entity_registry as er
-from .const import MODE_TEXT_IMAGE, MODE_TEXT, MODE_CLOCK, MODE_GIF, DOMAIN
+from .const import MODE_TEXT_IMAGE, MODE_TEXT, MODE_CLOCK, MODE_GIF, MODE_RHYTHM, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -129,6 +129,8 @@ async def update_ipixel_display(hass: HomeAssistant, device_name: str, api, text
             return await _update_clock_mode(hass, device_name, api)
         elif mode == MODE_GIF:
             return await _update_gif_mode(hass, device_name, api)
+        elif mode == MODE_RHYTHM:
+            return await _update_rhythm_mode(hass, device_name, api)
         else:
             _LOGGER.warning("Unknown mode: %s, falling back to textimage", mode)
             return await _update_textimage_mode(hass, device_name, api, text)
@@ -395,6 +397,51 @@ async def _update_gif_mode(hass: HomeAssistant, device_name: str, api) -> bool:
 
     except Exception as err:
         _LOGGER.error("Error in GIF mode update: %s", err)
+        return False
+
+
+async def _update_rhythm_mode(hass: HomeAssistant, device_name: str, api) -> bool:
+    """Update display in rhythm/music visualizer mode.
+
+    Args:
+        hass: Home Assistant instance
+        device_name: Device name for entity ID lookups
+        api: iPIXEL API instance
+
+    Returns:
+        True if update was successful
+    """
+    try:
+        # Get rhythm settings from entities
+        rhythm_style = await _get_entity_setting(hass, device_name, "select", "rhythm_style_select", int, api._address)
+        if rhythm_style is None:
+            rhythm_style = 0  # Default style
+
+        rhythm_speed = await _get_entity_setting(hass, device_name, "number", "rhythm_speed", int, api._address)
+        if rhythm_speed is None:
+            rhythm_speed = 4  # Default speed
+
+        # Connect if needed
+        if not api.is_connected:
+            _LOGGER.debug("Reconnecting to device for rhythm mode update")
+            await api.connect()
+
+        # Send rhythm mode command
+        success = await api.set_rhythm_mode(
+            style=rhythm_style,
+            speed=rhythm_speed
+        )
+
+        if success:
+            _LOGGER.info("Rhythm mode activated: style=%d, speed=%d",
+                       rhythm_style, rhythm_speed)
+        else:
+            _LOGGER.error("Failed to activate rhythm mode")
+
+        return success
+
+    except Exception as err:
+        _LOGGER.error("Error in rhythm mode update: %s", err)
         return False
 
 
