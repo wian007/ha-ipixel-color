@@ -5,6 +5,10 @@ import logging
 from datetime import timedelta
 from typing import Any
 
+from pathlib import Path
+
+from homeassistant.components.frontend import async_register_built_in_panel
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
@@ -51,7 +55,37 @@ SERVICE_STOP_PLAYLIST = "stop_playlist"
 SERVICE_SET_POWER_SCHEDULE = "set_power_schedule"
 SERVICE_ADD_TIME_SLOT = "add_time_slot"
 
-# Type alias for iPIXEL config entries
+# Frontend card registration flag
+FRONTEND_REGISTERED = False
+
+
+async def _async_register_frontend(hass: HomeAssistant) -> None:
+    """Register the Lovelace card as a frontend resource."""
+    global FRONTEND_REGISTERED
+
+    if FRONTEND_REGISTERED:
+        return
+
+    # Get the path to our www folder
+    www_path = Path(__file__).parent / "www"
+    card_url = f"/{DOMAIN}/ipixel-display-card.js"
+
+    # Register static path for serving the card
+    await hass.http.async_register_static_paths([
+        StaticPathConfig(card_url, str(www_path / "ipixel-display-card.js"), cache_headers=False)
+    ])
+
+    # Add the card as a Lovelace resource
+    # This uses the built-in resource registration
+    hass.data.setdefault("lovelace_resources", set())
+    if card_url not in hass.data["lovelace_resources"]:
+        hass.data["lovelace_resources"].add(card_url)
+
+        # Fire event to notify frontend of new resource
+        hass.bus.async_fire("lovelace_updated", {"url_path": card_url})
+
+    FRONTEND_REGISTERED = True
+    _LOGGER.info("iPIXEL Display Card frontend registered at %s", card_url)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -91,6 +125,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     schedule_manager = iPIXELScheduleManager(hass, api, address)
     await schedule_manager.async_load()
     hass.data[DOMAIN][f"{entry.entry_id}_schedule"] = schedule_manager
+
+    # Register Lovelace card frontend resources
+    await _async_register_frontend(hass)
 
     # Set up hourly time sync
     async def _sync_time(now=None) -> None:

@@ -161,8 +161,10 @@ ip_bans.yaml
 .storage/
 deps/
 tts/
-www/
+/www/
 custom_components/*/*/__pycache__/
+# But include our component's www folder
+!custom_components/ipixel_color/www/
 
 # Testing files
 test_*.py
