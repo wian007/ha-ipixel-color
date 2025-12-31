@@ -12,12 +12,12 @@
  * Source files in /cards folder for development reference.
  * This bundled file is used by Home Assistant.
  *
- * @version 2.0.1
+ * @version 2.1.0
  * @author iPIXEL Color Team
  * @license MIT
  */
 
-const CARD_VERSION = '2.0.1';
+const CARD_VERSION = '2.1.0';
 
 // =============================================================================
 // SHARED STYLES
@@ -257,9 +257,32 @@ class iPIXELCardBase extends HTMLElement {
 
   getRelatedEntity(domain, suffix = '') {
     if (!this._hass || !this._config.entity) return null;
-    const baseName = this._config.entity.replace(/^[^.]+\./, '').replace(/_?(text|display)$/, '');
-    const entityId = `${domain}.${baseName}${suffix}`;
-    return this._hass.states[entityId];
+
+    // Extract base name from config entity (e.g., "led_ble_28b0e78e" from "text.led_ble_28b0e78e_display")
+    const baseName = this._config.entity.replace(/^[^.]+\./, '').replace(/_?(text|display|gif_url)$/i, '');
+
+    // Try exact match first
+    const exactId = `${domain}.${baseName}${suffix}`;
+    if (this._hass.states[exactId]) return this._hass.states[exactId];
+
+    // Search for matching entities in the domain
+    const matches = Object.keys(this._hass.states).filter(id => {
+      if (!id.startsWith(`${domain}.`)) return false;
+      const entityName = id.replace(/^[^.]+\./, '');
+      return entityName.includes(baseName) || baseName.includes(entityName.replace(suffix, ''));
+    });
+
+    // Prefer entities without suffix for power switch, with suffix for others
+    if (suffix) {
+      const withSuffix = matches.find(id => id.endsWith(suffix));
+      if (withSuffix) return this._hass.states[withSuffix];
+    } else {
+      // For power switch, find the one that matches the base name most closely
+      const sorted = matches.sort((a, b) => a.length - b.length);
+      if (sorted.length > 0) return this._hass.states[sorted[0]];
+    }
+
+    return matches.length > 0 ? this._hass.states[matches[0]] : null;
   }
 
   async callService(domain, service, data = {}) {
@@ -305,23 +328,85 @@ class iPIXELDisplayCard extends iPIXELCardBase {
     const [width, height] = this.getResolution();
     const isOn = this.isOn();
     const name = this._config.name || this.getEntity()?.attributes?.friendly_name || 'iPIXEL Display';
-    const pixels = Math.min(width * height, 2048);
+
+    // Get current display content
+    const textEntity = this.getEntity();
+    const currentText = textEntity?.state || '';
+    const modeEntity = this.getRelatedEntity('select', '_mode');
+    const currentMode = modeEntity?.state || 'text';
+
+    // Determine what to show in the preview
+    let previewContent = '';
+    let previewClass = 'text-mode';
+    if (!isOn) {
+      previewContent = '';
+      previewClass = 'off-mode';
+    } else if (currentMode === 'clock') {
+      const now = new Date();
+      previewContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+      previewClass = 'clock-mode';
+    } else if (currentMode === 'gif') {
+      previewContent = '🎬 GIF';
+      previewClass = 'gif-mode';
+    } else if (currentMode === 'rhythm') {
+      previewContent = '🎵 Rhythm';
+      previewClass = 'rhythm-mode';
+    } else {
+      previewContent = currentText || 'No content';
+      previewClass = currentText ? 'text-mode' : 'empty-mode';
+    }
 
     this.shadowRoot.innerHTML = `
       <style>${iPIXELCardStyles}
         .display-container { background: #000; border-radius: 8px; padding: 8px; }
-        .display-grid {
-          display: grid;
-          grid-template-columns: repeat(${width}, 1fr);
-          gap: 1px;
-          background: #111;
+        .display-screen {
+          background: linear-gradient(180deg, #0a0a0a 0%, #000 100%);
           border-radius: 4px;
           overflow: hidden;
           aspect-ratio: ${width}/${height};
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          position: relative;
+          min-height: 48px;
         }
-        .pixel { background: #1a1a1a; aspect-ratio: 1; }
-        .pixel.on { background: var(--pixel-color, #ff6600); box-shadow: 0 0 2px var(--pixel-color, #ff6600); }
+        .display-screen::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 2px,
+            rgba(0,0,0,0.3) 2px,
+            rgba(0,0,0,0.3) 4px
+          );
+          pointer-events: none;
+        }
+        .display-content {
+          font-family: 'Courier New', monospace;
+          font-weight: bold;
+          font-size: clamp(12px, 3vw, 24px);
+          text-shadow: 0 0 10px currentColor, 0 0 20px currentColor;
+          padding: 8px 16px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 100%;
+          z-index: 1;
+        }
+        .display-content.text-mode { color: #ff6600; animation: glow 2s ease-in-out infinite alternate; }
+        .display-content.clock-mode { color: #00ff88; font-size: clamp(16px, 4vw, 32px); }
+        .display-content.gif-mode { color: #ff44ff; }
+        .display-content.rhythm-mode { color: #44aaff; animation: pulse 0.5s ease-in-out infinite; }
+        .display-content.empty-mode { color: #444; font-style: italic; text-shadow: none; }
+        .display-content.off-mode { color: #111; }
+        .display-content.scrolling { animation: scroll 8s linear infinite; }
+        @keyframes glow { from { opacity: 0.8; } to { opacity: 1; } }
+        @keyframes pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+        @keyframes scroll { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
         .display-footer { display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.75em; opacity: 0.6; }
+        .mode-badge { background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; text-transform: capitalize; }
       </style>
       <ha-card>
         <div class="card-content">
@@ -335,15 +420,25 @@ class iPIXELDisplayCard extends iPIXELCardBase {
             </button>
           </div>
           <div class="display-container">
-            <div class="display-grid">${Array(pixels).fill(0).map(() => `<div class="pixel ${isOn ? 'on' : ''}"></div>`).join('')}</div>
-            <div class="display-footer"><span>${width} x ${height}</span><span>${isOn ? 'Active' : 'Off'}</span></div>
+            <div class="display-screen">
+              <div class="display-content ${previewClass}">${previewContent}</div>
+            </div>
+            <div class="display-footer">
+              <span>${width} x ${height}</span>
+              <span class="mode-badge">${isOn ? currentMode : 'Off'}</span>
+            </div>
           </div>
         </div>
       </ha-card>`;
 
     this.shadowRoot.getElementById('power-btn')?.addEventListener('click', () => {
       const sw = this.getRelatedEntity('switch');
-      if (sw) this._hass.callService('switch', 'toggle', { entity_id: sw.entity_id });
+      if (sw) {
+        this._hass.callService('switch', 'toggle', { entity_id: sw.entity_id });
+      } else {
+        console.warn('iPIXEL: No power switch found. Config entity:', this._config.entity);
+        console.log('iPIXEL: Available switches:', Object.keys(this._hass.states).filter(e => e.startsWith('switch.')));
+      }
     });
   }
   static getConfigElement() { return document.createElement('ipixel-simple-editor'); }
@@ -419,7 +514,11 @@ class iPIXELControlsCard extends iPIXELCardBase {
         const action = e.currentTarget.dataset.action;
         if (action === 'power') {
           const sw = this.getRelatedEntity('switch');
-          if (sw) this._hass.callService('switch', 'toggle', { entity_id: sw.entity_id });
+          if (sw) {
+            this._hass.callService('switch', 'toggle', { entity_id: sw.entity_id });
+          } else {
+            console.warn('iPIXEL: No power switch found for toggle');
+          }
         } else if (action === 'clear') this.callService('ipixel_color', 'clear_pixels');
         else if (action === 'clock') this.callService('ipixel_color', 'set_clock_mode', { style: 1 });
         else if (action === 'sync') this.callService('ipixel_color', 'sync_time');
