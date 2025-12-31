@@ -17,7 +17,7 @@
  * @license MIT
  */
 
-const CARD_VERSION = '2.5.0';
+const CARD_VERSION = '2.6.0';
 
 // Shared state for display content (syncs between cards)
 // Load from localStorage if available, otherwise use defaults
@@ -390,7 +390,7 @@ class iPIXELDisplayCard extends iPIXELCardBase {
     };
   }
 
-  // Render text to pixel array
+  // Render text to pixel array (centered)
   _textToPixels(text, width, height, fgColor = '#ff6600', bgColor = '#111') {
     const pixels = [];
     const charWidth = 6; // 5 pixels + 1 space
@@ -404,22 +404,26 @@ class iPIXELDisplayCard extends iPIXELCardBase {
       }
     }
 
-    // Render each character
-    let xOffset = 1;
-    for (const char of text.toUpperCase()) {
+    // Calculate text width for centering
+    const upperText = text.toUpperCase();
+    const textWidth = upperText.length * charWidth - 1; // -1 for last space
+    const startX = Math.max(1, Math.floor((width - textWidth) / 2));
+
+    // Render each character (centered)
+    let xOffset = startX;
+    for (const char of upperText) {
       const charData = this._pixelFont[char] || this._pixelFont[' '];
       for (let col = 0; col < 5; col++) {
         for (let row = 0; row < 7; row++) {
           const pixelOn = (charData[col] >> row) & 1;
           const px = xOffset + col;
           const py = startY + row;
-          if (px < width && py < height && py >= 0) {
+          if (px >= 0 && px < width && py < height && py >= 0) {
             pixels[py * width + px] = pixelOn ? fgColor : bgColor;
           }
         }
       }
       xOffset += charWidth;
-      if (xOffset >= width) break;
     }
     return pixels;
   }
@@ -464,17 +468,28 @@ class iPIXELDisplayCard extends iPIXELCardBase {
       }
     }
 
-    // Scrolling effects wrap the content in a group with animation
+    // For scrolling effects, we need to duplicate content for seamless loop
+    let content = rects;
     let groupStyle = '';
-    if (effect === 'scroll_ltr') {
-      groupStyle = `animation: ipixel-scroll-ltr ${scrollDuration}s linear infinite;`;
-    } else if (effect === 'scroll_rtl') {
-      groupStyle = `animation: ipixel-scroll-rtl ${scrollDuration}s linear infinite;`;
+
+    if (effect === 'scroll_ltr' || effect === 'scroll_rtl') {
+      // Create a duplicate shifted by 100% for seamless loop
+      const duplicate = rects.replace(/x="(\d+\.?\d*)"/g, (_, x) => `x="${parseFloat(x) + svgWidth}"`);
+      content = rects + duplicate;
+
+      if (effect === 'scroll_ltr') {
+        groupStyle = `animation: ipixel-scroll-ltr ${scrollDuration}s linear infinite;`;
+      } else {
+        groupStyle = `animation: ipixel-scroll-rtl ${scrollDuration}s linear infinite;`;
+      }
     }
 
     return `
       <svg viewBox="0 0 ${svgWidth} ${svgHeight}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block;overflow:hidden;">
         <defs>
+          <clipPath id="displayClip">
+            <rect x="0" y="0" width="${svgWidth}" height="${svgHeight}"/>
+          </clipPath>
           <style>
             @keyframes ipixel-blink {
               0%, 100% { opacity: 1; }
@@ -495,16 +510,18 @@ class iPIXELDisplayCard extends iPIXELCardBase {
               50% { opacity: 1; filter: brightness(1.5); }
             }
             @keyframes ipixel-scroll-ltr {
-              0% { transform: translateX(-100%); }
-              100% { transform: translateX(100%); }
+              0% { transform: translateX(-${svgWidth}px); }
+              100% { transform: translateX(0); }
             }
             @keyframes ipixel-scroll-rtl {
-              0% { transform: translateX(100%); }
-              100% { transform: translateX(-100%); }
+              0% { transform: translateX(0); }
+              100% { transform: translateX(-${svgWidth}px); }
             }
           </style>
         </defs>
-        <g style="${groupStyle}">${rects}</g>
+        <g clip-path="url(#displayClip)">
+          <g style="${groupStyle}">${content}</g>
+        </g>
       </svg>`;
   }
 
@@ -726,6 +743,22 @@ class iPIXELControlsCard extends iPIXELCardBase {
         const mode = e.currentTarget.dataset.mode;
         const modeEntity = this.getRelatedEntity('select', '_mode');
         if (modeEntity) this._hass.callService('select', 'select_option', { entity_id: modeEntity.entity_id, option: mode });
+
+        // Update shared state for simulator
+        const modeColors = {
+          'text': '#ff6600', 'textimage': '#ff6600', 'clock': '#00ff88',
+          'gif': '#ff44ff', 'rhythm': '#44aaff'
+        };
+        window.iPIXELDisplayState = {
+          ...window.iPIXELDisplayState,
+          mode: mode,
+          fgColor: modeColors[mode] || '#ff6600',
+          text: mode === 'clock' ? '' : window.iPIXELDisplayState.text,
+          lastUpdate: Date.now()
+        };
+        saveDisplayState(window.iPIXELDisplayState);
+        window.dispatchEvent(new CustomEvent('ipixel-display-update', { detail: window.iPIXELDisplayState }));
+
         this.shadowRoot.querySelectorAll('[data-mode]').forEach(b => b.classList.remove('active'));
         e.currentTarget.classList.add('active');
       });
