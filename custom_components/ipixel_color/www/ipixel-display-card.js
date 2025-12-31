@@ -12,21 +12,46 @@
  * Source files in /cards folder for development reference.
  * This bundled file is used by Home Assistant.
  *
- * @version 2.3.0
+ * @version 2.4.0
  * @author iPIXEL Color Team
  * @license MIT
  */
 
-const CARD_VERSION = '2.3.0';
+const CARD_VERSION = '2.5.0';
 
 // Shared state for display content (syncs between cards)
-window.iPIXELDisplayState = window.iPIXELDisplayState || {
-  text: '',
-  mode: 'text',
-  fgColor: '#ff6600',
-  bgColor: '#000000',
-  lastUpdate: 0
-};
+// Load from localStorage if available, otherwise use defaults
+const IPIXEL_STORAGE_KEY = 'iPIXEL_DisplayState';
+
+function loadDisplayState() {
+  try {
+    const saved = localStorage.getItem(IPIXEL_STORAGE_KEY);
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (e) {
+    console.warn('iPIXEL: Could not load saved state', e);
+  }
+  return {
+    text: '',
+    mode: 'text',
+    effect: 'fixed',
+    speed: 50,
+    fgColor: '#ff6600',
+    bgColor: '#000000',
+    lastUpdate: 0
+  };
+}
+
+function saveDisplayState(state) {
+  try {
+    localStorage.setItem(IPIXEL_STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.warn('iPIXEL: Could not save state', e);
+  }
+}
+
+window.iPIXELDisplayState = window.iPIXELDisplayState || loadDisplayState();
 
 // =============================================================================
 // SHARED STYLES
@@ -399,21 +424,88 @@ class iPIXELDisplayCard extends iPIXELCardBase {
     return pixels;
   }
 
-  // Create SVG pixel display
-  _createPixelSvg(width, height, pixels, pixelGap = 1) {
-    const svgWidth = 100; // percentage-based
+  // Create SVG pixel display with effect animations
+  _createPixelSvg(width, height, pixels, pixelGap = 1, effect = 'fixed', speed = 50) {
+    const svgWidth = 100;
     const pxWidth = svgWidth / width;
-    const pxHeight = pxWidth; // square pixels
+    const pxHeight = pxWidth;
+    const svgHeight = height * pxHeight;
+
+    // Speed mapping: 1 = slowest (10s), 100 = fastest (0.2s)
+    // Blink/effects: shorter durations
+    const effectDuration = 0.2 + (100 - speed) * 0.08; // 0.2s to 8.2s
+    // Scroll: longer durations for full traverse
+    const scrollDuration = 1 + (100 - speed) * 0.15; // 1s to 16s
 
     let rects = '';
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const color = pixels[y * width + x] || '#111';
-        const isLit = color !== '#111' && color !== '#000' && color !== '#1a1a1a';
-        rects += `<rect x="${x * pxWidth}" y="${y * pxHeight}" width="${pxWidth - pixelGap * 0.1}" height="${pxHeight - pixelGap * 0.1}" fill="${color}" rx="0.3" ${isLit ? `style="filter: drop-shadow(0 0 1px ${color})"` : ''}/>`;
+        const isLit = color !== '#111' && color !== '#000' && color !== '#1a1a1a' && color !== '#050505';
+        const delay = (x / width) * effectDuration * 0.3; // stagger for wave effects
+
+        let style = isLit ? `filter: drop-shadow(0 0 2px ${color});` : '';
+
+        // Add per-pixel animation styles based on effect
+        if (isLit) {
+          if (effect === 'blink') {
+            style += `animation: ipixel-blink ${effectDuration}s ease-in-out infinite;`;
+          } else if (effect === 'breeze') {
+            style += `animation: ipixel-breeze ${effectDuration * 1.5}s ease-in-out infinite; animation-delay: ${delay}s;`;
+          } else if (effect === 'snow') {
+            const randomDelay = Math.random() * effectDuration;
+            style += `animation: ipixel-snow ${effectDuration * 2}s ease-in-out infinite; animation-delay: ${randomDelay}s;`;
+          } else if (effect === 'laser') {
+            style += `animation: ipixel-laser ${effectDuration}s linear infinite; animation-delay: ${delay}s;`;
+          }
+        }
+
+        rects += `<rect x="${x * pxWidth}" y="${y * pxHeight}" width="${pxWidth - pixelGap * 0.1}" height="${pxHeight - pixelGap * 0.1}" fill="${color}" rx="0.3" style="${style}"/>`;
       }
     }
-    return `<svg viewBox="0 0 ${svgWidth} ${height * pxHeight}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block;">${rects}</svg>`;
+
+    // Scrolling effects wrap the content in a group with animation
+    let groupStyle = '';
+    if (effect === 'scroll_ltr') {
+      groupStyle = `animation: ipixel-scroll-ltr ${scrollDuration}s linear infinite;`;
+    } else if (effect === 'scroll_rtl') {
+      groupStyle = `animation: ipixel-scroll-rtl ${scrollDuration}s linear infinite;`;
+    }
+
+    return `
+      <svg viewBox="0 0 ${svgWidth} ${svgHeight}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block;overflow:hidden;">
+        <defs>
+          <style>
+            @keyframes ipixel-blink {
+              0%, 100% { opacity: 1; }
+              50% { opacity: 0; }
+            }
+            @keyframes ipixel-breeze {
+              0%, 100% { opacity: 1; transform: translateX(0); }
+              50% { opacity: 0.4; transform: translateX(1px); }
+            }
+            @keyframes ipixel-snow {
+              0%, 100% { opacity: 1; }
+              25% { opacity: 0.2; }
+              50% { opacity: 0.8; }
+              75% { opacity: 0.3; }
+            }
+            @keyframes ipixel-laser {
+              0%, 100% { opacity: 0.2; filter: brightness(0.5); }
+              50% { opacity: 1; filter: brightness(1.5); }
+            }
+            @keyframes ipixel-scroll-ltr {
+              0% { transform: translateX(-100%); }
+              100% { transform: translateX(100%); }
+            }
+            @keyframes ipixel-scroll-rtl {
+              0% { transform: translateX(100%); }
+              100% { transform: translateX(-100%); }
+            }
+          </style>
+        </defs>
+        <g style="${groupStyle}">${rects}</g>
+      </svg>`;
   }
 
   render() {
@@ -431,11 +523,15 @@ class iPIXELDisplayCard extends iPIXELCardBase {
 
     // Use shared state text if it's newer, otherwise use entity state
     const currentText = sharedState.text || entityText;
+    const currentEffect = sharedState.effect || 'fixed';
+    const currentSpeed = sharedState.speed || 50;
 
     // Determine content and colors
     let displayText = '';
     let fgColor = sharedState.fgColor || '#ff6600';
     let bgColor = sharedState.bgColor || '#111';
+    let effect = currentEffect;
+    let speed = currentSpeed;
 
     if (!isOn) {
       displayText = '';
@@ -456,7 +552,7 @@ class iPIXELDisplayCard extends iPIXELCardBase {
 
     // Generate pixel data
     const pixels = this._textToPixels(displayText, width, height, fgColor, bgColor);
-    const pixelSvg = this._createPixelSvg(width, height, pixels);
+    const pixelSvg = this._createPixelSvg(width, height, pixels, 1, effect, speed);
 
     this.shadowRoot.innerHTML = `
       <style>${iPIXELCardStyles}
@@ -485,7 +581,7 @@ class iPIXELDisplayCard extends iPIXELCardBase {
             <div class="display-screen">${pixelSvg}</div>
             <div class="display-footer">
               <span>${width} x ${height}</span>
-              <span class="mode-badge">${isOn ? currentMode : 'Off'}</span>
+              <span class="mode-badge">${isOn ? (effect !== 'fixed' ? effect.replace('_', ' ') : currentMode) : 'Off'}</span>
             </div>
           </div>
         </div>
@@ -600,12 +696,14 @@ class iPIXELControlsCard extends iPIXELCardBase {
           }
         } else if (action === 'clear') {
           // Update shared state
-          window.iPIXELDisplayState = { text: '', mode: 'text', fgColor: '#ff6600', bgColor: '#000000', lastUpdate: Date.now() };
+          window.iPIXELDisplayState = { text: '', mode: 'text', effect: 'fixed', speed: 50, fgColor: '#ff6600', bgColor: '#000000', lastUpdate: Date.now() };
+          saveDisplayState(window.iPIXELDisplayState);
           window.dispatchEvent(new CustomEvent('ipixel-display-update', { detail: window.iPIXELDisplayState }));
           this.callService('ipixel_color', 'clear_pixels');
         }
         else if (action === 'clock') {
-          window.iPIXELDisplayState = { text: '', mode: 'clock', fgColor: '#00ff88', bgColor: '#000000', lastUpdate: Date.now() };
+          window.iPIXELDisplayState = { text: '', mode: 'clock', effect: 'fixed', speed: 50, fgColor: '#00ff88', bgColor: '#000000', lastUpdate: Date.now() };
+          saveDisplayState(window.iPIXELDisplayState);
           window.dispatchEvent(new CustomEvent('ipixel-display-update', { detail: window.iPIXELDisplayState }));
           this.callService('ipixel_color', 'set_clock_mode', { style: 1 });
         }
@@ -706,6 +804,8 @@ class iPIXELTextCard extends iPIXELCardBase {
 
     this.shadowRoot.getElementById('send-btn')?.addEventListener('click', () => {
       const text = this.shadowRoot.getElementById('text-input')?.value;
+      const effect = this.shadowRoot.getElementById('effect')?.value || 'fixed';
+      const speed = parseInt(this.shadowRoot.getElementById('speed')?.value || '50');
       const fgColorHex = this.shadowRoot.getElementById('text-color')?.value || '#ff6600';
       const bgColorHex = this.shadowRoot.getElementById('bg-color')?.value || '#000000';
 
@@ -714,10 +814,15 @@ class iPIXELTextCard extends iPIXELCardBase {
         window.iPIXELDisplayState = {
           text: text,
           mode: 'text',
+          effect: effect,
+          speed: speed,
           fgColor: fgColorHex,
           bgColor: bgColorHex,
           lastUpdate: Date.now()
         };
+
+        // Save to localStorage for persistence
+        saveDisplayState(window.iPIXELDisplayState);
 
         // Dispatch event to notify other cards
         window.dispatchEvent(new CustomEvent('ipixel-display-update', { detail: window.iPIXELDisplayState }));
