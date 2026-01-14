@@ -144,6 +144,14 @@ export class iPIXELTextCard extends iPIXELCardBase {
                 <span class="slider-value" id="text-speed-val">50</span>
               </div>
             </div>
+            <div class="section-title">Font</div>
+            <div class="control-row">
+              <select class="dropdown" id="font-select">
+                <option value="VCR_OSD_MONO">VCR OSD Mono</option>
+                <option value="CUSONG">CUSONG</option>
+                <option value="LEGACY">Legacy (Bitmap)</option>
+              </select>
+            </div>
             <div class="section-title">Colors</div>
             <div class="control-row">
               <div class="color-row">
@@ -185,7 +193,8 @@ export class iPIXELTextCard extends iPIXELCardBase {
       effect: this.shadowRoot.getElementById('text-effect')?.value || 'fixed',
       speed: parseInt(this.shadowRoot.getElementById('text-speed')?.value || '50'),
       fgColor: this.shadowRoot.getElementById('text-color')?.value || '#ff6600',
-      bgColor: this.shadowRoot.getElementById('bg-color')?.value || '#000000'
+      bgColor: this.shadowRoot.getElementById('bg-color')?.value || '#000000',
+      font: this.shadowRoot.getElementById('font-select')?.value || 'VCR_OSD_MONO'
     };
   }
 
@@ -203,7 +212,7 @@ export class iPIXELTextCard extends iPIXELCardBase {
    * Update text preview (without sending to device)
    */
   _updateTextPreview() {
-    const { text, effect, speed, fgColor, bgColor } = this._getTextFormValues();
+    const { text, effect, speed, fgColor, bgColor, font } = this._getTextFormValues();
 
     updateDisplayState({
       text: text || 'Preview',
@@ -211,7 +220,8 @@ export class iPIXELTextCard extends iPIXELCardBase {
       effect,
       speed,
       fgColor,
-      bgColor
+      bgColor,
+      font
     });
   }
 
@@ -261,6 +271,11 @@ export class iPIXELTextCard extends iPIXELCardBase {
       this._updateTextPreview();
     });
 
+    // Font selector with live preview
+    this.shadowRoot.getElementById('font-select')?.addEventListener('change', () => {
+      this._updateTextPreview();
+    });
+
     // Color pickers with live preview
     this.shadowRoot.getElementById('text-color')?.addEventListener('input', () => {
       this._updateTextPreview();
@@ -276,7 +291,7 @@ export class iPIXELTextCard extends iPIXELCardBase {
 
     // Send text button
     this.shadowRoot.getElementById('send-btn')?.addEventListener('click', () => {
-      const { text, effect, speed, fgColor, bgColor } = this._getTextFormValues();
+      const { text, effect, speed, fgColor, bgColor, font } = this._getTextFormValues();
 
       if (text) {
         updateDisplayState({
@@ -285,7 +300,8 @@ export class iPIXELTextCard extends iPIXELCardBase {
           effect,
           speed,
           fgColor,
-          bgColor
+          bgColor,
+          font
         });
 
         if (this._config.entity) {
@@ -295,12 +311,16 @@ export class iPIXELTextCard extends iPIXELCardBase {
           });
         }
 
+        // Map font name for backend (LEGACY uses default CUSONG)
+        const backendFont = font === 'LEGACY' ? 'CUSONG' : font;
+
         this.callService('ipixel_color', 'display_text', {
           text,
           effect,
           speed,
           color_fg: this.hexToRgb(fgColor),
           color_bg: this.hexToRgb(bgColor),
+          font: backendFont,
         });
       }
     });

@@ -7,6 +7,7 @@
 import { iPIXELCardBase } from '../base.js';
 import { iPIXELCardStyles } from '../styles.js';
 import { textToPixels, textToScrollPixels } from '../font.js';
+import { textToPixelsCanvas, textToScrollPixelsCanvas, loadFont, isFontLoaded } from '../canvas-font.js';
 import { LEDMatrixRenderer, createPixelSvg, EFFECTS } from '../renderer.js';
 import { getDisplayState, updateDisplayState } from '../state.js';
 
@@ -38,6 +39,15 @@ export class iPIXELDisplayCard extends iPIXELCardBase {
     if (rendererCache.has(this._rendererId)) {
       this._renderer = rendererCache.get(this._rendererId);
     }
+
+    // Preload default fonts
+    loadFont('VCR_OSD_MONO').then(() => {
+      // Re-render if we have state to display
+      if (this._lastState) {
+        this._updateDisplay(this._lastState);
+      }
+    });
+    loadFont('CUSONG'); // Load in background
   }
 
   disconnectedCallback() {
@@ -128,6 +138,10 @@ export class iPIXELDisplayCard extends iPIXELCardBase {
     const fgColor = state?.fgColor || '#ff6600';
     const bgColor = state?.bgColor || '#111';
     const mode = state?.mode || 'text';
+    const font = state?.font || 'VCR_OSD_MONO';
+
+    // Store state for re-render after font loads
+    this._lastState = state;
 
     // Determine display text based on mode
     let displayText = text;
@@ -153,20 +167,44 @@ export class iPIXELDisplayCard extends iPIXELCardBase {
       // Ambient effects don't need text pixels
       this._renderer.setData([], [], width);
     } else {
-      // Check if we need scrolling (text wider than display)
-      const textPixelWidth = displayText.length * 6; // 6 pixels per char
+      // Helper to get pixels using appropriate renderer
+      const useCanvasFont = font !== 'LEGACY' && isFontLoaded(font);
+
+      const getPixels = (text, w, h, fg, bg) => {
+        if (useCanvasFont) {
+          const canvasPixels = textToPixelsCanvas(text, w, h, fg, bg, font);
+          if (canvasPixels) return canvasPixels;
+        }
+        // Fall back to bitmap font
+        return textToPixels(text, w, h, fg, bg);
+      };
+
+      const getScrollPixels = (text, displayW, h, fg, bg) => {
+        if (useCanvasFont) {
+          const canvasResult = textToScrollPixelsCanvas(text, displayW, h, fg, bg, font);
+          if (canvasResult) return canvasResult;
+        }
+        // Fall back to bitmap font
+        return textToScrollPixels(text, displayW, h, fg, bg);
+      };
+
+      // Estimate text width for scroll detection
+      // For canvas fonts, we use the font's actual character width
+      // For bitmap, we use 6 pixels per char
+      const textPixelWidth = useCanvasFont
+        ? displayText.length * 10 // Approximate for TTF fonts
+        : displayText.length * 6;
+
       const needsScroll = (effect === 'scroll_ltr' || effect === 'scroll_rtl' || effect === 'bounce') && textPixelWidth > width;
 
       if (needsScroll) {
         // Generate extended pixel data for scrolling
-        const { pixels: extendedPixels, width: extendedWidth } = textToScrollPixels(
-          displayText, width, height, displayFg, bgColor
-        );
-        const displayPixels = textToPixels(displayText, width, height, displayFg, bgColor);
-        this._renderer.setData(displayPixels, extendedPixels, extendedWidth);
+        const scrollResult = getScrollPixels(displayText, width, height, displayFg, bgColor);
+        const displayPixels = getPixels(displayText, width, height, displayFg, bgColor);
+        this._renderer.setData(displayPixels, scrollResult.pixels, scrollResult.width);
       } else {
         // Static or non-scroll effects
-        const pixels = textToPixels(displayText, width, height, displayFg, bgColor);
+        const pixels = getPixels(displayText, width, height, displayFg, bgColor);
         this._renderer.setData(pixels);
       }
     }
@@ -202,6 +240,7 @@ export class iPIXELDisplayCard extends iPIXELCardBase {
     const currentSpeed = sharedState.speed || 50;
     const fgColor = sharedState.fgColor || '#ff6600';
     const bgColor = sharedState.bgColor || '#111';
+    const currentFont = sharedState.font || 'VCR_OSD_MONO';
 
     // Check if effect is ambient
     const effectInfo = EFFECTS[currentEffect];
@@ -270,7 +309,8 @@ export class iPIXELDisplayCard extends iPIXELCardBase {
       speed: currentSpeed,
       fgColor: fgColor,
       bgColor: bgColor,
-      mode: currentMode
+      mode: currentMode,
+      font: currentFont
     });
 
     this._attachPowerButton();

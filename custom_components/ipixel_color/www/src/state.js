@@ -12,6 +12,7 @@ const DEFAULT_STATE = {
   speed: 50,
   fgColor: '#ff6600',
   bgColor: '#000000',
+  font: 'VCR_OSD_MONO',
   lastUpdate: 0
 };
 
