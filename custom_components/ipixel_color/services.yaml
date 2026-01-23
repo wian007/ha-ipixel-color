@@ -663,3 +663,56 @@ display_image_url:
           min: 1
           max: 255
           mode: box
+
+# Screen and mode control
+
+set_screen:
+  name: Set Screen
+  description: Select which stored screen buffer to display (1-9)
+  target:
+    entity:
+      integration: ipixel_color
+      domain: switch
+  fields:
+    screen:
+      name: Screen Number
+      description: Screen buffer to display (1-9)
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 9
+          mode: box
+
+set_diy_mode:
+  name: Set DIY Mode
+  description: Enable or disable DIY mode for custom content creation
+  target:
+    entity:
+      integration: ipixel_color
+      domain: switch
+  fields:
+    enable:
+      name: Enable
+      description: Enable DIY mode
+      required: true
+      default: true
+      selector:
+        boolean:
+
+send_raw_command:
+  name: Send Raw Command
+  description: Send raw hex command to device (for expert/debugging use)
+  target:
+    entity:
+      integration: ipixel_color
+      domain: switch
+  fields:
+    hex_data:
+      name: Hex Data
+      description: Raw command as hex string (e.g., 'AABBCC' or 'AA BB CC')
+      required: true
+      example: "05 00 07 01 01"
+      selector:
+        text:

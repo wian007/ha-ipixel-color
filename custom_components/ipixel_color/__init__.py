@@ -62,6 +62,10 @@ SERVICE_ERASE_DATA = "erase_data"
 SERVICE_SET_PROGRAM_MODE = "set_program_mode"
 SERVICE_SET_RHYTHM_MODE_ADVANCED = "set_rhythm_mode_advanced"
 SERVICE_DISPLAY_IMAGE_URL = "display_image_url"
+# Screen and mode control (from ipixel-ctrl reference)
+SERVICE_SET_SCREEN = "set_screen"
+SERVICE_SET_DIY_MODE = "set_diy_mode"
+SERVICE_SEND_RAW_COMMAND = "send_raw_command"
 
 # Frontend card registration flag
 FRONTEND_REGISTERED = False
@@ -600,6 +604,51 @@ async def _async_register_services(
         except Exception as err:
             _LOGGER.error("Error displaying image from URL: %s", err)
 
+    # Screen and mode control handlers (from ipixel-ctrl reference)
+
+    async def handle_set_screen(call: ServiceCall) -> None:
+        """Handle set_screen service call."""
+        screen = call.data.get("screen", 1)
+
+        try:
+            success = await api.set_screen(screen)
+            if success:
+                _LOGGER.info("Screen set to %d", screen)
+            else:
+                _LOGGER.error("Failed to set screen to %d", screen)
+        except Exception as err:
+            _LOGGER.error("Error setting screen: %s", err)
+
+    async def handle_set_diy_mode(call: ServiceCall) -> None:
+        """Handle set_diy_mode service call."""
+        enable = call.data.get("enable", True)
+
+        try:
+            success = await api.set_diy_mode(enable)
+            if success:
+                _LOGGER.info("DIY mode %s", "enabled" if enable else "disabled")
+            else:
+                _LOGGER.error("Failed to set DIY mode")
+        except Exception as err:
+            _LOGGER.error("Error setting DIY mode: %s", err)
+
+    async def handle_send_raw_command(call: ServiceCall) -> None:
+        """Handle send_raw_command service call."""
+        hex_data = call.data.get("hex_data", "")
+
+        if not hex_data:
+            _LOGGER.error("No hex data provided for send_raw_command")
+            return
+
+        try:
+            success = await api.send_raw_command(hex_data)
+            if success:
+                _LOGGER.info("Raw command sent: %s", hex_data)
+            else:
+                _LOGGER.error("Failed to send raw command: %s", hex_data)
+        except Exception as err:
+            _LOGGER.error("Error sending raw command: %s", err)
+
     # Register all services if not already registered
     if not hass.services.has_service(DOMAIN, SERVICE_DISPLAY_TEXT):
         hass.services.async_register(DOMAIN, SERVICE_DISPLAY_TEXT, handle_display_text)
@@ -654,6 +703,13 @@ async def _async_register_services(
         hass.services.async_register(DOMAIN, SERVICE_SET_RHYTHM_MODE_ADVANCED, handle_set_rhythm_mode_advanced)
     if not hass.services.has_service(DOMAIN, SERVICE_DISPLAY_IMAGE_URL):
         hass.services.async_register(DOMAIN, SERVICE_DISPLAY_IMAGE_URL, handle_display_image_url)
+    # Screen and mode control services (from ipixel-ctrl reference)
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_SCREEN):
+        hass.services.async_register(DOMAIN, SERVICE_SET_SCREEN, handle_set_screen)
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_DIY_MODE):
+        hass.services.async_register(DOMAIN, SERVICE_SET_DIY_MODE, handle_set_diy_mode)
+    if not hass.services.has_service(DOMAIN, SERVICE_SEND_RAW_COMMAND):
+        hass.services.async_register(DOMAIN, SERVICE_SEND_RAW_COMMAND, handle_send_raw_command)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

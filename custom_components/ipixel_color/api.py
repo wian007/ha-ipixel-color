@@ -25,6 +25,9 @@ from .device.commands import (
     make_erase_data_command,
     make_program_mode_command,
     make_rhythm_mode_advanced_command,
+    make_screen_command,
+    make_diy_mode_command,
+    make_raw_command,
 )
 from .device.clock import make_clock_mode_command, make_time_command
 from .device.text import make_text_command
@@ -861,6 +864,86 @@ class iPIXELAPI:
             return False
         except Exception as err:
             _LOGGER.error("Error setting advanced rhythm mode: %s", err)
+            return False
+
+    async def set_screen(self, screen: int) -> bool:
+        """Select visible screen buffer.
+
+        Args:
+            screen: Screen number to display (1-9)
+
+        Returns:
+            True if command was sent successfully
+        """
+        try:
+            command = make_screen_command(screen)
+            success = await self._bluetooth.send_command(command)
+
+            if success:
+                _LOGGER.info("Screen set to %d", screen)
+            else:
+                _LOGGER.error("Failed to set screen to %d", screen)
+            return success
+
+        except ValueError as err:
+            _LOGGER.error("Invalid screen value: %s", err)
+            return False
+        except Exception as err:
+            _LOGGER.error("Error setting screen: %s", err)
+            return False
+
+    async def set_diy_mode(self, enable: bool) -> bool:
+        """Enable or disable DIY mode.
+
+        DIY mode allows custom pixel manipulation and content creation.
+
+        Args:
+            enable: True to enable DIY mode, False to disable
+
+        Returns:
+            True if command was sent successfully
+        """
+        try:
+            command = make_diy_mode_command(enable)
+            success = await self._bluetooth.send_command(command)
+
+            if success:
+                _LOGGER.info("DIY mode %s", "enabled" if enable else "disabled")
+            else:
+                _LOGGER.error("Failed to set DIY mode")
+            return success
+
+        except Exception as err:
+            _LOGGER.error("Error setting DIY mode: %s", err)
+            return False
+
+    async def send_raw_command(self, hex_data: str) -> bool:
+        """Send raw hex command to device for expert/debugging use.
+
+        This allows sending arbitrary commands to the device for testing
+        or accessing undocumented features. Use with caution.
+
+        Args:
+            hex_data: Hex string (e.g., 'AABBCC' or 'AA BB CC')
+
+        Returns:
+            True if command was sent successfully
+        """
+        try:
+            command = make_raw_command(hex_data)
+            success = await self._bluetooth.send_command(command)
+
+            if success:
+                _LOGGER.info("Raw command sent: %s (%d bytes)", hex_data, len(command))
+            else:
+                _LOGGER.error("Failed to send raw command: %s", hex_data)
+            return success
+
+        except ValueError as err:
+            _LOGGER.error("Invalid raw command: %s", err)
+            return False
+        except Exception as err:
+            _LOGGER.error("Error sending raw command: %s", err)
             return False
 
     async def display_image_url(

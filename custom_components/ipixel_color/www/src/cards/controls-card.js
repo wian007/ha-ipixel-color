@@ -59,6 +59,25 @@ export class iPIXELControlsCard extends iPIXELCardBase {
               <option value="270">270°</option>
             </select>
           </div>
+          <div class="section-title">Screen Buffer</div>
+          <div class="control-row">
+            <div class="button-grid button-grid-3">
+              ${[1,2,3,4,5,6,7,8,9].map(n => `<button class="mode-btn" data-screen="${n}">${n}</button>`).join('')}
+            </div>
+          </div>
+          <div class="section-title">Advanced</div>
+          <div class="control-row">
+            <div class="button-grid button-grid-2">
+              <button class="mode-btn" id="diy-mode-btn" data-action="diy-on">DIY Mode On</button>
+              <button class="mode-btn" data-action="diy-off">DIY Mode Off</button>
+            </div>
+          </div>
+          <div class="control-row" style="margin-top: 8px;">
+            <div style="display: flex; gap: 8px;">
+              <input type="text" class="text-input" id="raw-command" placeholder="Raw hex (e.g., 05 00 07 01 01)" style="flex: 1;">
+              <button class="btn btn-secondary" id="send-raw-btn">Send</button>
+            </div>
+          </div>
         </div>
       </ha-card>`;
 
@@ -129,6 +148,43 @@ export class iPIXELControlsCard extends iPIXELCardBase {
       const orientEntity = this.getRelatedEntity('select', '_orientation');
       if (orientEntity) {
         this._hass.callService('select', 'select_option', { entity_id: orientEntity.entity_id, option: e.target.value });
+      }
+    });
+
+    // Screen buffer selection
+    this.shadowRoot.querySelectorAll('[data-screen]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const screen = parseInt(e.currentTarget.dataset.screen);
+        this.callService('ipixel_color', 'set_screen', { screen: screen });
+        // Update active state
+        this.shadowRoot.querySelectorAll('[data-screen]').forEach(b => b.classList.remove('active'));
+        e.currentTarget.classList.add('active');
+      });
+    });
+
+    // DIY mode buttons
+    this.shadowRoot.querySelectorAll('[data-action="diy-on"], [data-action="diy-off"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const enable = e.currentTarget.dataset.action === 'diy-on';
+        this.callService('ipixel_color', 'set_diy_mode', { enable: enable });
+      });
+    });
+
+    // Raw command input
+    this.shadowRoot.getElementById('send-raw-btn')?.addEventListener('click', () => {
+      const hexData = this.shadowRoot.getElementById('raw-command')?.value;
+      if (hexData && hexData.trim()) {
+        this.callService('ipixel_color', 'send_raw_command', { hex_data: hexData.trim() });
+      }
+    });
+
+    // Also allow Enter key to send raw command
+    this.shadowRoot.getElementById('raw-command')?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        const hexData = e.target.value;
+        if (hexData && hexData.trim()) {
+          this.callService('ipixel_color', 'send_raw_command', { hex_data: hexData.trim() });
+        }
       }
     });
   }

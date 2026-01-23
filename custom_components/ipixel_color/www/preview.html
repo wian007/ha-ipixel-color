@@ -207,6 +207,33 @@
     </div>
   </div>
 
+  <div class="controls-section" id="ble-section">
+    <h3>Real Device Connection (WebBluetooth)</h3>
+    <div class="control-row">
+      <label>Status:</label>
+      <span id="ble-status" style="color: #f44; font-weight: bold;">Disconnected</span>
+      <span id="ble-device-name" style="color: #888; margin-left: 8px;"></span>
+    </div>
+    <div class="control-row">
+      <button id="ble-connect-btn" onclick="connectBleDevice()">Connect Device</button>
+      <button id="ble-disconnect-btn" onclick="disconnectBleDevice()" style="display:none;">Disconnect</button>
+    </div>
+    <div class="control-row" id="ble-controls" style="display:none;">
+      <button onclick="blePowerOn()">Power On</button>
+      <button onclick="blePowerOff()">Power Off</button>
+      <button onclick="bleSendPreview()">Send Preview to Device</button>
+    </div>
+    <div class="control-row" id="ble-controls-2" style="display:none;">
+      <label>Brightness:</label>
+      <input type="range" id="ble-brightness" min="1" max="100" value="50" style="flex:1;">
+      <span id="ble-brightness-value">50</span>
+      <button onclick="bleSetBrightness()">Set</button>
+    </div>
+    <p style="font-size: 0.75em; color: #666; margin-top: 8px;">
+      Requires Chrome or Edge. Click "Connect Device" and select your LED_BLE_* device.
+    </p>
+  </div>
+
   <div class="log-section">
     <h3>Service Calls Log</h3>
     <div id="service-log"></div>
@@ -341,6 +368,107 @@
           card.hass = { ...mockHass };
         }
       });
+    }
+
+    // Import BLE device module
+    import * as BLE from './src/ble-device.js';
+    window.BLE = BLE; // Expose for debugging
+
+    // BLE connection functions
+    window.connectBleDevice = async function() {
+      try {
+        const deviceName = await BLE.connectDevice();
+        document.getElementById('ble-status').textContent = 'Connected';
+        document.getElementById('ble-status').style.color = '#4f4';
+        document.getElementById('ble-device-name').textContent = deviceName;
+        document.getElementById('ble-connect-btn').style.display = 'none';
+        document.getElementById('ble-disconnect-btn').style.display = 'inline-block';
+        document.getElementById('ble-controls').style.display = 'flex';
+        document.getElementById('ble-controls-2').style.display = 'flex';
+        logService('ble', 'connect', { device: deviceName });
+      } catch (e) {
+        logService('ble', 'error', { message: e.message });
+      }
+    };
+
+    window.disconnectBleDevice = async function() {
+      await BLE.disconnectDevice();
+      document.getElementById('ble-status').textContent = 'Disconnected';
+      document.getElementById('ble-status').style.color = '#f44';
+      document.getElementById('ble-device-name').textContent = '';
+      document.getElementById('ble-connect-btn').style.display = 'inline-block';
+      document.getElementById('ble-disconnect-btn').style.display = 'none';
+      document.getElementById('ble-controls').style.display = 'none';
+      document.getElementById('ble-controls-2').style.display = 'none';
+      logService('ble', 'disconnect', {});
+    };
+
+    window.blePowerOn = async function() {
+      await BLE.powerOn();
+      logService('ble', 'power_on', {});
+    };
+
+    window.blePowerOff = async function() {
+      await BLE.powerOff();
+      logService('ble', 'power_off', {});
+    };
+
+    window.bleSetBrightness = async function() {
+      const value = parseInt(document.getElementById('ble-brightness').value);
+      await BLE.setBrightness(value);
+      logService('ble', 'set_brightness', { value });
+    };
+
+    // Update brightness display
+    document.getElementById('ble-brightness').addEventListener('input', (e) => {
+      document.getElementById('ble-brightness-value').textContent = e.target.value;
+    });
+
+    window.bleSendPreview = async function() {
+      // Get current preview pixels from the renderer
+      const displayCard = document.getElementById('display-card');
+      if (!displayCard || !displayCard._renderer) {
+        logService('ble', 'error', { message: 'No renderer available' });
+        return;
+      }
+
+      const renderer = displayCard._renderer;
+      const width = renderer.width;
+      const height = renderer.height;
+      const pixels = renderer._colorPixels || [];
+
+      if (pixels.length === 0) {
+        logService('ble', 'error', { message: 'No pixels to send' });
+        return;
+      }
+
+      logService('ble', 'send_preview', { width, height, pixelCount: pixels.length });
+
+      try {
+        await BLE.sendPixels(pixels, width, height);
+        logService('ble', 'send_preview_complete', {});
+      } catch (e) {
+        logService('ble', 'error', { message: e.message });
+      }
+    };
+
+    // Handle BLE disconnect events
+    BLE.addEventListener('disconnect', () => {
+      document.getElementById('ble-status').textContent = 'Disconnected';
+      document.getElementById('ble-status').style.color = '#f44';
+      document.getElementById('ble-device-name').textContent = '';
+      document.getElementById('ble-connect-btn').style.display = 'inline-block';
+      document.getElementById('ble-disconnect-btn').style.display = 'none';
+      document.getElementById('ble-controls').style.display = 'none';
+      document.getElementById('ble-controls-2').style.display = 'none';
+    });
+
+    // Check WebBluetooth availability
+    if (!BLE.isWebBluetoothAvailable()) {
+      document.getElementById('ble-section').innerHTML = `
+        <h3>Real Device Connection</h3>
+        <p style="color: #f88;">WebBluetooth is not available. Use Chrome or Edge on a supported platform.</p>
+      `;
     }
 
     // Import and initialize cards

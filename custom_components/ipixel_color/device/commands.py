@@ -320,3 +320,66 @@ def make_rhythm_mode_advanced_command(style: int, levels: list[int]) -> bytes:
     command = bytearray([16, 0, 1, 2, style])
     command.extend(levels)
     return bytes(command)
+
+
+def make_screen_command(screen: int) -> bytes:
+    """Build command to select visible screen buffer.
+
+    Command format from ipixel-ctrl (opcode 0x8007):
+    [length, 0, 0x07, 0x80, screen]
+
+    Args:
+        screen: Screen number to display (1-9)
+
+    Returns:
+        Command bytes for screen selection
+
+    Raises:
+        ValueError: If screen is not in valid range (1-9)
+    """
+    if screen < 1 or screen > 9:
+        raise ValueError("Screen must be between 1 and 9")
+
+    return make_command_payload(0x8007, bytes([screen]))
+
+
+def make_diy_mode_command(enable: bool) -> bytes:
+    """Build command to enable/disable DIY mode.
+
+    Command format from ipixel-ctrl (opcode 0x0104):
+    [length, 0, 0x04, 0x01, enable_byte]
+
+    Args:
+        enable: True to enable DIY mode, False to disable
+
+    Returns:
+        Command bytes for DIY mode control
+    """
+    enable_byte = 0x01 if enable else 0x00
+    return make_command_payload(0x0104, bytes([enable_byte]))
+
+
+def make_raw_command(hex_data: str) -> bytes:
+    """Build raw command from hex string for expert/debugging use.
+
+    This allows sending arbitrary commands to the device for testing
+    or accessing undocumented features.
+
+    Args:
+        hex_data: Hex string (e.g., 'AABBCC' or 'AA BB CC')
+
+    Returns:
+        Command bytes from the hex data
+
+    Raises:
+        ValueError: If hex_data is empty or invalid
+    """
+    if not hex_data or len(hex_data) < 1:
+        raise ValueError("At least one byte must be specified")
+
+    # Remove spaces and convert to bytes
+    hex_clean = hex_data.replace(" ", "")
+    try:
+        return bytes.fromhex(hex_clean)
+    except ValueError as err:
+        raise ValueError(f"Invalid hex data: {err}") from err
