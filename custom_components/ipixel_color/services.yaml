@@ -795,3 +795,91 @@ send_mix_data:
           min: 1
           max: 255
           mode: box
+
+# Optimized pixel and image services (from go-ipxl)
+
+set_pixels_batched:
+  name: Set Pixels (Batched)
+  description: Set multiple pixels using optimized batch sending, grouped by color. More efficient than set_pixels for drawing shapes or patterns.
+  target:
+    entity:
+      integration: ipixel_color
+      domain: switch
+  fields:
+    pixels:
+      name: Pixels
+      description: List of pixel objects with x, y, and color properties. Pixels are automatically grouped by color for efficient transmission.
+      required: true
+      example: '[{"x": 0, "y": 0, "color": "ff0000"}, {"x": 1, "y": 0, "color": "ff0000"}, {"x": 2, "y": 0, "color": "00ff00"}]'
+      selector:
+        object:
+
+display_image_raw_rgb:
+  name: Display Image (Raw RGB)
+  description: Display image using raw RGB protocol (camera mode). Sends pixel data directly without PNG encoding, useful for real-time streaming applications.
+  target:
+    entity:
+      integration: ipixel_color
+      domain: switch
+  fields:
+    image_path:
+      name: Image Path
+      description: Path to the image file (PNG, JPEG, etc.)
+      required: true
+      example: "/config/www/images/display.png"
+      selector:
+        text:
+    brightness:
+      name: Brightness
+      description: Brightness level applied to image data (1-100)
+      required: false
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 100
+          mode: slider
+          unit_of_measurement: "%"
+
+display_image_raw_rgb_url:
+  name: Display Image URL (Raw RGB)
+  description: Download and display image using raw RGB protocol. Uses direct pixel data transmission for potentially faster updates.
+  target:
+    entity:
+      integration: ipixel_color
+      domain: switch
+  fields:
+    url:
+      name: Image URL
+      description: URL to the image file (PNG, JPEG, etc.)
+      required: true
+      example: "https://example.com/image.png"
+      selector:
+        text:
+    brightness:
+      name: Brightness
+      description: Brightness level applied to image data (1-100)
+      required: false
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 100
+          mode: slider
+          unit_of_measurement: "%"
+
+draw_solid_color:
+  name: Draw Solid Color
+  description: Fill the entire display with a single color using raw RGB protocol. Faster than setting each pixel individually.
+  target:
+    entity:
+      integration: ipixel_color
+      domain: switch
+  fields:
+    color:
+      name: Color
+      description: Hex color to fill display with (e.g., 'ff0000' for red)
+      required: true
+      example: "ff0000"
+      selector:
+        text:

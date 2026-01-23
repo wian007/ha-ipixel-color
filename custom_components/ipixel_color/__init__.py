@@ -71,6 +71,11 @@ SERVICE_SET_PASSWORD = "set_password"
 SERVICE_VERIFY_PASSWORD = "verify_password"
 # Mixed data command (from ipixel-ctrl protocol)
 SERVICE_SEND_MIX_DATA = "send_mix_data"
+# Optimized pixel and image services (from go-ipxl)
+SERVICE_SET_PIXELS_BATCHED = "set_pixels_batched"
+SERVICE_DISPLAY_IMAGE_RAW_RGB = "display_image_raw_rgb"
+SERVICE_DISPLAY_IMAGE_RAW_RGB_URL = "display_image_raw_rgb_url"
+SERVICE_DRAW_SOLID_COLOR = "draw_solid_color"
 
 # Frontend card registration flag
 FRONTEND_REGISTERED = False
@@ -348,6 +353,84 @@ async def _async_register_services(
                 _LOGGER.warning("Some pixels failed to set")
         except Exception as err:
             _LOGGER.error("Error setting pixels: %s", err)
+
+    async def handle_set_pixels_batched(call: ServiceCall) -> None:
+        """Handle set_pixels_batched service call (optimized batch sending)."""
+        pixels = call.data.get("pixels", [])
+
+        if not pixels:
+            _LOGGER.warning("No pixels provided")
+            return
+
+        try:
+            # Ensure fun mode is enabled
+            await api.set_fun_mode(True)
+
+            success = await api.set_pixels_batched(pixels)
+            if success:
+                _LOGGER.info("Set %d pixels successfully (batched)", len(pixels))
+            else:
+                _LOGGER.warning("Some batched pixels failed to set")
+        except Exception as err:
+            _LOGGER.error("Error setting batched pixels: %s", err)
+
+    async def handle_display_image_raw_rgb(call: ServiceCall) -> None:
+        """Handle display_image_raw_rgb service call (raw RGB protocol)."""
+        image_path = call.data.get("image_path")
+        brightness = call.data.get("brightness", 100)
+
+        if not image_path:
+            _LOGGER.error("No image_path provided")
+            return
+
+        try:
+            import aiofiles
+            async with aiofiles.open(image_path, 'rb') as f:
+                image_bytes = await f.read()
+
+            # Determine file extension
+            file_ext = "." + image_path.split(".")[-1].lower() if "." in image_path else ".png"
+
+            success = await api.display_image_raw_rgb(image_bytes, file_ext, brightness)
+            if success:
+                _LOGGER.info("Displayed raw RGB image: %s", image_path)
+            else:
+                _LOGGER.error("Failed to display raw RGB image")
+        except FileNotFoundError:
+            _LOGGER.error("Image file not found: %s", image_path)
+        except Exception as err:
+            _LOGGER.error("Error displaying raw RGB image: %s", err)
+
+    async def handle_display_image_raw_rgb_url(call: ServiceCall) -> None:
+        """Handle display_image_raw_rgb_url service call (raw RGB from URL)."""
+        url = call.data.get("url")
+        brightness = call.data.get("brightness", 100)
+
+        if not url:
+            _LOGGER.error("No URL provided")
+            return
+
+        try:
+            success = await api.display_image_raw_rgb_url(url, brightness)
+            if success:
+                _LOGGER.info("Displayed raw RGB image from URL: %s", url)
+            else:
+                _LOGGER.error("Failed to display raw RGB image from URL")
+        except Exception as err:
+            _LOGGER.error("Error displaying raw RGB image from URL: %s", err)
+
+    async def handle_draw_solid_color(call: ServiceCall) -> None:
+        """Handle draw_solid_color service call (fill display with color)."""
+        color = call.data.get("color", "000000")
+
+        try:
+            success = await api.draw_solid_color(color)
+            if success:
+                _LOGGER.info("Filled display with color #%s", color)
+            else:
+                _LOGGER.error("Failed to fill display with color")
+        except Exception as err:
+            _LOGGER.error("Error filling display with color: %s", err)
 
     async def handle_clear_pixels(call: ServiceCall) -> None:
         """Handle clear_pixels service call."""
@@ -795,6 +878,15 @@ async def _async_register_services(
     # Mixed data service (from ipixel-ctrl protocol)
     if not hass.services.has_service(DOMAIN, SERVICE_SEND_MIX_DATA):
         hass.services.async_register(DOMAIN, SERVICE_SEND_MIX_DATA, handle_send_mix_data)
+    # Optimized pixel and image services (from go-ipxl)
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_PIXELS_BATCHED):
+        hass.services.async_register(DOMAIN, SERVICE_SET_PIXELS_BATCHED, handle_set_pixels_batched)
+    if not hass.services.has_service(DOMAIN, SERVICE_DISPLAY_IMAGE_RAW_RGB):
+        hass.services.async_register(DOMAIN, SERVICE_DISPLAY_IMAGE_RAW_RGB, handle_display_image_raw_rgb)
+    if not hass.services.has_service(DOMAIN, SERVICE_DISPLAY_IMAGE_RAW_RGB_URL):
+        hass.services.async_register(DOMAIN, SERVICE_DISPLAY_IMAGE_RAW_RGB_URL, handle_display_image_raw_rgb_url)
+    if not hass.services.has_service(DOMAIN, SERVICE_DRAW_SOLID_COLOR):
+        hass.services.async_register(DOMAIN, SERVICE_DRAW_SOLID_COLOR, handle_draw_solid_color)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

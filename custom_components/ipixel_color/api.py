@@ -36,6 +36,14 @@ from .device.commands import (
     MIX_BLOCK_TYPE_TEXT,
     MIX_BLOCK_TYPE_GIF,
     MIX_BLOCK_TYPE_PNG,
+    # Batch pixel commands (from go-ipxl)
+    make_batch_pixel_command,
+    group_pixels_by_color,
+    # Raw RGB camera protocol (from go-ipxl)
+    make_raw_rgb_chunk_command,
+    split_rgb_into_chunks,
+    image_to_rgb_bytes,
+    RAW_RGB_CHUNK_SIZE,
 )
 from .device.clock import make_clock_mode_command, make_time_command
 from .device.text import make_text_command
@@ -239,9 +247,10 @@ class iPIXELAPI:
             return False
 
     async def set_pixels(self, pixels: list[dict]) -> bool:
-        """Set multiple pixels at once.
+        """Set multiple pixels at once (sends one command per pixel).
 
         Note: Fun mode must be enabled first for this to work.
+        For better performance with many pixels, use set_pixels_batched() instead.
 
         Args:
             pixels: List of dicts with 'x', 'y', and 'color' keys
@@ -267,6 +276,237 @@ class iPIXELAPI:
 
         except Exception as err:
             _LOGGER.error("Error setting pixels: %s", err)
+            return False
+
+    async def set_pixels_batched(self, pixels: list[dict]) -> bool:
+        """Set multiple pixels using batched commands grouped by color.
+
+        This is more efficient than set_pixels() when drawing shapes or patterns
+        because it groups pixels by color and sends them in batches, reducing
+        the number of BLE round-trips.
+
+        Based on go-ipxl's rawSendPixels implementation.
+
+        Note: Fun mode must be enabled first for this to work.
+
+        Args:
+            pixels: List of dicts with 'x', 'y', and 'color' keys
+                    color can be hex string ('ff0000') or RGB tuple (255, 0, 0)
+
+        Returns:
+            True if all commands were sent successfully
+        """
+        try:
+            # Group pixels by color
+            color_groups = group_pixels_by_color(pixels)
+
+            if not color_groups:
+                _LOGGER.warning("No valid pixels to set")
+                return False
+
+            all_success = True
+            total_pixels = 0
+
+            for (r, g, b), positions in color_groups.items():
+                # Skip black pixels (they're "off")
+                if r == 0 and g == 0 and b == 0:
+                    continue
+
+                # Split into chunks if too many positions (max ~118 per packet)
+                MAX_POSITIONS = 118
+                for i in range(0, len(positions), MAX_POSITIONS):
+                    chunk_positions = positions[i:i + MAX_POSITIONS]
+
+                    command = make_batch_pixel_command(r, g, b, chunk_positions)
+                    success = await self._bluetooth.send_command(command)
+
+                    if not success:
+                        _LOGGER.error(
+                            "Failed to send batch pixel command for color #%02x%02x%02x",
+                            r, g, b
+                        )
+                        all_success = False
+                    else:
+                        total_pixels += len(chunk_positions)
+
+            if all_success:
+                _LOGGER.info(
+                    "Set %d pixels in %d color groups (batched)",
+                    total_pixels, len(color_groups)
+                )
+            else:
+                _LOGGER.warning("Some batched pixel commands failed")
+
+            return all_success
+
+        except Exception as err:
+            _LOGGER.error("Error setting batched pixels: %s", err)
+            return False
+
+    async def display_image_raw_rgb(
+        self,
+        image_bytes: bytes,
+        file_extension: str = ".png",
+        brightness: int = 100
+    ) -> bool:
+        """Display image using raw RGB protocol (camera mode).
+
+        This sends the image as raw RGB bytes in 12KB chunks, which can be
+        faster than PNG encoding for real-time applications like camera feeds
+        or live animations.
+
+        Based on go-ipxl's SendImage implementation.
+
+        Args:
+            image_bytes: Raw image file bytes (PNG, JPEG, etc.)
+            file_extension: Image format hint for decoding
+            brightness: Brightness level 1-100 (applied to RGB data)
+
+        Returns:
+            True if image was sent successfully
+        """
+        try:
+            # Get device dimensions
+            device_info = await self.get_device_info()
+            width = device_info["width"]
+            height = device_info["height"]
+
+            # Convert image to raw RGB bytes
+            rgb_data = image_to_rgb_bytes(image_bytes, width, height, file_extension)
+
+            expected_size = width * height * 3
+            if len(rgb_data) != expected_size:
+                _LOGGER.error(
+                    "RGB data size mismatch: expected %d, got %d",
+                    expected_size, len(rgb_data)
+                )
+                return False
+
+            # Split into chunks
+            chunks = split_rgb_into_chunks(rgb_data, RAW_RGB_CHUNK_SIZE)
+
+            _LOGGER.debug(
+                "Sending raw RGB image: %dx%d (%d bytes, %d chunks)",
+                width, height, len(rgb_data), len(chunks)
+            )
+
+            # Send each chunk
+            for i, chunk in enumerate(chunks):
+                command = make_raw_rgb_chunk_command(
+                    chunk_data=chunk,
+                    total_rgb_data=rgb_data,
+                    chunk_index=i,
+                    brightness=brightness
+                )
+
+                success = await self._bluetooth.send_command(command)
+                if not success:
+                    _LOGGER.error("Failed to send RGB chunk %d/%d", i + 1, len(chunks))
+                    return False
+
+            _LOGGER.info(
+                "Raw RGB image sent: %dx%d, %d bytes, %d chunks",
+                width, height, len(rgb_data), len(chunks)
+            )
+            return True
+
+        except Exception as err:
+            _LOGGER.error("Error displaying raw RGB image: %s", err)
+            return False
+
+    async def display_image_raw_rgb_url(
+        self,
+        url: str,
+        brightness: int = 100
+    ) -> bool:
+        """Download and display image using raw RGB protocol.
+
+        Args:
+            url: URL to image file
+            brightness: Brightness level 1-100
+
+        Returns:
+            True if image was sent successfully
+        """
+        try:
+            import aiohttp
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                    if response.status != 200:
+                        _LOGGER.error("Failed to download image: HTTP %d", response.status)
+                        return False
+
+                    image_bytes = await response.read()
+                    content_type = response.headers.get('Content-Type', '')
+
+            # Determine file extension from content type or URL
+            if 'png' in content_type or url.lower().endswith('.png'):
+                file_ext = '.png'
+            elif 'jpeg' in content_type or 'jpg' in content_type or url.lower().endswith(('.jpg', '.jpeg')):
+                file_ext = '.jpg'
+            else:
+                file_ext = '.png'  # Default to PNG
+
+            _LOGGER.debug("Downloaded image from %s (%d bytes)", url, len(image_bytes))
+            return await self.display_image_raw_rgb(image_bytes, file_ext, brightness)
+
+        except Exception as err:
+            _LOGGER.error("Error downloading image from %s: %s", url, err)
+            return False
+
+    async def draw_solid_color(self, color: str) -> bool:
+        """Fill the entire display with a solid color using raw RGB protocol.
+
+        This is faster than setting each pixel individually.
+
+        Args:
+            color: Hex color string (e.g., 'ff0000' for red)
+
+        Returns:
+            True if command was sent successfully
+        """
+        try:
+            # Parse color
+            color = color.lstrip('#')
+            if len(color) != 6:
+                raise ValueError("Color must be 6 hex characters")
+            r = int(color[0:2], 16)
+            g = int(color[2:4], 16)
+            b = int(color[4:6], 16)
+
+            # Get device dimensions
+            device_info = await self.get_device_info()
+            width = device_info["width"]
+            height = device_info["height"]
+
+            # Create solid color RGB data
+            total_pixels = width * height
+            rgb_data = bytes([r, g, b] * total_pixels)
+
+            # Split into chunks and send
+            chunks = split_rgb_into_chunks(rgb_data, RAW_RGB_CHUNK_SIZE)
+
+            for i, chunk in enumerate(chunks):
+                command = make_raw_rgb_chunk_command(
+                    chunk_data=chunk,
+                    total_rgb_data=rgb_data,
+                    chunk_index=i,
+                    brightness=100
+                )
+                success = await self._bluetooth.send_command(command)
+                if not success:
+                    _LOGGER.error("Failed to send solid color chunk %d/%d", i + 1, len(chunks))
+                    return False
+
+            _LOGGER.info("Filled display with color #%s", color)
+            return True
+
+        except ValueError as err:
+            _LOGGER.error("Invalid color: %s", err)
+            return False
+        except Exception as err:
+            _LOGGER.error("Error drawing solid color: %s", err)
             return False
 
     async def clear_display(self) -> bool:
