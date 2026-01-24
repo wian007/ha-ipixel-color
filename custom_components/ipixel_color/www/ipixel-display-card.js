@@ -1,4 +1,89 @@
-(()=>{var vt="2.11.1";var L=class extends HTMLElement{constructor(){super(),this.attachShadow({mode:"open"}),this._config={},this._hass=null}set hass(e){this._hass=e,this.render()}setConfig(e){if(!e.entity)throw new Error("Please define an entity");this._config=e,this.render()}getEntity(){return!this._hass||!this._config.entity?null:this._hass.states[this._config.entity]}getRelatedEntity(e,t=""){if(!this._hass||!this._config.entity)return null;let i=this._config.entity.replace(/^[^.]+\./,"").replace(/_?(text|display|gif_url)$/i,""),s=`${e}.${i}${t}`;if(this._hass.states[s])return this._hass.states[s];let n=Object.keys(this._hass.states).filter(r=>{if(!r.startsWith(`${e}.`))return!1;let a=r.replace(/^[^.]+\./,"");return a.includes(i)||i.includes(a.replace(t,""))});if(t){let r=n.find(a=>a.endsWith(t));if(r)return this._hass.states[r]}else{let r=n.sort((a,o)=>a.length-o.length);if(r.length>0)return this._hass.states[r[0]]}return n.length>0?this._hass.states[n[0]]:null}async callService(e,t,i={}){if(this._hass)try{await this._hass.callService(e,t,i)}catch(s){console.error(`iPIXEL service call failed: ${e}.${t}`,s)}}getResolution(){let e=this.getRelatedEntity("sensor","_width")||this._hass?.states["sensor.display_width"],t=this.getRelatedEntity("sensor","_height")||this._hass?.states["sensor.display_height"];if(e&&t){let i=parseInt(e.state),s=parseInt(t.state);if(!isNaN(i)&&!isNaN(s)&&i>0&&s>0)return[i,s]}return[64,16]}isOn(){return this.getRelatedEntity("switch")?.state==="on"}hexToRgb(e){let t=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(e);return t?[parseInt(t[1],16),parseInt(t[2],16),parseInt(t[3],16)]:[255,255,255]}render(){}getCardSize(){return 2}};var $=`
+(() => {
+  // src/version.js
+  var CARD_VERSION = "2.11.1";
+
+  // src/base.js
+  var iPIXELCardBase = class extends HTMLElement {
+    constructor() {
+      super();
+      this.attachShadow({ mode: "open" });
+      this._config = {};
+      this._hass = null;
+    }
+    set hass(hass) {
+      this._hass = hass;
+      this.render();
+    }
+    setConfig(config) {
+      if (!config.entity)
+        throw new Error("Please define an entity");
+      this._config = config;
+      this.render();
+    }
+    getEntity() {
+      if (!this._hass || !this._config.entity)
+        return null;
+      return this._hass.states[this._config.entity];
+    }
+    getRelatedEntity(domain, suffix = "") {
+      if (!this._hass || !this._config.entity)
+        return null;
+      const baseName = this._config.entity.replace(/^[^.]+\./, "").replace(/_?(text|display|gif_url)$/i, "");
+      const exactId = `${domain}.${baseName}${suffix}`;
+      if (this._hass.states[exactId])
+        return this._hass.states[exactId];
+      const matches = Object.keys(this._hass.states).filter((id) => {
+        if (!id.startsWith(`${domain}.`))
+          return false;
+        const entityName = id.replace(/^[^.]+\./, "");
+        return entityName.includes(baseName) || baseName.includes(entityName.replace(suffix, ""));
+      });
+      if (suffix) {
+        const withSuffix = matches.find((id) => id.endsWith(suffix));
+        if (withSuffix)
+          return this._hass.states[withSuffix];
+      } else {
+        const sorted = matches.sort((a2, b) => a2.length - b.length);
+        if (sorted.length > 0)
+          return this._hass.states[sorted[0]];
+      }
+      return matches.length > 0 ? this._hass.states[matches[0]] : null;
+    }
+    async callService(domain, service, data = {}) {
+      if (!this._hass)
+        return;
+      try {
+        await this._hass.callService(domain, service, data);
+      } catch (err) {
+        console.error(`iPIXEL service call failed: ${domain}.${service}`, err);
+      }
+    }
+    getResolution() {
+      const widthEntity = this.getRelatedEntity("sensor", "_width") || this._hass?.states["sensor.display_width"];
+      const heightEntity = this.getRelatedEntity("sensor", "_height") || this._hass?.states["sensor.display_height"];
+      if (widthEntity && heightEntity) {
+        const w = parseInt(widthEntity.state), h2 = parseInt(heightEntity.state);
+        if (!isNaN(w) && !isNaN(h2) && w > 0 && h2 > 0)
+          return [w, h2];
+      }
+      return [64, 16];
+    }
+    isOn() {
+      return this.getRelatedEntity("switch")?.state === "on";
+    }
+    hexToRgb(hex) {
+      const r2 = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return r2 ? [parseInt(r2[1], 16), parseInt(r2[2], 16), parseInt(r2[3], 16)] : [255, 255, 255];
+    }
+    render() {
+    }
+    getCardSize() {
+      return 2;
+    }
+  };
+
+  // src/styles.js
+  var iPIXELCardStyles = `
   :host {
     --ipixel-primary: var(--primary-color, #03a9f4);
     --ipixel-accent: var(--accent-color, #ff9800);
@@ -199,13 +284,2800 @@
   @media (max-width: 400px) {
     .button-grid-4 { grid-template-columns: repeat(2, 1fr); }
   }
-`;var Y={A:[124,18,17,18,124],B:[127,73,73,73,54],C:[62,65,65,65,34],D:[127,65,65,34,28],E:[127,73,73,73,65],F:[127,9,9,9,1],G:[62,65,73,73,122],H:[127,8,8,8,127],I:[0,65,127,65,0],J:[32,64,65,63,1],K:[127,8,20,34,65],L:[127,64,64,64,64],M:[127,2,12,2,127],N:[127,4,8,16,127],O:[62,65,65,65,62],P:[127,9,9,9,6],Q:[62,65,81,33,94],R:[127,9,25,41,70],S:[70,73,73,73,49],T:[1,1,127,1,1],U:[63,64,64,64,63],V:[31,32,64,32,31],W:[63,64,56,64,63],X:[99,20,8,20,99],Y:[7,8,112,8,7],Z:[97,81,73,69,67],a:[32,84,84,84,120],b:[127,72,68,68,56],c:[56,68,68,68,32],d:[56,68,68,72,127],e:[56,84,84,84,24],f:[8,126,9,1,2],g:[12,82,82,82,62],h:[127,8,4,4,120],i:[0,68,125,64,0],j:[32,64,68,61,0],k:[127,16,40,68,0],l:[0,65,127,64,0],m:[124,4,24,4,120],n:[124,8,4,4,120],o:[56,68,68,68,56],p:[124,20,20,20,8],q:[8,20,20,24,124],r:[124,8,4,4,8],s:[72,84,84,84,32],t:[4,63,68,64,32],u:[60,64,64,32,124],v:[28,32,64,32,28],w:[60,64,48,64,60],x:[68,40,16,40,68],y:[12,80,80,80,60],z:[68,100,84,76,68],0:[62,81,73,69,62],1:[0,66,127,64,0],2:[66,97,81,73,70],3:[33,65,69,75,49],4:[24,20,18,127,16],5:[39,69,69,69,57],6:[60,74,73,73,48],7:[1,113,9,5,3],8:[54,73,73,73,54],9:[6,73,73,41,30]," ":[0,0,0,0,0],".":[0,96,96,0,0],",":[0,128,96,0,0],":":[0,54,54,0,0],";":[0,128,54,0,0],"!":[0,0,95,0,0],"?":[2,1,81,9,6],"-":[8,8,8,8,8],"+":[8,8,62,8,8],"=":[20,20,20,20,20],_:[64,64,64,64,64],"/":[32,16,8,4,2],"\\":[2,4,8,16,32],"(":[0,28,34,65,0],")":[0,65,34,28,0],"[":[0,127,65,65,0],"]":[0,65,65,127,0],"<":[8,20,34,65,0],">":[0,65,34,20,8],"*":[20,8,62,8,20],"#":[20,127,20,127,20],"@":[62,65,93,85,30],"&":[54,73,85,34,80],"%":[35,19,8,100,98],$:[18,42,127,42,36],"'":[0,0,7,0,0],'"':[0,7,0,7,0],"`":[0,1,2,0,0],"^":[4,2,1,2,4],"~":[8,4,8,16,8]};function ft(p,e,t,i="#ff6600",s="#111"){let n=[],o=Math.floor((t-7)/2);for(let h=0;h<t;h++)for(let f=0;f<e;f++)n.push(s);let l=p.length*6-1,d=Math.max(1,Math.floor((e-l)/2));for(let h of p){let f=Y[h]||Y[" "];for(let x=0;x<5;x++)for(let u=0;u<7;u++){let b=f[x]>>u&1,g=d+x,v=o+u;g>=0&&g<e&&v<t&&v>=0&&(n[v*e+g]=b?i:s)}d+=6}return n}function wt(p,e,t,i="#ff6600",s="#111"){let a=Math.floor((t-7)/2),o=p.length*6,l=e+o+e,c=[];for(let h=0;h<t;h++)for(let f=0;f<l;f++)c.push(s);let d=e;for(let h of p){let f=Y[h]||Y[" "];for(let x=0;x<5;x++)for(let u=0;u<7;u++){let b=f[x]>>u&1,g=d+x,v=a+u;g>=0&&g<l&&v<t&&v>=0&&(c[v*l+g]=b?i:s)}d+=6}return{pixels:c,width:l}}var St={VCR_OSD_MONO:{16:{font_size:16,offset:[0,0],pixel_threshold:70,var_width:!0},24:{font_size:24,offset:[0,0],pixel_threshold:70,var_width:!0},32:{font_size:28,offset:[-1,2],pixel_threshold:30,var_width:!1}},CUSONG:{16:{font_size:16,offset:[0,-1],pixel_threshold:70,var_width:!1},24:{font_size:24,offset:[0,0],pixel_threshold:70,var_width:!1},32:{font_size:32,offset:[0,0],pixel_threshold:70,var_width:!1}}},N={},J={};function zt(p){return window.location.pathname.includes("preview.html")||window.location.port==="8080"?`./fonts/${p}.ttf`:`/hacsfiles/ipixel_color/fonts/${p}.ttf`}async function z(p){return N[p]===!0?!0:N[p]===!1?!1:(J[p]||(J[p]=(async()=>{let e=zt(p);try{let i=await new FontFace(p,`url(${e})`).load();return document.fonts.add(i),N[p]=!0,console.log(`iPIXEL: Font ${p} loaded successfully`),!0}catch(t){return console.warn(`iPIXEL: Failed to load font ${p}:`,t),N[p]=!1,!1}})()),J[p])}function K(p){return N[p]===!0}function It(p){return p<=18?16:p<=28?24:32}function Et(p){let e=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(p);return e?{r:parseInt(e[1],16),g:parseInt(e[2],16),b:parseInt(e[3],16)}:{r:0,g:0,b:0}}function Ct(p,e,t,i="#ff6600",s="#111",n="VCR_OSD_MONO"){let r=St[n];if(!r)return console.warn(`iPIXEL: Unknown font: ${n}`),null;if(!K(n))return z(n),null;let a=It(t),o=r[a],l=document.createElement("canvas");l.width=e,l.height=t;let c=l.getContext("2d");if(c.imageSmoothingEnabled=!1,c.fillStyle=s,c.fillRect(0,0,e,t),!p||p.trim()===""){let m=[];for(let y=0;y<e*t;y++)m.push(s);return m}c.font=`${o.font_size}px "${n}"`,c.fillStyle=i,c.textBaseline="top";let h=c.measureText(p).width,f=Math.floor((e-h)/2)+o.offset[0],x=Math.floor((t-o.font_size)/2)+o.offset[1];c.fillText(p,f,x);let u=c.getImageData(0,0,e,t),b=[],g=Et(i),v=Et(s);for(let m=0;m<u.data.length;m+=4){let y=u.data[m],_=u.data[m+1],S=u.data[m+2];(y+_+S)/3>=o.pixel_threshold?b.push(i):b.push(s)}return b}function kt(p,e,t,i="#ff6600",s="#111",n="VCR_OSD_MONO"){let r=St[n];if(!r)return null;if(!K(n))return z(n),null;let a=It(t),o=r[a],c=document.createElement("canvas").getContext("2d");c.font=`${o.font_size}px "${n}"`;let d=Math.ceil(c.measureText(p).width),h=e+d+e,f=document.createElement("canvas");f.width=h,f.height=t;let x=f.getContext("2d");if(x.imageSmoothingEnabled=!1,x.fillStyle=s,x.fillRect(0,0,h,t),!p||p.trim()===""){let m=[];for(let y=0;y<h*t;y++)m.push(s);return{pixels:m,width:h}}x.font=`${o.font_size}px "${n}"`,x.fillStyle=i,x.textBaseline="top";let u=e+o.offset[0],b=Math.floor((t-o.font_size)/2)+o.offset[1];x.fillText(p,u,b);let g=x.getImageData(0,0,h,t),v=[];for(let m=0;m<g.data.length;m+=4){let y=g.data[m],_=g.data[m+1],S=g.data[m+2];(y+_+S)/3>=o.pixel_threshold?v.push(i):v.push(s)}return{pixels:v,width:h}}var Vt=function(p,e,t,i){return new(t||(t=Promise))(function(s,n){function r(l){try{o(i.next(l))}catch(c){n(c)}}function a(l){try{o(i.throw(l))}catch(c){n(c)}}function o(l){var c;l.done?s(l.value):(c=l.value,c instanceof t?c:new t(function(d){d(c)})).then(r,a)}o((i=i.apply(p,e||[])).next())})},F=function(p){return this instanceof F?(this.v=p,this):new F(p)},Gt=function(p,e,t){if(!Symbol.asyncIterator)throw new TypeError("Symbol.asyncIterator is not defined.");var i,s=t.apply(p,e||[]),n=[];return i={},r("next"),r("throw"),r("return"),i[Symbol.asyncIterator]=function(){return this},i;function r(d){s[d]&&(i[d]=function(h){return new Promise(function(f,x){n.push([d,h,f,x])>1||a(d,h)})})}function a(d,h){try{(f=s[d](h)).value instanceof F?Promise.resolve(f.value.v).then(o,l):c(n[0][2],f)}catch(x){c(n[0][3],x)}var f}function o(d){a("next",d)}function l(d){a("throw",d)}function c(d,h){d(h),n.shift(),n.length&&a(n[0][0],n[0][1])}};function Rt(p,{includeLastEmptyLine:e=!0,encoding:t="utf-8",delimiter:i=/\r?\n/g}={}){return Gt(this,arguments,function*(){let s=yield F((d=>Vt(void 0,void 0,void 0,function*(){let h=yield fetch(d);if(h.body===null)throw new Error("Cannot read file");return h.body.getReader()}))(p)),{value:n,done:r}=yield F(s.read()),a=new TextDecoder(t),o,l=n?a.decode(n):"";if(typeof i=="string"){if(i==="")throw new Error("delimiter cannot be empty string!");o=new RegExp(i.replace(/[.*+\-?^${}()|[\]\\]/g,"\\$&"),"g")}else o=/g/.test(i.flags)===!1?new RegExp(i.source,i.flags+"g"):i;let c=0;for(;;){let d=o.exec(l);if(d!==null)yield yield F(l.substring(c,d.index)),c=o.lastIndex;else{if(r===!0)break;let h=l.substring(c);({value:n,done:r}=yield F(s.read())),l=h+(l?a.decode(n):""),c=0}}(e||c<l.length)&&(yield yield F(l.substring(c)))})}var B=function(p,e,t,i){return new(t||(t=Promise))(function(s,n){function r(l){try{o(i.next(l))}catch(c){n(c)}}function a(l){try{o(i.throw(l))}catch(c){n(c)}}function o(l){var c;l.done?s(l.value):(c=l.value,c instanceof t?c:new t(function(d){d(c)})).then(r,a)}o((i=i.apply(p,e||[])).next())})},Wt=function(p){if(!Symbol.asyncIterator)throw new TypeError("Symbol.asyncIterator is not defined.");var e,t=p[Symbol.asyncIterator];return t?t.call(p):(p=typeof __values=="function"?__values(p):p[Symbol.iterator](),e={},i("next"),i("throw"),i("return"),e[Symbol.asyncIterator]=function(){return this},e);function i(s){e[s]=p[s]&&function(n){return new Promise(function(r,a){(function(o,l,c,d){Promise.resolve(d).then(function(h){o({value:h,done:c})},l)})(r,a,(n=p[s](n)).done,n.value)})}}},Mt="[\\s]+",jt={glyphname:"empty",codepoint:8203,bbw:0,bbh:0,bbxoff:0,bbyoff:0,swx0:0,swy0:0,dwx0:0,dwy0:0,swx1:0,swy1:0,dwx1:0,dwy1:0,vvectorx:0,vvectory:0,hexdata:[]},Ut=["glyphname","codepoint","bbw","bbh","bbxoff","bbyoff","swx0","swy0","dwx0","dwy0","swx1","swy1","dwx1","dwy1","vvectorx","vvectory","hexdata"],qt={lr:"lrtb",rl:"rltb",tb:"tbrl",bt:"btrl",lrtb:void 0,lrbt:void 0,rltb:void 0,rlbt:void 0,tbrl:void 0,tblr:void 0,btrl:void 0,btlr:void 0},Z={lr:1,rl:2,tb:0,bt:-1},xt=class{constructor(){this.headers=void 0,this.__headers={},this.props={},this.glyphs=new Map,this.__glyph_count_to_check=null,this.__curline_startchar=null,this.__curline_chars=null}load_filelines(e){var t,i;return B(this,void 0,void 0,function*(){try{this.__f=e,yield this.__parse_headers()}finally{if(typeof Deno<"u"&&this.__f!==void 0)try{for(var s,n=Wt(this.__f);!(s=yield n.next()).done;)s.value}catch(r){t={error:r}}finally{try{s&&!s.done&&(i=n.return)&&(yield i.call(n))}finally{if(t)throw t.error}}}return this})}__parse_headers(){var e,t;return B(this,void 0,void 0,function*(){for(;;){let i=(t=yield(e=this.__f)===null||e===void 0?void 0:e.next())===null||t===void 0?void 0:t.value,s=i.split(/ (.+)/,2),n=s.length,r;if(n===2){let a=s[0],o=s[1].trim();switch(a){case"STARTFONT":this.__headers.bdfversion=parseFloat(o);break;case"FONT":this.__headers.fontname=o;break;case"SIZE":r=o.split(" "),this.__headers.pointsize=parseInt(r[0],10),this.__headers.xres=parseInt(r[1],10),this.__headers.yres=parseInt(r[2],10);break;case"FONTBOUNDINGBOX":r=o.split(" "),this.__headers.fbbx=parseInt(r[0],10),this.__headers.fbby=parseInt(r[1],10),this.__headers.fbbxoff=parseInt(r[2],10),this.__headers.fbbyoff=parseInt(r[3],10);break;case"STARTPROPERTIES":return this.__parse_headers_after(),void(yield this.__parse_props());case"COMMENT":"comment"in this.__headers&&Array.isArray(this.__headers.comment)||(this.__headers.comment=[]),this.__headers.comment.push(o.replace(/^[\s"'\t\r\n]+|[\s"'\t\r\n]+$/g,""));break;case"SWIDTH":r=o.split(" "),this.__headers.swx0=parseInt(r[0],10),this.__headers.swy0=parseInt(r[1],10);break;case"DWIDTH":r=o.split(" "),this.__headers.dwx0=parseInt(r[0],10),this.__headers.dwy0=parseInt(r[1],10);break;case"SWIDTH1":r=o.split(" "),this.__headers.swx1=parseInt(r[0],10),this.__headers.swy1=parseInt(r[1],10);break;case"DWIDTH1":r=o.split(" "),this.__headers.dwx1=parseInt(r[0],10),this.__headers.dwy1=parseInt(r[1],10);break;case"VVECTOR":r=Mt.split(o),this.__headers.vvectorx=parseInt(r[0],10),this.__headers.vvectory=parseInt(r[1],10);break;case"METRICSSET":case"CONTENTVERSION":this.__headers[a.toLowerCase()]=parseInt(o,10);break;case"CHARS":return console.warn("It looks like the font does not have property block beginning with 'STARTPROPERTIES' keyword"),this.__parse_headers_after(),this.__curline_chars=i,void(yield this.__parse_glyph_count());case"STARTCHAR":return console.warn("It looks like the font does not have property block beginning with 'STARTPROPERTIES' keyword"),console.warn("Cannot find 'CHARS' line"),this.__parse_headers_after(),this.__curline_startchar=i,void(yield this.__prepare_glyphs())}}if(n===1&&s[0].trim()==="ENDFONT")return console.warn("It looks like the font does not have property block beginning with 'STARTPROPERTIES' keyword"),void console.warn("This font does not have any glyphs")}})}__parse_headers_after(){"metricsset"in this.__headers||(this.__headers.metricsset=0),this.headers=this.__headers}__parse_props(){var e,t;return B(this,void 0,void 0,function*(){for(;;){let i=((t=yield(e=this.__f)===null||e===void 0?void 0:e.next())===null||t===void 0?void 0:t.value).split(/ (.+)/,2),s=i.length;if(s===2){let n=i[0],r=i[1].replace(/^[\s"'\t\r\n]+|[\s"'\t\r\n]+$/g,"");n==="COMMENT"?("comment"in this.props&&Array.isArray(this.props.comment)||(this.props.comment=[]),this.props.comment.push(r.replace(/^[\s"'\t\r\n]+|[\s"'\t\r\n]+$/g,""))):this.props[n.toLowerCase()]=r}else if(s===1){let n=i[0].trim();if(n==="ENDPROPERTIES")return void(yield this.__parse_glyph_count());if(n==="ENDFONT")return void console.warn("This font does not have any glyphs");this.props[n]=null}}})}__parse_glyph_count(){var e,t;return B(this,void 0,void 0,function*(){let i;if(this.__curline_chars===null?i=(t=yield(e=this.__f)===null||e===void 0?void 0:e.next())===null||t===void 0?void 0:t.value:(i=this.__curline_chars,this.__curline_chars=null),i.trim()==="ENDFONT")return void console.warn("This font does not have any glyphs");let s=i.split(/ (.+)/,2);s[0]==="CHARS"?this.__glyph_count_to_check=parseInt(s[1].trim(),10):(this.__curline_startchar=i,console.warn("Cannot find 'CHARS' line next to 'ENDPROPERTIES' line")),yield this.__prepare_glyphs()})}__prepare_glyphs(){var e,t;return B(this,void 0,void 0,function*(){let i=0,s=[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],n=[],r=!1,a=!1;for(;;){let o;if(this.__curline_startchar===null?o=(t=yield(e=this.__f)===null||e===void 0?void 0:e.next())===null||t===void 0?void 0:t.value:(o=this.__curline_startchar,this.__curline_startchar=null),o==null)return console.warn("This font does not have 'ENDFONT' keyword"),void this.__prepare_glyphs_after();let l=o.split(/ (.+)/,2),c=l.length;if(c===2){let d=l[0],h=l[1].trim(),f;switch(d){case"STARTCHAR":s=[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],s[0]=h,a=!1;break;case"ENCODING":i=parseInt(h,10),s[1]=i;break;case"BBX":f=h.split(" "),s[2]=parseInt(f[0],10),s[3]=parseInt(f[1],10),s[4]=parseInt(f[2],10),s[5]=parseInt(f[3],10);break;case"SWIDTH":f=h.split(" "),s[6]=parseInt(f[0],10),s[7]=parseInt(f[1],10);break;case"DWIDTH":f=h.split(" "),s[8]=parseInt(f[0],10),s[9]=parseInt(f[1],10);break;case"SWIDTH1":f=h.split(" "),s[10]=parseInt(f[0],10),s[11]=parseInt(f[1],10);break;case"DWIDTH1":f=h.split(" "),s[12]=parseInt(f[0],10),s[13]=parseInt(f[1],10);break;case"VVECTOR":f=Mt.split(h),s[14]=parseInt(f[0],10),s[15]=parseInt(f[1],10)}}else if(c===1){let d=l[0].trim();switch(d){case"BITMAP":n=[],r=!0;break;case"ENDCHAR":r=!1,s[16]=n,this.glyphs.set(i,s),a=!0;break;case"ENDFONT":if(a)return void this.__prepare_glyphs_after();default:r&&n.push(d)}}}})}__prepare_glyphs_after(){let e=this.glyphs.size;this.__glyph_count_to_check!==e&&(this.__glyph_count_to_check===null?console.warn("The glyph count next to 'CHARS' keyword does not exist"):console.warn(`The glyph count next to 'CHARS' keyword is ${this.__glyph_count_to_check.toString()}, which does not match the actual glyph count ${e.toString()}`))}get length(){return this.glyphs.size}itercps(e,t){let i=e??1,s=t??null,n,r=[...this.glyphs.keys()];switch(i){case 1:n=r.sort((a,o)=>a-o);break;case 0:n=r;break;case 2:n=r.sort((a,o)=>o-a);break;case-1:n=r.reverse()}if(s!==null){let a=o=>{if(typeof s=="number")return o<s;if(Array.isArray(s)&&s.length===2&&typeof s[0]=="number"&&typeof s[1]=="number")return o<=s[1]&&o>=s[0];if(Array.isArray(s)&&Array.isArray(s[0]))for(let l of s){let[c,d]=l;if(o<=d&&o>=c)return!0}return!1};n=n.filter(a)}return n}*iterglyphs(e,t){for(let i of this.itercps(e,t))yield this.glyphbycp(i)}glyphbycp(e){let t=this.glyphs.get(e);if(t==null)return console.warn(`Glyph "${String.fromCodePoint(e)}" (codepoint ${e.toString()}) does not exist in the font. Will return 'null'`),null;{let i={};return Ut.forEach((s,n)=>{var r,a,o;r=i,a=s,o=t[n],r[a]=o}),new D(i,this)}}glyph(e){let t=e.codePointAt(0);return t===void 0?null:this.glyphbycp(t)}lacksglyphs(e){let t=[],i=e.length;for(let s,n=0;n<i;n++){s=e[n];let r=s.codePointAt(0);r!==void 0&&this.glyphs.has(r)||t.push(s)}return t.length!==0?t:null}drawcps(e,t={}){var i,s,n,r,a,o,l;let c=(i=t.linelimit)!==null&&i!==void 0?i:512,d=(s=t.mode)!==null&&s!==void 0?s:1,h=(n=t.direction)!==null&&n!==void 0?n:"lrtb",f=(r=t.usecurrentglyphspacing)!==null&&r!==void 0&&r,x=(a=t.missing)!==null&&a!==void 0?a:null;if(this.headers===void 0)throw new Error("Font is not loaded");let u,b,g,v,m,y,_,S,E,C,I,R,T,M,A,W,j,U,ut=(o=qt[h])!==null&&o!==void 0?o:h,gt=ut.slice(0,2),bt=ut.slice(2,4);gt in Z&&bt in Z?(y=Z[gt],_=Z[bt]):(y=1,_=0),_===0||_===2?u=1:_!==1&&_!==-1||(u=0),y===1||y===-1?b=1:y!==2&&y!==0||(b=0),d===1&&(S=y>0?this.headers.fbbx:this.headers.fbby,y>0?(R="dwx0",T="dwy0"):(R="dwx1",T="dwy1"),I=R in this.headers?this.headers[R]:T in this.headers?this.headers[T]:null);let mt=[];v=[];let _t=[];A=[],W=0;let yt=()=>{mt.push(v),f?A.shift():A.pop(),_t.push(A)},Xt=e[Symbol.iterator]();for(j=!1;;){if(j)j=!1;else{if(m=(l=Xt.next())===null||l===void 0?void 0:l.value,m===void 0)break;let q=this.glyphbycp(m);E=q!==null?q:x?x instanceof D?x:new D(x,this):new D(jt,this),g=E.draw(),U=g.width(),M=0,d===1&&R!==void 0&&T!==void 0&&(C=E.meta[R]||E.meta[T],C==null&&(C=I),C!=null&&S!==void 0&&(M=C-S))}if(U!==void 0&&M!==void 0&&g!==void 0&&E!==void 0&&m!==void 0)if(W+=U+M,W<=c)v.push(g),A.push(M);else{if(v.length===0)throw new Error(`\`_linelimit\` (${c}) is too small the line can't even contain one glyph: "${E.chr()}" (codepoint ${m}, width: ${U})`);yt(),W=0,v=[],A=[],j=!0}}v.length!==0&&yt();let Ht=mt.map((q,Nt)=>V.concatall(q,{direction:y,align:u,offsetlist:_t[Nt]}));return V.concatall(Ht,{direction:_,align:b})}draw(e,t={}){let{linelimit:i,mode:s,direction:n,usecurrentglyphspacing:r,missing:a}=t;return this.drawcps(e.split("").map(o=>{let l=o.codePointAt(0);return l===void 0?8203:l}),{linelimit:i,mode:s,direction:n,usecurrentglyphspacing:r,missing:a})}drawall(e={}){let{order:t,r:i,linelimit:s,mode:n,direction:r,usecurrentglyphspacing:a}=e,o=n??0;return this.drawcps(this.itercps(t,i),{linelimit:s,mode:o,direction:r,usecurrentglyphspacing:a})}},D=class{constructor(e,t){this.meta=e,this.font=t}toString(){return this.draw().toString()}repr(){var e;return"Glyph("+JSON.stringify(this.meta,null,2)+", Font(<"+((e=this.font.headers)===null||e===void 0?void 0:e.fontname)+">)"}cp(){return this.meta.codepoint}chr(){return String.fromCodePoint(this.cp())}draw(e,t){let i=t??null,s;switch(e??0){case 0:s=this.__draw_fbb();break;case 1:s=this.__draw_bb();break;case 2:s=this.__draw_original();break;case-1:if(i===null)throw new Error("Parameter bb in draw() method must be set when mode=-1");s=this.__draw_user_specified(i)}return s}__draw_user_specified(e){let t=this.meta.bbxoff,i=this.meta.bbyoff,[s,n,r,a]=e;return this.__draw_bb().crop(s,n,-t+r,-i+a)}__draw_original(){return new V(this.meta.hexdata.map(e=>e?parseInt(e,16).toString(2).padStart(4*e.length,"0"):""))}__draw_bb(){let e=this.meta.bbw,t=this.meta.bbh,i=this.__draw_original(),s=i.bindata,n=s.length;return n!==t&&console.warn(`Glyph "${this.meta.glyphname.toString()}" (codepoint ${this.meta.codepoint.toString()})'s bbh, ${t.toString()}, does not match its hexdata line count, ${n.toString()}`),i.bindata=s.map(r=>r.slice(0,e)),i}__draw_fbb(){let e=this.font.headers;if(e===void 0)throw new Error("Font is not loaded");return this.__draw_user_specified([e.fbbx,e.fbby,e.fbbxoff,e.fbbyoff])}origin(e={}){var t,i,s,n;let r=(t=e.mode)!==null&&t!==void 0?t:0,a=(i=e.fromorigin)!==null&&i!==void 0&&i,o=(s=e.xoff)!==null&&s!==void 0?s:null,l=(n=e.yoff)!==null&&n!==void 0?n:null,c,d=this.meta.bbxoff,h=this.meta.bbyoff;switch(r){case 0:let f=this.font.headers;if(f===void 0)throw new Error("Font is not loaded");c=[f.fbbxoff,f.fbbyoff];break;case 1:case 2:c=[d,h];break;case-1:if(o===null||l===null)throw new Error("Parameter xoff and yoff in origin() method must be all set when mode=-1");c=[o,l]}return a?c:[0-c[0],0-c[1]]}},V=class p{constructor(e){this.bindata=e}toString(){return this.bindata.join(`
-`).replace(/0/g,".").replace(/1/g,"#").replace(/2/g,"&")}repr(){return`Bitmap(${JSON.stringify(this.bindata,null,2)})`}width(){return this.bindata[0].length}height(){return this.bindata.length}clone(){return new p([...this.bindata])}static __crop_string(e,t,i){let s=e,n=e.length,r=0;t<0&&(r=0-t,s=s.padStart(r+n,"0")),t+i>n&&(s=s.padEnd(t+i-n+s.length,"0"));let a=t+r;return s.slice(a,a+i)}static __string_offset_concat(e,t,i){let s=i??0;if(s===0)return e+t;let n=e.length,r=n+s,a=r+t.length,o=Math.min(0,r),l=Math.max(n,a),c=p.__crop_string(e,o,l-o),d=p.__crop_string(t,o-r,l-o);return c.split("").map((h,f)=>(parseInt(d[f],10)||parseInt(h,10)).toString()).join("")}static __listofstr_offset_concat(e,t,i){let s=i??0,n,r;if(s===0)return e.concat(t);let a=e[0].length,o=e.length,l=o+s,c=l+t.length,d=Math.min(0,l),h=Math.max(o,c),f=[];for(let x=d;x<h;x++)n=x<0||x>=o?"0".repeat(a):e[x],r=x<l||x>=c?"0".repeat(a):t[x-l],f.push(n.split("").map((u,b)=>(parseInt(r[b],10)||parseInt(u,10)).toString()).join(""));return f}static __crop_bitmap(e,t,i,s,n){let r,a=[],o=e.length;for(let l=0;l<i;l++)r=o-n-i+l,r<0||r>=o?a.push("0".repeat(t)):a.push(p.__crop_string(e[r],s,t));return a}crop(e,t,i,s){let n=i??0,r=s??0;return this.bindata=p.__crop_bitmap(this.bindata,e,t,n,r),this}overlay(e){let t=this.bindata,i=e.bindata;return t.length!==i.length&&console.warn("the bitmaps to overlay have different height"),t[0].length!==i[0].length&&console.warn("the bitmaps to overlay have different width"),this.bindata=t.map((s,n)=>{let r=s,a=i[n];return r.split("").map((o,l)=>(parseInt(a[l],10)||parseInt(o,10)).toString()).join("")}),this}static concatall(e,t={}){var i,s,n;let r=(i=t.direction)!==null&&i!==void 0?i:1,a=(s=t.align)!==null&&s!==void 0?s:1,o=(n=t.offsetlist)!==null&&n!==void 0?n:null,l,c,d,h,f,x,u;if(r>0){d=Math.max(...e.map(g=>g.height())),f=Array(d).fill("");let b=(g,v,m)=>r===1?p.__string_offset_concat(g,v,m):p.__string_offset_concat(v,g,m);for(let g=0;g<d;g++){c=a?-g-1:g,h=0;let v=e.length;for(let m=0;m<v;m++){let y=e[m];o&&m!==0&&(h=o[m-1]),g<y.height()?c>=0?f[c]=b(f[c],y.bindata[c],h):f[d+c]=b(f[d+c],y.bindata[y.height()+c],h):c>=0?f[c]=b(f[c],"0".repeat(y.width()),h):f[d+c]=b(f[d+c],"0".repeat(y.width()),h)}}}else{d=Math.max(...e.map(g=>g.width())),f=[],h=0;let b=e.length;for(let g=0;g<b;g++){let v=e[g];o&&g!==0&&(h=o[g-1]),l=v.bindata,x=v.width(),x!==d&&(u=a?0:x-d,l=this.__crop_bitmap(l,d,v.height(),u,0)),f=r===0?p.__listofstr_offset_concat(f,l,h):p.__listofstr_offset_concat(l,f,h)}}return new this(f)}concat(e,t={}){let{direction:i,align:s,offset:n}=t,r=n??0;return this.bindata=p.concatall([this,e],{direction:i,align:s,offsetlist:[r]}).bindata,this}static __enlarge_bindata(e,t,i){let s=t??1,n=i??1,r=[...e];return s>1&&(r=r.map(a=>a.split("").reduce((o,l)=>o.concat(Array(s).fill(l)),[]).join(""))),n>1&&(r=r.reduce((a,o)=>a.concat(Array(n).fill(o)),[])),r}enlarge(e,t){return this.bindata=p.__enlarge_bindata(this.bindata,e,t),this}replace(e,t){let i=typeof e=="number"?e.toString():e,s=typeof t=="number"?t.toString():t;return this.bindata=this.bindata.map(n=>((r,a,o)=>{if("replaceAll"in String.prototype)return r.replaceAll(a,o);{let l=c=>c.replace(/[.*+\-?^${}()|[\]\\]/g,"\\$&");return r.replace(new RegExp(l(a),"g"),o)}})(n,i,s)),this}shadow(e,t){let i=e??1,s=t??-1,n,r,a,o,l,c,d=this.clone();return c=this.width(),n=this.height(),c+=Math.abs(i),n+=Math.abs(s),d.bindata=d.bindata.map(h=>h.replace(/1/g,"2")),i>0?(r=0,o=-i):(r=i,o=0),s>0?(a=0,l=-s):(a=s,l=0),this.crop(c,n,r,a),d.crop(c,n,o,l),d.overlay(this),this.bindata=d.bindata,this}glow(e){var t,i,s,n,r,a,o,l,c,d,h,f,x,u;let b=e??0,g,v,m,y;m=this.width(),y=this.height(),m+=2,y+=2,this.crop(m,y,-1,-1);let _=this.todata(2),S=_.length;for(let E=0;E<S;E++){g=_[E];let C=g.length;for(let I=0;I<C;I++)v=g[I],v===1&&((t=_[E])[i=I-1]||(t[i]=2),(s=_[E])[n=I+1]||(s[n]=2),(r=_[E-1])[I]||(r[I]=2),(a=_[E+1])[I]||(a[I]=2),b===1&&((o=_[E-1])[l=I-1]||(o[l]=2),(c=_[E-1])[d=I+1]||(c[d]=2),(h=_[E+1])[f=I-1]||(h[f]=2),(x=_[E+1])[u=I+1]||(x[u]=2)))}return this.bindata=_.map(E=>E.map(C=>C.toString()).join("")),this}bytepad(e){let t=e??8,i=this.width(),s=this.height(),n=i%t;return n===0?this:this.crop(i+t-n,s)}todata(e){let t;switch(e??1){case 0:t=this.bindata.join(`
-`);break;case 1:t=this.bindata;break;case 2:t=this.bindata.map(i=>i.split("").map(s=>parseInt(s,10)));break;case 3:t=[].concat(...this.todata(2));break;case 4:t=this.bindata.map(i=>{if(!/^[01]+$/.test(i))throw new Error(`Invalid binary string: ${i}`);return parseInt(i,2).toString(16).padStart(-1*Math.floor(-1*this.width()/4),"0")});break;case 5:t=this.bindata.map(i=>{if(!/^[01]+$/.test(i))throw new Error(`Invalid binary string: ${i}`);return parseInt(i,2)})}return t}draw2canvas(e,t){let i=t??{0:null,1:"black",2:"red"};return this.todata(2).forEach((s,n)=>{s.forEach((r,a)=>{let o=r.toString();if(o==="0"||o==="1"||o==="2"){let l=i[o];l!=null&&(e.fillStyle=l,e.fillRect(a,n,1,1))}})}),this}},Tt=p=>B(void 0,void 0,void 0,function*(){return yield new xt().load_filelines(p)});var Yt={VCR_OSD_MONO:{16:{file:"VCR_OSD_MONO_16.bdf",yOffset:0},24:{file:"VCR_OSD_MONO_24.bdf",yOffset:0},32:{file:"VCR_OSD_MONO_32.bdf",yOffset:2}},CUSONG:{16:{file:"CUSONG_16.bdf",yOffset:-1},24:{file:"CUSONG_24.bdf",yOffset:0},32:{file:"CUSONG_32.bdf",yOffset:0}}},X=new Map,Q=new Map;function Jt(p){return window.location.pathname.includes("preview.html")||window.location.port==="8080"?`./fonts/${p}`:`/hacsfiles/ipixel_color/fonts/${p}`}function tt(p){return p<=18?16:p<=28?24:32}async function O(p,e=16){let t=`${p}_${e}`;if(X.has(t))return X.get(t);if(Q.has(t))return Q.get(t);let i=Yt[p];if(!i||!i[e])return console.warn(`iPIXEL BDF: No config for font ${p} at height ${e}`),null;let s=i[e],n=(async()=>{try{let r=Jt(s.file);console.log(`iPIXEL BDF: Loading ${r}...`);let o={font:await Tt(Rt(r)),config:s};return X.set(t,o),console.log(`iPIXEL BDF: Font ${p} (${e}px) loaded successfully`),o}catch(r){return console.warn(`iPIXEL BDF: Failed to load font ${p} (${e}px):`,r),Q.delete(t),null}})();return Q.set(t,n),n}function Lt(p,e=16){let t=`${p}_${e}`;return X.has(t)}function $t(p,e,t,i="#ff6600",s="#111",n="VCR_OSD_MONO"){let r=tt(t),a=`${n}_${r}`,o=X.get(a);if(!o)return O(n,r),null;let{font:l,config:c}=o,d=new Array(e*t).fill(s);if(!p||p.trim()==="")return d;try{let h=l.draw(p,{direction:"lrtb",mode:1}),f=h.bindata,x=h.width(),u=h.height(),b=Math.floor((e-x)/2),g=Math.floor((t-u)/2)+(c.yOffset||0);for(let v=0;v<u;v++){let m=f[v]||"";for(let y=0;y<m.length;y++){let _=b+y,S=g+v;if(_>=0&&_<e&&S>=0&&S<t){let E=S*e+_;d[E]=m[y]==="1"?i:s}}}}catch(h){return console.warn("iPIXEL BDF: Error rendering text:",h),null}return d}function Pt(p,e,t,i="#ff6600",s="#111",n="VCR_OSD_MONO"){let r=tt(t),a=`${n}_${r}`,o=X.get(a);if(!o)return O(n,r),null;let{font:l,config:c}=o;if(!p||p.trim()===""){let d=e*3;return{pixels:new Array(d*t).fill(s),width:d}}try{let d=l.draw(p,{direction:"lrtb",mode:1}),h=d.bindata,f=d.width(),x=d.height(),u=e+f+e,b=new Array(u*t).fill(s),g=e,v=Math.floor((t-x)/2)+(c.yOffset||0);for(let m=0;m<x;m++){let y=h[m]||"";for(let _=0;_<y.length;_++){let S=g+_,E=v+m;if(S>=0&&S<u&&E>=0&&E<t){let C=E*u+S;b[C]=y[_]==="1"?i:s}}}return{pixels:b,width:u}}catch(d){return console.warn("iPIXEL BDF: Error rendering scroll text:",d),null}}var et=class{constructor(e){this.renderer=e}init(e,t){let{width:i,height:s}=this.renderer;switch(e){case"scroll_ltr":case"scroll_rtl":t.offset=0;break;case"blink":t.visible=!0;break;case"snow":case"breeze":t.phases=[];for(let n=0;n<i*s;n++)t.phases[n]=Math.random()*Math.PI*2;break;case"laser":t.position=0;break;case"fade":t.opacity=0,t.direction=1;break;case"typewriter":t.charIndex=0,t.cursorVisible=!0;break;case"bounce":t.offset=0,t.direction=1;break;case"sparkle":t.sparkles=[];for(let n=0;n<Math.floor(i*s*.1);n++)t.sparkles.push({x:Math.floor(Math.random()*i),y:Math.floor(Math.random()*s),brightness:Math.random(),speed:.05+Math.random()*.1});break}}step(e,t){let{width:i,extendedWidth:s}=this.renderer;switch(e){case"scroll_ltr":t.offset-=1,t.offset<=-(s||i)&&(t.offset=i);break;case"scroll_rtl":t.offset+=1,t.offset>=(s||i)&&(t.offset=-i);break;case"blink":t.visible=!t.visible;break;case"laser":t.position=(t.position+1)%i;break;case"fade":t.opacity+=t.direction*.05,t.opacity>=1?(t.opacity=1,t.direction=-1):t.opacity<=0&&(t.opacity=0,t.direction=1);break;case"typewriter":t.tick%3===0&&t.charIndex++,t.cursorVisible=t.tick%10<5;break;case"bounce":t.offset+=t.direction;let n=Math.max(0,(s||i)-i);t.offset>=n?(t.offset=n,t.direction=-1):t.offset<=0&&(t.offset=0,t.direction=1);break;case"sparkle":for(let r of t.sparkles)r.brightness+=r.speed,r.brightness>1&&(r.brightness=0,r.x=Math.floor(Math.random()*i),r.y=Math.floor(Math.random()*this.renderer.height));break}}render(e,t,i,s,n){let{width:r,height:a}=this.renderer,o=s||i||[],l=i||[],c=n||r;for(let d=0;d<a;d++)for(let h=0;h<r;h++){let f,x=h;if(e==="scroll_ltr"||e==="scroll_rtl"||e==="bounce"){for(x=h-(t.offset||0);x<0;)x+=c;for(;x>=c;)x-=c;f=o[d*c+x]||"#111"}else if(e==="typewriter"){let y=(t.charIndex||0)*6;h<y?f=l[d*r+h]||"#111":h===y&&t.cursorVisible?f="#ffffff":f="#111"}else f=l[d*r+h]||"#111";let[u,b,g]=this._hexToRgb(f);if(u>20||b>20||g>20)switch(e){case"blink":t.visible||(u=b=g=17);break;case"snow":{let m=t.phases?.[d*r+h]||0,y=t.tick||0,_=.3+.7*Math.abs(Math.sin(m+y*.3));u*=_,b*=_,g*=_;break}case"breeze":{let m=t.phases?.[d*r+h]||0,y=t.tick||0,_=.4+.6*Math.abs(Math.sin(m+y*.15+h*.2));u*=_,b*=_,g*=_;break}case"laser":{let m=t.position||0,_=Math.abs(h-m)<3?1:.3;u*=_,b*=_,g*=_;break}case"fade":{let m=t.opacity||1;u*=m,b*=m,g*=m;break}}if(e==="sparkle"&&t.sparkles){for(let m of t.sparkles)if(m.x===h&&m.y===d){let y=Math.sin(m.brightness*Math.PI);u=Math.min(255,u+y*200),b=Math.min(255,b+y*200),g=Math.min(255,g+y*200)}}this.renderer.setPixel(h,d,[u,b,g])}}_hexToRgb(e){if(!e||e==="#111"||e==="#000")return[17,17,17];if(e==="#050505")return[5,5,5];let t=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(e);return t?[parseInt(t[1],16),parseInt(t[2],16),parseInt(t[3],16)]:[17,17,17]}};function Ot(p,e,t){let i,s,n,r=Math.floor(p*6),a=p*6-r,o=t*(1-e),l=t*(1-a*e),c=t*(1-(1-a)*e);switch(r%6){case 0:i=t,s=c,n=o;break;case 1:i=l,s=t,n=o;break;case 2:i=o,s=t,n=c;break;case 3:i=o,s=l,n=t;break;case 4:i=c,s=o,n=t;break;case 5:i=t,s=o,n=l;break}return[i*255,s*255,n*255]}var it=class{constructor(e){this.renderer=e}init(e,t){let{width:i,height:s}=this.renderer;switch(e){case"rainbow":t.position=0;break;case"matrix":let n=[[0,255,0],[0,255,255],[255,0,255]];t.colorMode=n[Math.floor(Math.random()*n.length)],t.buffer=[];for(let a=0;a<s;a++)t.buffer.push(Array(i).fill(null).map(()=>[0,0,0]));break;case"plasma":t.time=0;break;case"gradient":t.time=0;break;case"fire":t.heat=[];for(let a=0;a<i*s;a++)t.heat[a]=0;t.palette=this._createFirePalette();break;case"water":t.current=[],t.previous=[];for(let a=0;a<i*s;a++)t.current[a]=0,t.previous[a]=0;t.damping=.95;break;case"stars":t.stars=[];let r=Math.floor(i*s*.15);for(let a=0;a<r;a++)t.stars.push({x:Math.floor(Math.random()*i),y:Math.floor(Math.random()*s),brightness:Math.random(),speed:.02+Math.random()*.05,phase:Math.random()*Math.PI*2});break;case"confetti":t.particles=[];for(let a=0;a<20;a++)t.particles.push(this._createConfettiParticle(i,s,!0));break;case"plasma_wave":t.time=0;break;case"radial_pulse":t.time=0;break;case"hypnotic":t.time=0;break;case"lava":t.time=0,t.noise=[];for(let a=0;a<i*s;a++)t.noise[a]=Math.random()*Math.PI*2;break;case"aurora":t.time=0;break}}step(e,t){let{width:i,height:s}=this.renderer;switch(e){case"rainbow":t.position=(t.position+.01)%1;break;case"matrix":this._stepMatrix(t,i,s);break;case"plasma":case"gradient":t.time=(t.time||0)+.05;break;case"fire":this._stepFire(t,i,s);break;case"water":this._stepWater(t,i,s);break;case"stars":for(let n of t.stars)n.phase+=n.speed;break;case"confetti":for(let n=0;n<t.particles.length;n++){let r=t.particles[n];r.y+=r.speed,r.x+=r.drift,r.rotation+=r.rotationSpeed,r.y>s&&(t.particles[n]=this._createConfettiParticle(i,s,!1))}break;case"plasma_wave":case"radial_pulse":case"hypnotic":case"lava":case"aurora":t.time=(t.time||0)+.03;break}}render(e,t){switch(e){case"rainbow":this._renderRainbow(t);break;case"matrix":this._renderMatrix(t);break;case"plasma":this._renderPlasma(t);break;case"gradient":this._renderGradient(t);break;case"fire":this._renderFire(t);break;case"water":this._renderWater(t);break;case"stars":this._renderStars(t);break;case"confetti":this._renderConfetti(t);break;case"plasma_wave":this._renderPlasmaWave(t);break;case"radial_pulse":this._renderRadialPulse(t);break;case"hypnotic":this._renderHypnotic(t);break;case"lava":this._renderLava(t);break;case"aurora":this._renderAurora(t);break}}_renderRainbow(e){let{width:t,height:i}=this.renderer,s=e.position||0;for(let n=0;n<t;n++){let r=(s+n/t)%1,[a,o,l]=Ot(r,1,.6);for(let c=0;c<i;c++)this.renderer.setPixel(n,c,[a,o,l])}}_stepMatrix(e,t,i){let s=e.buffer,n=e.colorMode,r=.15;s.pop();let a=s[0].map(([o,l,c])=>[o*(1-r),l*(1-r),c*(1-r)]);s.unshift(JSON.parse(JSON.stringify(a)));for(let o=0;o<t;o++)Math.random()<.08&&(s[0][o]=[Math.floor(Math.random()*n[0]),Math.floor(Math.random()*n[1]),Math.floor(Math.random()*n[2])])}_renderMatrix(e){let{width:t,height:i}=this.renderer,s=e.buffer;if(s)for(let n=0;n<i;n++)for(let r=0;r<t;r++){let[a,o,l]=s[n]?.[r]||[0,0,0];this.renderer.setPixel(r,n,[a,o,l])}}_renderPlasma(e){let{width:t,height:i}=this.renderer,s=e.time||0,n=t/2,r=i/2;for(let a=0;a<t;a++)for(let o=0;o<i;o++){let l=a-n,c=o-r,d=Math.sqrt(l*l+c*c),h=Math.sin(a/8+s),f=Math.sin(o/6+s*.8),x=Math.sin(d/6-s*1.2),u=Math.sin((a+o)/10+s*.5),b=(h+f+x+u+4)/8,g=Math.sin(b*Math.PI*2)*.5+.5,v=Math.sin(b*Math.PI*2+2)*.5+.5,m=Math.sin(b*Math.PI*2+4)*.5+.5;this.renderer.setPixel(a,o,[g*255,v*255,m*255])}}_renderGradient(e){let{width:t,height:i}=this.renderer,n=(e.time||0)*10;for(let r=0;r<t;r++)for(let a=0;a<i;a++){let o=(Math.sin((r+n)*.05)*.5+.5)*255,l=(Math.cos((a+n)*.05)*.5+.5)*255,c=(Math.sin((r+a+n)*.03)*.5+.5)*255;this.renderer.setPixel(r,a,[o,l,c])}}_createFirePalette(){let e=[];for(let t=0;t<256;t++){let i,s,n;t<64?(i=t*4,s=0,n=0):t<128?(i=255,s=(t-64)*4,n=0):t<192?(i=255,s=255,n=(t-128)*4):(i=255,s=255,n=255),e.push([i,s,n])}return e}_stepFire(e,t,i){let s=e.heat;for(let n=0;n<t*i;n++)s[n]=Math.max(0,s[n]-Math.random()*10);for(let n=0;n<i-1;n++)for(let r=0;r<t;r++){let a=n*t+r,o=(n+1)*t+r,l=n*t+Math.max(0,r-1),c=n*t+Math.min(t-1,r+1);s[a]=(s[o]+s[l]+s[c])/3.05}for(let n=0;n<t;n++)Math.random()<.6&&(s[(i-1)*t+n]=180+Math.random()*75)}_renderFire(e){let{width:t,height:i}=this.renderer,s=e.heat,n=e.palette;for(let r=0;r<i;r++)for(let a=0;a<t;a++){let o=r*t+a,l=Math.floor(Math.min(255,s[o])),[c,d,h]=n[l];this.renderer.setPixel(a,r,[c,d,h])}}_stepWater(e,t,i){let{current:s,previous:n,damping:r}=e,a=[...n];for(let o=0;o<s.length;o++)n[o]=s[o];for(let o=1;o<i-1;o++)for(let l=1;l<t-1;l++){let c=o*t+l;s[c]=(a[(o-1)*t+l]+a[(o+1)*t+l]+a[o*t+(l-1)]+a[o*t+(l+1)])/2-s[c],s[c]*=r}if(Math.random()<.1){let o=Math.floor(Math.random()*(t-2))+1,l=Math.floor(Math.random()*(i-2))+1;s[l*t+o]=255}}_renderWater(e){let{width:t,height:i}=this.renderer,s=e.current;for(let n=0;n<i;n++)for(let r=0;r<t;r++){let a=n*t+r,o=Math.abs(s[a]),l=Math.min(255,o*2),c=l>200?l:0,d=l>150?l*.8:l*.3,h=Math.min(255,50+l);this.renderer.setPixel(r,n,[c,d,h])}}_renderStars(e){let{width:t,height:i}=this.renderer;for(let s=0;s<i;s++)for(let n=0;n<t;n++)this.renderer.setPixel(n,s,[5,5,15]);for(let s of e.stars){let n=(Math.sin(s.phase)*.5+.5)*255,r=Math.floor(s.x),a=Math.floor(s.y);r>=0&&r<t&&a>=0&&a<i&&this.renderer.setPixel(r,a,[n,n,n*.9])}}_createConfettiParticle(e,t,i){let s=[[255,0,0],[0,255,0],[0,0,255],[255,255,0],[255,0,255],[0,255,255],[255,128,0],[255,192,203]];return{x:Math.random()*e,y:i?Math.random()*t:-2,speed:.2+Math.random()*.3,drift:(Math.random()-.5)*.3,color:s[Math.floor(Math.random()*s.length)],size:1+Math.random(),rotation:Math.random()*Math.PI*2,rotationSpeed:(Math.random()-.5)*.2}}_renderConfetti(e){let{width:t,height:i}=this.renderer;for(let s=0;s<i;s++)for(let n=0;n<t;n++)this.renderer.setPixel(n,s,[10,10,10]);for(let s of e.particles){let n=Math.floor(s.x),r=Math.floor(s.y);if(n>=0&&n<t&&r>=0&&r<i){this.renderer.setPixel(n,r,s.color);let a=Math.abs(Math.sin(s.rotation))*.5+.5,[o,l,c]=s.color;this.renderer.setPixel(n,r,[o*a,l*a,c*a])}}}_renderPlasmaWave(e){let{width:t,height:i}=this.renderer,s=e.time||0;for(let n=0;n<t;n++)for(let r=0;r<i;r++){let a=n/t,o=r/i,l=Math.sin(a*10+s)+Math.sin(o*10+s)+Math.sin((a+o)*10+s)+Math.sin(Math.sqrt((a-.5)**2+(o-.5)**2)*20-s*2),c=Math.sin(l*Math.PI)*.5+.5,d=Math.sin(l*Math.PI+2.094)*.5+.5,h=Math.sin(l*Math.PI+4.188)*.5+.5;this.renderer.setPixel(n,r,[c*255,d*255,h*255])}}_renderRadialPulse(e){let{width:t,height:i}=this.renderer,s=e.time||0,n=t/2,r=i/2;for(let a=0;a<t;a++)for(let o=0;o<i;o++){let l=a-n,c=o-r,d=Math.sqrt(l*l+c*c),h=Math.sin(d*.8-s*3)*.5+.5,f=Math.sin(s*2)*.3+.7,x=(d/20+s*.5)%1,[u,b,g]=Ot(x,.8,h*f);this.renderer.setPixel(a,o,[u,b,g])}}_renderHypnotic(e){let{width:t,height:i}=this.renderer,s=e.time||0,n=t/2,r=i/2;for(let a=0;a<t;a++)for(let o=0;o<i;o++){let l=a-n,c=o-r,d=Math.sqrt(l*l+c*c),h=Math.atan2(c,l),x=Math.sin(h*4+d*.5-s*2)*.5+.5,u=x*(Math.sin(s)*.5+.5),b=x*(Math.sin(s+2.094)*.5+.5),g=x*(Math.sin(s+4.188)*.5+.5);this.renderer.setPixel(a,o,[u*255,b*255,g*255])}}_renderLava(e){let{width:t,height:i}=this.renderer,s=e.time||0;for(let n=0;n<t;n++)for(let r=0;r<i;r++){let a=n/t,o=r/i,l=Math.sin(a*8+s*.7)*Math.cos(o*6+s*.5),c=Math.sin(a*12-s*.3)*Math.sin(o*10+s*.8),d=Math.cos((a+o)*5+s),h=(l+c+d+3)/6,f,x,u;h<.3?(f=h*3*100,x=0,u=0):h<.6?(f=100+(h-.3)*3*155,x=(h-.3)*3*100,u=0):(f=255,x=100+(h-.6)*2.5*155,u=(h-.6)*2.5*100),this.renderer.setPixel(n,r,[f,x,u])}}_renderAurora(e){let{width:t,height:i}=this.renderer,s=e.time||0;for(let n=0;n<t;n++)for(let r=0;r<i;r++){let a=n/t,o=r/i,l=Math.sin(a*6+s)*.3,c=Math.sin(a*4-s*.7)*.2,d=Math.sin(a*8+s*1.3)*.15,h=.5+l+c+d,f=Math.abs(o-h),x=Math.max(0,1-f*4),u=Math.pow(x,1.5),b=Math.sin(a*3+s*.5),g=u*(.2+b*.3)*255,v=u*(.8+Math.sin(s+a)*.2)*255,m=u*(.6+b*.4)*255,y=Math.sin(n*127.1+r*311.7)*.5+.5,_=Math.sin(s*3+n+r)*.5+.5,S=g,E=v,C=m;if(y>.98&&x<.3){let I=_*180;S=Math.max(g,I),E=Math.max(v,I),C=Math.max(m,I*.9)}this.renderer.setPixel(n,r,[S,E,C])}}};function Ft(p,e,t){let i,s,n,r=Math.floor(p*6),a=p*6-r,o=t*(1-e),l=t*(1-a*e),c=t*(1-(1-a)*e);switch(r%6){case 0:i=t,s=c,n=o;break;case 1:i=l,s=t,n=o;break;case 2:i=o,s=t,n=c;break;case 3:i=o,s=l,n=t;break;case 4:i=c,s=o,n=t;break;case 5:i=t,s=o,n=l;break}return[i*255,s*255,n*255]}var st=class{constructor(e){this.renderer=e}init(e,t){switch(e){case"color_cycle":t.hue=0;break;case"rainbow_text":t.offset=0;break;case"neon":t.glowIntensity=0,t.direction=1,t.baseColor=t.fgColor||"#ff00ff";break}}step(e,t){switch(e){case"color_cycle":t.hue=(t.hue+.01)%1;break;case"rainbow_text":t.offset=(t.offset+.02)%1;break;case"neon":t.glowIntensity+=t.direction*.05,t.glowIntensity>=1?(t.glowIntensity=1,t.direction=-1):t.glowIntensity<=.3&&(t.glowIntensity=.3,t.direction=1);break}}render(e,t,i){let{width:s,height:n}=this.renderer,r=i||[];for(let a=0;a<n;a++)for(let o=0;o<s;o++){let l=r[a*s+o]||"#111",[c,d,h]=this._hexToRgb(l);if(c>20||d>20||h>20)switch(e){case"color_cycle":{let[x,u,b]=Ft(t.hue,1,.8),g=(c+d+h)/(3*255);c=x*g,d=u*g,h=b*g;break}case"rainbow_text":{let x=(t.offset+o/s)%1,[u,b,g]=Ft(x,1,.8),v=(c+d+h)/(3*255);c=u*v,d=b*v,h=g*v;break}case"neon":{let x=this._hexToRgb(t.baseColor||"#ff00ff"),u=t.glowIntensity||.5;if(c=x[0]*u,d=x[1]*u,h=x[2]*u,u>.8){let b=(u-.8)*5;c=c+(255-c)*b*.3,d=d+(255-d)*b*.3,h=h+(255-h)*b*.3}break}}this.renderer.setPixel(o,a,[c,d,h])}}_hexToRgb(e){if(!e||e==="#111"||e==="#000")return[17,17,17];if(e==="#050505")return[5,5,5];let t=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(e);return t?[parseInt(t[1],16),parseInt(t[2],16),parseInt(t[3],16)]:[17,17,17]}};var w={TEXT:"text",AMBIENT:"ambient",COLOR:"color"},k={fixed:{category:w.TEXT,name:"Fixed",description:"Static display"},scroll_ltr:{category:w.TEXT,name:"Scroll Left",description:"Text scrolls left to right"},scroll_rtl:{category:w.TEXT,name:"Scroll Right",description:"Text scrolls right to left"},blink:{category:w.TEXT,name:"Blink",description:"Text blinks on/off"},breeze:{category:w.TEXT,name:"Breeze",description:"Gentle wave brightness"},snow:{category:w.TEXT,name:"Snow",description:"Sparkle effect"},laser:{category:w.TEXT,name:"Laser",description:"Scanning beam"},fade:{category:w.TEXT,name:"Fade",description:"Fade in/out"},typewriter:{category:w.TEXT,name:"Typewriter",description:"Characters appear one by one"},bounce:{category:w.TEXT,name:"Bounce",description:"Text bounces back and forth"},sparkle:{category:w.TEXT,name:"Sparkle",description:"Random sparkle overlay"},rainbow:{category:w.AMBIENT,name:"Rainbow",description:"HSV rainbow gradient"},matrix:{category:w.AMBIENT,name:"Matrix",description:"Digital rain effect"},plasma:{category:w.AMBIENT,name:"Plasma",description:"Classic plasma waves"},gradient:{category:w.AMBIENT,name:"Gradient",description:"Moving color gradients"},fire:{category:w.AMBIENT,name:"Fire",description:"Fire/flame simulation"},water:{category:w.AMBIENT,name:"Water",description:"Ripple/wave effect"},stars:{category:w.AMBIENT,name:"Stars",description:"Twinkling starfield"},confetti:{category:w.AMBIENT,name:"Confetti",description:"Falling colored particles"},plasma_wave:{category:w.AMBIENT,name:"Plasma Wave",description:"Multi-frequency sine waves"},radial_pulse:{category:w.AMBIENT,name:"Radial Pulse",description:"Expanding ring patterns"},hypnotic:{category:w.AMBIENT,name:"Hypnotic",description:"Spiral pattern"},lava:{category:w.AMBIENT,name:"Lava",description:"Flowing lava/magma"},aurora:{category:w.AMBIENT,name:"Aurora",description:"Northern lights"},color_cycle:{category:w.COLOR,name:"Color Cycle",description:"Cycle through colors"},rainbow_text:{category:w.COLOR,name:"Rainbow Text",description:"Rainbow gradient on text"},neon:{category:w.COLOR,name:"Neon",description:"Pulsing neon glow"}},G=class{constructor(e){this.renderer=e,this.textEffects=new et(e),this.ambientEffects=new it(e),this.colorEffects=new st(e),this.currentEffect="fixed",this.effectState={}}getEffectInfo(e){return k[e]||k.fixed}getEffectsByCategory(e){return Object.entries(k).filter(([t,i])=>i.category===e).map(([t,i])=>({name:t,...i}))}initEffect(e,t={}){let i=this.getEffectInfo(e);switch(this.currentEffect=e,this.effectState={tick:0,...t},i.category){case w.TEXT:this.textEffects.init(e,this.effectState);break;case w.AMBIENT:this.ambientEffects.init(e,this.effectState);break;case w.COLOR:this.colorEffects.init(e,this.effectState);break}return this.effectState}step(){let e=this.getEffectInfo(this.currentEffect);switch(this.effectState.tick=(this.effectState.tick||0)+1,e.category){case w.TEXT:this.textEffects.step(this.currentEffect,this.effectState);break;case w.AMBIENT:this.ambientEffects.step(this.currentEffect,this.effectState);break;case w.COLOR:this.colorEffects.step(this.currentEffect,this.effectState);break}}render(e,t,i){switch(this.getEffectInfo(this.currentEffect).category){case w.AMBIENT:this.ambientEffects.render(this.currentEffect,this.effectState);break;case w.TEXT:this.textEffects.render(this.currentEffect,this.effectState,e,t,i);break;case w.COLOR:this.colorEffects.render(this.currentEffect,this.effectState,e);break}}isAmbient(e){return this.getEffectInfo(e).category===w.AMBIENT}needsAnimation(e){return e!=="fixed"}},me=Object.entries(k).filter(([p,e])=>e.category===w.TEXT).map(([p])=>p),_e=Object.entries(k).filter(([p,e])=>e.category===w.AMBIENT).map(([p])=>p),ye=Object.entries(k).filter(([p,e])=>e.category===w.COLOR).map(([p])=>p),ve=Object.keys(k);var nt=class{constructor(e,t={}){this.container=e,this.width=t.width||64,this.height=t.height||16,this.pixelGap=t.pixelGap||.1,this.buffer=[],this.prevBuffer=[],this._initBuffer(),this._colorPixels=[],this._extendedColorPixels=[],this.extendedWidth=this.width,this.effect="fixed",this.speed=50,this.animationId=null,this.lastFrameTime=0,this._isRunning=!1,this.pixelElements=[],this.svgCreated=!1,this._svg=null,this.effectManager=new G(this)}_initBuffer(){this.buffer=[],this.prevBuffer=[];for(let e=0;e<this.width*this.height;e++)this.buffer.push([0,0,0]),this.prevBuffer.push([-1,-1,-1])}_createSvg(){let t=100/this.width,i=t,s=this.height*i,n=this.pixelGap,r=document.createElementNS("http://www.w3.org/2000/svg","svg");r.setAttribute("viewBox",`0 0 100 ${s}`),r.setAttribute("preserveAspectRatio","xMidYMid meet"),r.style.width="100%",r.style.height="100%",r.style.display="block",this.pixelElements=[];for(let a=0;a<this.height;a++)for(let o=0;o<this.width;o++){let l=document.createElementNS("http://www.w3.org/2000/svg","rect");l.setAttribute("x",o*t),l.setAttribute("y",a*i),l.setAttribute("width",t-n),l.setAttribute("height",i-n),l.setAttribute("rx","0.3"),l.setAttribute("fill","rgb(17, 17, 17)"),r.appendChild(l),this.pixelElements.push(l)}this.container&&this.container.isConnected!==!1&&(this.container.innerHTML="",this.container.appendChild(r)),this._svg=r,this.svgCreated=!0}_ensureSvgInContainer(){return this.container?this._svg&&this._svg.parentNode===this.container?!0:this._svg&&this.container.isConnected!==!1?(this.container.innerHTML="",this.container.appendChild(this._svg),!0):!1:!1}setPixel(e,t,i){if(e>=0&&e<this.width&&t>=0&&t<this.height){let s=t*this.width+e;s<this.buffer.length&&(this.buffer[s]=i)}}clear(){for(let e=0;e<this.buffer.length;e++)this.buffer[e]=[0,0,0]}flush(){this.svgCreated?this._ensureSvgInContainer()||this._createSvg():this._createSvg();for(let e=0;e<this.buffer.length;e++){let t=this.buffer[e],i=this.prevBuffer[e];if(!t||!Array.isArray(t))continue;if(!i||!Array.isArray(i)){this.prevBuffer[e]=[-1,-1,-1];continue}let[s,n,r]=t,[a,o,l]=i;if(s!==a||n!==o||r!==l){let c=this.pixelElements[e];if(c){let d=s>20||n>20||r>20;c.setAttribute("fill",`rgb(${Math.round(s)}, ${Math.round(n)}, ${Math.round(r)})`),d?c.style.filter=`drop-shadow(0 0 2px rgb(${Math.round(s)}, ${Math.round(n)}, ${Math.round(r)}))`:c.style.filter=""}this.prevBuffer[e]=[s,n,r]}}}setData(e,t=null,i=null){this._colorPixels=e||[],t?(this._extendedColorPixels=t,this.extendedWidth=i||this.width):(this._extendedColorPixels=e||[],this.extendedWidth=this.width)}setEffect(e,t=50){let i=this._isRunning;this.effect!==e&&(this.effect=e,this.effectManager.initEffect(e,{speed:t})),this.speed=t,i&&e!=="fixed"&&this.start()}start(){this._isRunning||(this._isRunning=!0,this.lastFrameTime=performance.now(),this._animate())}stop(){this._isRunning=!1,this.animationId&&(cancelAnimationFrame(this.animationId),this.animationId=null)}get isRunning(){return this._isRunning}_animate(){if(!this._isRunning)return;let e=performance.now(),t=500-(this.speed-1)*4.7;e-this.lastFrameTime>=t&&(this.lastFrameTime=e,this.effectManager.step()),this._renderFrame(),this.animationId=requestAnimationFrame(()=>this._animate())}_renderFrame(){this.effectManager.render(this._colorPixels,this._extendedColorPixels,this.extendedWidth),this.flush()}renderStatic(){this.svgCreated||this._createSvg(),this._renderFrame()}setDimensions(e,t){(e!==this.width||t!==this.height)&&(this.width=e,this.height=t,this.extendedWidth=e,this._initBuffer(),this.svgCreated=!1,this.effectManager=new G(this),this.effect!=="fixed"&&this.effectManager.initEffect(this.effect,{speed:this.speed}))}setContainer(e){e!==this.container&&(this.container=e,this._svg&&e&&(e.innerHTML="",e.appendChild(this._svg)))}destroy(){this.stop(),this.pixelElements=[],this._svg=null,this.svgCreated=!1}};function At(p,e,t,i=1){let n=100/p,r=n,a=e*r,o=i*.1,l="";for(let c=0;c<e;c++)for(let d=0;d<p;d++){let h=t[c*p+d]||"#111",x=h!=="#111"&&h!=="#000"&&h!=="#1a1a1a"&&h!=="#050505"?`filter:drop-shadow(0 0 2px ${h});`:"";l+=`<rect x="${d*n}" y="${c*r}" width="${n-o}" height="${r-o}" fill="${h}" rx="0.3" style="${x}"/>`}return`
-    <svg viewBox="0 0 100 ${a}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block;">
-      ${l}
-    </svg>`}var Bt="iPIXEL_DisplayState",Kt={text:"",mode:"text",effect:"fixed",speed:50,fgColor:"#ff6600",bgColor:"#000000",font:"VCR_OSD_MONO",lastUpdate:0};function Zt(){try{let p=localStorage.getItem(Bt);if(p)return JSON.parse(p)}catch(p){console.warn("iPIXEL: Could not load saved state",p)}return{...Kt}}function Qt(p){try{localStorage.setItem(Bt,JSON.stringify(p))}catch(e){console.warn("iPIXEL: Could not save state",e)}}window.iPIXELDisplayState||(window.iPIXELDisplayState=Zt());function Dt(){return window.iPIXELDisplayState}function P(p){return window.iPIXELDisplayState={...window.iPIXELDisplayState,...p,lastUpdate:Date.now()},Qt(window.iPIXELDisplayState),window.dispatchEvent(new CustomEvent("ipixel-display-update",{detail:window.iPIXELDisplayState})),window.iPIXELDisplayState}var rt=new Map,ot=class extends L{constructor(){super(),this._renderer=null,this._displayContainer=null,this._lastState=null,this._cachedResolution=null,this._rendererId=null,this._handleDisplayUpdate=e=>{this._updateDisplay(e.detail)},window.addEventListener("ipixel-display-update",this._handleDisplayUpdate)}connectedCallback(){this._rendererId||(this._rendererId=`renderer_${Date.now()}_${Math.random().toString(36).substr(2,9)}`),rt.has(this._rendererId)&&(this._renderer=rt.get(this._rendererId)),O("VCR_OSD_MONO",16).then(()=>{this._lastState&&this._updateDisplay(this._lastState)}),O("VCR_OSD_MONO",24),O("VCR_OSD_MONO",32),O("CUSONG",16),O("CUSONG",24),O("CUSONG",32),z("VCR_OSD_MONO"),z("CUSONG")}disconnectedCallback(){window.removeEventListener("ipixel-display-update",this._handleDisplayUpdate),this._renderer&&this._rendererId&&(this._renderer.stop(),rt.set(this._rendererId,this._renderer))}_getResolutionCached(){let[e,t]=this.getResolution();if(e>0&&t>0&&e!==64){this._cachedResolution=[e,t];try{localStorage.setItem("iPIXEL_Resolution",JSON.stringify([e,t]))}catch{}}if(this._cachedResolution)return this._cachedResolution;try{let i=localStorage.getItem("iPIXEL_Resolution");if(i){let s=JSON.parse(i);if(Array.isArray(s)&&s.length===2)return this._cachedResolution=s,s}}catch{}return this._config?.width&&this._config?.height?[this._config.width,this._config.height]:[e||64,t||16]}_updateDisplay(e){if(!this._displayContainer)return;let[t,i]=this._getResolutionCached(),s=this.isOn();if(this._renderer?(this._renderer.setContainer(this._displayContainer),(this._renderer.width!==t||this._renderer.height!==i)&&this._renderer.setDimensions(t,i)):(this._renderer=new nt(this._displayContainer,{width:t,height:i}),this._rendererId&&rt.set(this._rendererId,this._renderer)),!s){this._renderer.stop();let b=ft("",t,i,"#111","#050505");this._displayContainer.innerHTML=At(t,i,b);return}let n=e?.text||"",r=e?.effect||"fixed",a=e?.speed||50,o=e?.fgColor||"#ff6600",l=e?.bgColor||"#111",c=e?.mode||"text",d=e?.font||"VCR_OSD_MONO";this._lastState=e;let h=n,f=o;if(c==="clock"?(h=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:!1}),f="#00ff88"):c==="gif"?(h="GIF",f="#ff44ff"):c==="rhythm"&&(h="***",f="#44aaff"),k[r]?.category==="ambient")this._renderer.setData([],[],t);else{let b=tt(i),g=d!=="LEGACY"&&Lt(d,b),v=d!=="LEGACY"&&K(d),m=(E,C,I,R,T)=>{if(g){let M=$t(E,C,I,R,T,d);if(M)return M}if(v){let M=Ct(E,C,I,R,T,d);if(M)return M}return ft(E,C,I,R,T)},y=(E,C,I,R,T)=>{if(g){let M=Pt(E,C,I,R,T,d);if(M)return M}if(v){let M=kt(E,C,I,R,T,d);if(M)return M}return wt(E,C,I,R,T)},_=v?h.length*10:h.length*6;if((r==="scroll_ltr"||r==="scroll_rtl"||r==="bounce")&&_>t){let E=y(h,t,i,f,l),C=m(h,t,i,f,l);this._renderer.setData(C,E.pixels,E.width)}else{let E=m(h,t,i,f,l);this._renderer.setData(E)}}this._renderer.setEffect(r,a),r==="fixed"?(this._renderer.stop(),this._renderer.renderStatic()):this._renderer.start()}render(){if(!this._hass)return;let[e,t]=this._getResolutionCached(),i=this.isOn(),s=this._config.name||this.getEntity()?.attributes?.friendly_name||"iPIXEL Display",n=Dt(),a=this.getEntity()?.state||"",l=this.getRelatedEntity("select","_mode")?.state||n.mode||"text",c=n.text||a,d=n.effect||"fixed",h=n.speed||50,f=n.fgColor||"#ff6600",x=n.bgColor||"#111",u=n.font||"VCR_OSD_MONO",g=k[d]?.category==="ambient",v=Object.entries(k).filter(([_,S])=>S.category==="text").map(([_,S])=>`<option value="${_}">${S.name}</option>`).join(""),m=Object.entries(k).filter(([_,S])=>S.category==="ambient").map(([_,S])=>`<option value="${_}">${S.name}</option>`).join(""),y=Object.entries(k).filter(([_,S])=>S.category==="color").map(([_,S])=>`<option value="${_}">${S.name}</option>`).join("");this.shadowRoot.innerHTML=`
-      <style>${$}
+`;
+
+  // src/font.js
+  var pixelFont = {
+    // Uppercase letters (full height)
+    "A": [124, 18, 17, 18, 124],
+    "B": [127, 73, 73, 73, 54],
+    "C": [62, 65, 65, 65, 34],
+    "D": [127, 65, 65, 34, 28],
+    "E": [127, 73, 73, 73, 65],
+    "F": [127, 9, 9, 9, 1],
+    "G": [62, 65, 73, 73, 122],
+    "H": [127, 8, 8, 8, 127],
+    "I": [0, 65, 127, 65, 0],
+    "J": [32, 64, 65, 63, 1],
+    "K": [127, 8, 20, 34, 65],
+    "L": [127, 64, 64, 64, 64],
+    "M": [127, 2, 12, 2, 127],
+    "N": [127, 4, 8, 16, 127],
+    "O": [62, 65, 65, 65, 62],
+    "P": [127, 9, 9, 9, 6],
+    "Q": [62, 65, 81, 33, 94],
+    "R": [127, 9, 25, 41, 70],
+    "S": [70, 73, 73, 73, 49],
+    "T": [1, 1, 127, 1, 1],
+    "U": [63, 64, 64, 64, 63],
+    "V": [31, 32, 64, 32, 31],
+    "W": [63, 64, 56, 64, 63],
+    "X": [99, 20, 8, 20, 99],
+    "Y": [7, 8, 112, 8, 7],
+    "Z": [97, 81, 73, 69, 67],
+    // Lowercase letters (smaller x-height, with ascenders/descenders)
+    "a": [32, 84, 84, 84, 120],
+    "b": [127, 72, 68, 68, 56],
+    "c": [56, 68, 68, 68, 32],
+    "d": [56, 68, 68, 72, 127],
+    "e": [56, 84, 84, 84, 24],
+    "f": [8, 126, 9, 1, 2],
+    "g": [12, 82, 82, 82, 62],
+    "h": [127, 8, 4, 4, 120],
+    "i": [0, 68, 125, 64, 0],
+    "j": [32, 64, 68, 61, 0],
+    "k": [127, 16, 40, 68, 0],
+    "l": [0, 65, 127, 64, 0],
+    "m": [124, 4, 24, 4, 120],
+    "n": [124, 8, 4, 4, 120],
+    "o": [56, 68, 68, 68, 56],
+    "p": [124, 20, 20, 20, 8],
+    "q": [8, 20, 20, 24, 124],
+    "r": [124, 8, 4, 4, 8],
+    "s": [72, 84, 84, 84, 32],
+    "t": [4, 63, 68, 64, 32],
+    "u": [60, 64, 64, 32, 124],
+    "v": [28, 32, 64, 32, 28],
+    "w": [60, 64, 48, 64, 60],
+    "x": [68, 40, 16, 40, 68],
+    "y": [12, 80, 80, 80, 60],
+    "z": [68, 100, 84, 76, 68],
+    // Numbers
+    "0": [62, 81, 73, 69, 62],
+    "1": [0, 66, 127, 64, 0],
+    "2": [66, 97, 81, 73, 70],
+    "3": [33, 65, 69, 75, 49],
+    "4": [24, 20, 18, 127, 16],
+    "5": [39, 69, 69, 69, 57],
+    "6": [60, 74, 73, 73, 48],
+    "7": [1, 113, 9, 5, 3],
+    "8": [54, 73, 73, 73, 54],
+    "9": [6, 73, 73, 41, 30],
+    // Punctuation & symbols
+    " ": [0, 0, 0, 0, 0],
+    ".": [0, 96, 96, 0, 0],
+    ",": [0, 128, 96, 0, 0],
+    ":": [0, 54, 54, 0, 0],
+    ";": [0, 128, 54, 0, 0],
+    "!": [0, 0, 95, 0, 0],
+    "?": [2, 1, 81, 9, 6],
+    "-": [8, 8, 8, 8, 8],
+    "+": [8, 8, 62, 8, 8],
+    "=": [20, 20, 20, 20, 20],
+    "_": [64, 64, 64, 64, 64],
+    "/": [32, 16, 8, 4, 2],
+    "\\": [2, 4, 8, 16, 32],
+    "(": [0, 28, 34, 65, 0],
+    ")": [0, 65, 34, 28, 0],
+    "[": [0, 127, 65, 65, 0],
+    "]": [0, 65, 65, 127, 0],
+    "<": [8, 20, 34, 65, 0],
+    ">": [0, 65, 34, 20, 8],
+    "*": [20, 8, 62, 8, 20],
+    "#": [20, 127, 20, 127, 20],
+    "@": [62, 65, 93, 85, 30],
+    "&": [54, 73, 85, 34, 80],
+    "%": [35, 19, 8, 100, 98],
+    "$": [18, 42, 127, 42, 36],
+    "'": [0, 0, 7, 0, 0],
+    '"': [0, 7, 0, 7, 0],
+    "`": [0, 1, 2, 0, 0],
+    "^": [4, 2, 1, 2, 4],
+    "~": [8, 4, 8, 16, 8]
+  };
+  function textToPixels(text, width, height, fgColor = "#ff6600", bgColor = "#111") {
+    const pixels = [];
+    const charWidth = 6;
+    const charHeight = 7;
+    const startY = Math.floor((height - charHeight) / 2);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        pixels.push(bgColor);
+      }
+    }
+    const textWidth = text.length * charWidth - 1;
+    const startX = Math.max(1, Math.floor((width - textWidth) / 2));
+    let xOffset = startX;
+    for (const char of text) {
+      const charData = pixelFont[char] || pixelFont[" "];
+      for (let col = 0; col < 5; col++) {
+        for (let row = 0; row < 7; row++) {
+          const pixelOn = charData[col] >> row & 1;
+          const px = xOffset + col;
+          const py = startY + row;
+          if (px >= 0 && px < width && py < height && py >= 0) {
+            pixels[py * width + px] = pixelOn ? fgColor : bgColor;
+          }
+        }
+      }
+      xOffset += charWidth;
+    }
+    return pixels;
+  }
+  function textToScrollPixels(text, displayWidth, height, fgColor = "#ff6600", bgColor = "#111") {
+    const charWidth = 6;
+    const charHeight = 7;
+    const startY = Math.floor((height - charHeight) / 2);
+    const textPixelWidth = text.length * charWidth;
+    const extendedWidth = displayWidth + textPixelWidth + displayWidth;
+    const pixels = [];
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < extendedWidth; x++) {
+        pixels.push(bgColor);
+      }
+    }
+    let xOffset = displayWidth;
+    for (const char of text) {
+      const charData = pixelFont[char] || pixelFont[" "];
+      for (let col = 0; col < 5; col++) {
+        for (let row = 0; row < 7; row++) {
+          const pixelOn = charData[col] >> row & 1;
+          const px = xOffset + col;
+          const py = startY + row;
+          if (px >= 0 && px < extendedWidth && py < height && py >= 0) {
+            pixels[py * extendedWidth + px] = pixelOn ? fgColor : bgColor;
+          }
+        }
+      }
+      xOffset += charWidth;
+    }
+    return { pixels, width: extendedWidth };
+  }
+
+  // src/canvas-font.js
+  var FONT_METRICS = {
+    "VCR_OSD_MONO": {
+      16: { font_size: 16, offset: [0, 0], pixel_threshold: 70, var_width: true },
+      24: { font_size: 24, offset: [0, 0], pixel_threshold: 70, var_width: true },
+      32: { font_size: 28, offset: [-1, 2], pixel_threshold: 30, var_width: false }
+    },
+    "CUSONG": {
+      16: { font_size: 16, offset: [0, -1], pixel_threshold: 70, var_width: false },
+      24: { font_size: 24, offset: [0, 0], pixel_threshold: 70, var_width: false },
+      32: { font_size: 32, offset: [0, 0], pixel_threshold: 70, var_width: false }
+    }
+  };
+  var fontLoadState = {};
+  var fontLoadPromises = {};
+  function getFontUrl(fontName) {
+    if (window.location.pathname.includes("preview.html") || window.location.port === "8080") {
+      return `./fonts/${fontName}.ttf`;
+    }
+    return `/hacsfiles/ipixel_color/fonts/${fontName}.ttf`;
+  }
+  async function loadFont(fontName) {
+    if (fontLoadState[fontName] === true)
+      return true;
+    if (fontLoadState[fontName] === false)
+      return false;
+    if (fontLoadPromises[fontName])
+      return fontLoadPromises[fontName];
+    fontLoadPromises[fontName] = (async () => {
+      const fontUrl = getFontUrl(fontName);
+      try {
+        const font = new FontFace(fontName, `url(${fontUrl})`);
+        const loadedFont = await font.load();
+        document.fonts.add(loadedFont);
+        fontLoadState[fontName] = true;
+        console.log(`iPIXEL: Font ${fontName} loaded successfully`);
+        return true;
+      } catch (e2) {
+        console.warn(`iPIXEL: Failed to load font ${fontName}:`, e2);
+        fontLoadState[fontName] = false;
+        return false;
+      }
+    })();
+    return fontLoadPromises[fontName];
+  }
+  function isFontLoaded(fontName) {
+    return fontLoadState[fontName] === true;
+  }
+  function getHeightKey(height) {
+    if (height <= 18)
+      return 16;
+    if (height <= 28)
+      return 24;
+    return 32;
+  }
+  function hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16)
+    } : { r: 0, g: 0, b: 0 };
+  }
+  function textToPixelsCanvas(text, width, height, fgColor = "#ff6600", bgColor = "#111", fontName = "VCR_OSD_MONO") {
+    const fontMetrics = FONT_METRICS[fontName];
+    if (!fontMetrics) {
+      console.warn(`iPIXEL: Unknown font: ${fontName}`);
+      return null;
+    }
+    if (!isFontLoaded(fontName)) {
+      loadFont(fontName);
+      return null;
+    }
+    const heightKey = getHeightKey(height);
+    const metrics = fontMetrics[heightKey];
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, width, height);
+    if (!text || text.trim() === "") {
+      const pixels2 = [];
+      for (let i2 = 0; i2 < width * height; i2++) {
+        pixels2.push(bgColor);
+      }
+      return pixels2;
+    }
+    ctx.font = `${metrics.font_size}px "${fontName}"`;
+    ctx.fillStyle = fgColor;
+    ctx.textBaseline = "top";
+    const textMetrics = ctx.measureText(text);
+    const textWidth = textMetrics.width;
+    const x = Math.floor((width - textWidth) / 2) + metrics.offset[0];
+    const y = Math.floor((height - metrics.font_size) / 2) + metrics.offset[1];
+    ctx.fillText(text, x, y);
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const pixels = [];
+    const fg = hexToRgb(fgColor);
+    const bg = hexToRgb(bgColor);
+    for (let i2 = 0; i2 < imageData.data.length; i2 += 4) {
+      const r2 = imageData.data[i2];
+      const g = imageData.data[i2 + 1];
+      const b = imageData.data[i2 + 2];
+      const gray = (r2 + g + b) / 3;
+      if (gray >= metrics.pixel_threshold) {
+        pixels.push(fgColor);
+      } else {
+        pixels.push(bgColor);
+      }
+    }
+    return pixels;
+  }
+  function textToScrollPixelsCanvas(text, displayWidth, height, fgColor = "#ff6600", bgColor = "#111", fontName = "VCR_OSD_MONO") {
+    const fontMetrics = FONT_METRICS[fontName];
+    if (!fontMetrics) {
+      return null;
+    }
+    if (!isFontLoaded(fontName)) {
+      loadFont(fontName);
+      return null;
+    }
+    const heightKey = getHeightKey(height);
+    const metrics = fontMetrics[heightKey];
+    const tempCanvas = document.createElement("canvas");
+    const tempCtx = tempCanvas.getContext("2d");
+    tempCtx.font = `${metrics.font_size}px "${fontName}"`;
+    const textWidth = Math.ceil(tempCtx.measureText(text).width);
+    const extendedWidth = displayWidth + textWidth + displayWidth;
+    const canvas = document.createElement("canvas");
+    canvas.width = extendedWidth;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, extendedWidth, height);
+    if (!text || text.trim() === "") {
+      const pixels2 = [];
+      for (let i2 = 0; i2 < extendedWidth * height; i2++) {
+        pixels2.push(bgColor);
+      }
+      return { pixels: pixels2, width: extendedWidth };
+    }
+    ctx.font = `${metrics.font_size}px "${fontName}"`;
+    ctx.fillStyle = fgColor;
+    ctx.textBaseline = "top";
+    const x = displayWidth + metrics.offset[0];
+    const y = Math.floor((height - metrics.font_size) / 2) + metrics.offset[1];
+    ctx.fillText(text, x, y);
+    const imageData = ctx.getImageData(0, 0, extendedWidth, height);
+    const pixels = [];
+    for (let i2 = 0; i2 < imageData.data.length; i2 += 4) {
+      const r2 = imageData.data[i2];
+      const g = imageData.data[i2 + 1];
+      const b = imageData.data[i2 + 2];
+      const gray = (r2 + g + b) / 3;
+      if (gray >= metrics.pixel_threshold) {
+        pixels.push(fgColor);
+      } else {
+        pixels.push(bgColor);
+      }
+    }
+    return { pixels, width: extendedWidth };
+  }
+
+  // lib/bdfparser.bundle.js
+  var fetchline_e = function(e2, n2, t2, r2) {
+    return new (t2 || (t2 = Promise))(function(o2, i2) {
+      function c(e3) {
+        try {
+          l2(r2.next(e3));
+        } catch (e4) {
+          i2(e4);
+        }
+      }
+      function u(e3) {
+        try {
+          l2(r2.throw(e3));
+        } catch (e4) {
+          i2(e4);
+        }
+      }
+      function l2(e3) {
+        var n3;
+        e3.done ? o2(e3.value) : (n3 = e3.value, n3 instanceof t2 ? n3 : new t2(function(e4) {
+          e4(n3);
+        })).then(c, u);
+      }
+      l2((r2 = r2.apply(e2, n2 || [])).next());
+    });
+  };
+  var fetchline_n = function(e2) {
+    return this instanceof fetchline_n ? (this.v = e2, this) : new fetchline_n(e2);
+  };
+  var fetchline_t = function(e2, t2, r2) {
+    if (!Symbol.asyncIterator)
+      throw new TypeError("Symbol.asyncIterator is not defined.");
+    var o2, i2 = r2.apply(e2, t2 || []), c = [];
+    return o2 = {}, u("next"), u("throw"), u("return"), o2[Symbol.asyncIterator] = function() {
+      return this;
+    }, o2;
+    function u(e3) {
+      i2[e3] && (o2[e3] = function(n2) {
+        return new Promise(function(t3, r3) {
+          c.push([e3, n2, t3, r3]) > 1 || l2(e3, n2);
+        });
+      });
+    }
+    function l2(e3, t3) {
+      try {
+        (r3 = i2[e3](t3)).value instanceof fetchline_n ? Promise.resolve(r3.value.v).then(s2, a2) : f(c[0][2], r3);
+      } catch (e4) {
+        f(c[0][3], e4);
+      }
+      var r3;
+    }
+    function s2(e3) {
+      l2("next", e3);
+    }
+    function a2(e3) {
+      l2("throw", e3);
+    }
+    function f(e3, n2) {
+      e3(n2), c.shift(), c.length && l2(c[0][0], c[0][1]);
+    }
+  };
+  function $fetchline(r2, { includeLastEmptyLine: o2 = true, encoding: i2 = "utf-8", delimiter: c = /\r?\n/g } = {}) {
+    return fetchline_t(this, arguments, function* () {
+      const t2 = yield fetchline_n(((n2) => fetchline_e(void 0, void 0, void 0, function* () {
+        const e2 = yield fetch(n2);
+        if (null === e2.body)
+          throw new Error("Cannot read file");
+        return e2.body.getReader();
+      }))(r2));
+      let { value: u, done: l2 } = yield fetchline_n(t2.read());
+      const s2 = new TextDecoder(i2);
+      let a2, f = u ? s2.decode(u) : "";
+      if ("string" == typeof c) {
+        if ("" === c)
+          throw new Error("delimiter cannot be empty string!");
+        a2 = new RegExp(c.replace(/[.*+\-?^${}()|[\]\\]/g, "\\$&"), "g");
+      } else
+        a2 = false === /g/.test(c.flags) ? new RegExp(c.source, c.flags + "g") : c;
+      let d = 0;
+      for (; ; ) {
+        const e2 = a2.exec(f);
+        if (null !== e2)
+          yield yield fetchline_n(f.substring(d, e2.index)), d = a2.lastIndex;
+        else {
+          if (true === l2)
+            break;
+          const e3 = f.substring(d);
+          ({ value: u, done: l2 } = yield fetchline_n(t2.read())), f = e3 + (f ? s2.decode(u) : ""), d = 0;
+        }
+      }
+      (o2 || d < f.length) && (yield yield fetchline_n(f.substring(d)));
+    });
+  }
+  var t = function(t2, e2, n2, r2) {
+    return new (n2 || (n2 = Promise))(function(i2, s2) {
+      function a2(t3) {
+        try {
+          l2(r2.next(t3));
+        } catch (t4) {
+          s2(t4);
+        }
+      }
+      function o2(t3) {
+        try {
+          l2(r2.throw(t3));
+        } catch (t4) {
+          s2(t4);
+        }
+      }
+      function l2(t3) {
+        var e3;
+        t3.done ? i2(t3.value) : (e3 = t3.value, e3 instanceof n2 ? e3 : new n2(function(t4) {
+          t4(e3);
+        })).then(a2, o2);
+      }
+      l2((r2 = r2.apply(t2, e2 || [])).next());
+    });
+  };
+  var e = function(t2) {
+    if (!Symbol.asyncIterator)
+      throw new TypeError("Symbol.asyncIterator is not defined.");
+    var e2, n2 = t2[Symbol.asyncIterator];
+    return n2 ? n2.call(t2) : (t2 = "function" == typeof __values ? __values(t2) : t2[Symbol.iterator](), e2 = {}, r2("next"), r2("throw"), r2("return"), e2[Symbol.asyncIterator] = function() {
+      return this;
+    }, e2);
+    function r2(n3) {
+      e2[n3] = t2[n3] && function(e3) {
+        return new Promise(function(r3, i2) {
+          (function(t3, e4, n4, r4) {
+            Promise.resolve(r4).then(function(e5) {
+              t3({ value: e5, done: n4 });
+            }, e4);
+          })(r3, i2, (e3 = t2[n3](e3)).done, e3.value);
+        });
+      };
+    }
+  };
+  var n = "[\\s]+";
+  var r = { glyphname: "empty", codepoint: 8203, bbw: 0, bbh: 0, bbxoff: 0, bbyoff: 0, swx0: 0, swy0: 0, dwx0: 0, dwy0: 0, swx1: 0, swy1: 0, dwx1: 0, dwy1: 0, vvectorx: 0, vvectory: 0, hexdata: [] };
+  var i = ["glyphname", "codepoint", "bbw", "bbh", "bbxoff", "bbyoff", "swx0", "swy0", "dwx0", "dwy0", "swx1", "swy1", "dwx1", "dwy1", "vvectorx", "vvectory", "hexdata"];
+  var s = { lr: "lrtb", rl: "rltb", tb: "tbrl", bt: "btrl", lrtb: void 0, lrbt: void 0, rltb: void 0, rlbt: void 0, tbrl: void 0, tblr: void 0, btrl: void 0, btlr: void 0 };
+  var a = { lr: 1, rl: 2, tb: 0, bt: -1 };
+  var o = class {
+    constructor() {
+      this.headers = void 0, this.__headers = {}, this.props = {}, this.glyphs = /* @__PURE__ */ new Map(), this.__glyph_count_to_check = null, this.__curline_startchar = null, this.__curline_chars = null;
+    }
+    load_filelines(n2) {
+      var r2, i2;
+      return t(this, void 0, void 0, function* () {
+        try {
+          this.__f = n2, yield this.__parse_headers();
+        } finally {
+          if ("undefined" != typeof Deno && void 0 !== this.__f)
+            try {
+              for (var t2, s2 = e(this.__f); !(t2 = yield s2.next()).done; ) {
+                t2.value;
+              }
+            } catch (t3) {
+              r2 = { error: t3 };
+            } finally {
+              try {
+                t2 && !t2.done && (i2 = s2.return) && (yield i2.call(s2));
+              } finally {
+                if (r2)
+                  throw r2.error;
+              }
+            }
+        }
+        return this;
+      });
+    }
+    __parse_headers() {
+      var e2, r2;
+      return t(this, void 0, void 0, function* () {
+        for (; ; ) {
+          const t2 = null === (r2 = yield null === (e2 = this.__f) || void 0 === e2 ? void 0 : e2.next()) || void 0 === r2 ? void 0 : r2.value, i2 = t2.split(/ (.+)/, 2), s2 = i2.length;
+          let a2;
+          if (2 === s2) {
+            const e3 = i2[0], r3 = i2[1].trim();
+            switch (e3) {
+              case "STARTFONT":
+                this.__headers.bdfversion = parseFloat(r3);
+                break;
+              case "FONT":
+                this.__headers.fontname = r3;
+                break;
+              case "SIZE":
+                a2 = r3.split(" "), this.__headers.pointsize = parseInt(a2[0], 10), this.__headers.xres = parseInt(a2[1], 10), this.__headers.yres = parseInt(a2[2], 10);
+                break;
+              case "FONTBOUNDINGBOX":
+                a2 = r3.split(" "), this.__headers.fbbx = parseInt(a2[0], 10), this.__headers.fbby = parseInt(a2[1], 10), this.__headers.fbbxoff = parseInt(a2[2], 10), this.__headers.fbbyoff = parseInt(a2[3], 10);
+                break;
+              case "STARTPROPERTIES":
+                return this.__parse_headers_after(), void (yield this.__parse_props());
+              case "COMMENT":
+                "comment" in this.__headers && Array.isArray(this.__headers.comment) || (this.__headers.comment = []), this.__headers.comment.push(r3.replace(/^[\s"'\t\r\n]+|[\s"'\t\r\n]+$/g, ""));
+                break;
+              case "SWIDTH":
+                a2 = r3.split(" "), this.__headers.swx0 = parseInt(a2[0], 10), this.__headers.swy0 = parseInt(a2[1], 10);
+                break;
+              case "DWIDTH":
+                a2 = r3.split(" "), this.__headers.dwx0 = parseInt(a2[0], 10), this.__headers.dwy0 = parseInt(a2[1], 10);
+                break;
+              case "SWIDTH1":
+                a2 = r3.split(" "), this.__headers.swx1 = parseInt(a2[0], 10), this.__headers.swy1 = parseInt(a2[1], 10);
+                break;
+              case "DWIDTH1":
+                a2 = r3.split(" "), this.__headers.dwx1 = parseInt(a2[0], 10), this.__headers.dwy1 = parseInt(a2[1], 10);
+                break;
+              case "VVECTOR":
+                a2 = n.split(r3), this.__headers.vvectorx = parseInt(a2[0], 10), this.__headers.vvectory = parseInt(a2[1], 10);
+                break;
+              case "METRICSSET":
+              case "CONTENTVERSION":
+                this.__headers[e3.toLowerCase()] = parseInt(r3, 10);
+                break;
+              case "CHARS":
+                return console.warn("It looks like the font does not have property block beginning with 'STARTPROPERTIES' keyword"), this.__parse_headers_after(), this.__curline_chars = t2, void (yield this.__parse_glyph_count());
+              case "STARTCHAR":
+                return console.warn("It looks like the font does not have property block beginning with 'STARTPROPERTIES' keyword"), console.warn("Cannot find 'CHARS' line"), this.__parse_headers_after(), this.__curline_startchar = t2, void (yield this.__prepare_glyphs());
+            }
+          }
+          if (1 === s2 && "ENDFONT" === i2[0].trim())
+            return console.warn("It looks like the font does not have property block beginning with 'STARTPROPERTIES' keyword"), void console.warn("This font does not have any glyphs");
+        }
+      });
+    }
+    __parse_headers_after() {
+      "metricsset" in this.__headers || (this.__headers.metricsset = 0), this.headers = this.__headers;
+    }
+    __parse_props() {
+      var e2, n2;
+      return t(this, void 0, void 0, function* () {
+        for (; ; ) {
+          const t2 = (null === (n2 = yield null === (e2 = this.__f) || void 0 === e2 ? void 0 : e2.next()) || void 0 === n2 ? void 0 : n2.value).split(/ (.+)/, 2), r2 = t2.length;
+          if (2 === r2) {
+            const e3 = t2[0], n3 = t2[1].replace(/^[\s"'\t\r\n]+|[\s"'\t\r\n]+$/g, "");
+            "COMMENT" === e3 ? ("comment" in this.props && Array.isArray(this.props.comment) || (this.props.comment = []), this.props.comment.push(n3.replace(/^[\s"'\t\r\n]+|[\s"'\t\r\n]+$/g, ""))) : this.props[e3.toLowerCase()] = n3;
+          } else if (1 === r2) {
+            const e3 = t2[0].trim();
+            if ("ENDPROPERTIES" === e3)
+              return void (yield this.__parse_glyph_count());
+            if ("ENDFONT" === e3)
+              return void console.warn("This font does not have any glyphs");
+            this.props[e3] = null;
+          }
+        }
+      });
+    }
+    __parse_glyph_count() {
+      var e2, n2;
+      return t(this, void 0, void 0, function* () {
+        let t2;
+        if (null === this.__curline_chars ? t2 = null === (n2 = yield null === (e2 = this.__f) || void 0 === e2 ? void 0 : e2.next()) || void 0 === n2 ? void 0 : n2.value : (t2 = this.__curline_chars, this.__curline_chars = null), "ENDFONT" === t2.trim())
+          return void console.warn("This font does not have any glyphs");
+        const r2 = t2.split(/ (.+)/, 2);
+        "CHARS" === r2[0] ? this.__glyph_count_to_check = parseInt(r2[1].trim(), 10) : (this.__curline_startchar = t2, console.warn("Cannot find 'CHARS' line next to 'ENDPROPERTIES' line")), yield this.__prepare_glyphs();
+      });
+    }
+    __prepare_glyphs() {
+      var e2, r2;
+      return t(this, void 0, void 0, function* () {
+        let t2 = 0, i2 = [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null], s2 = [], a2 = false, o2 = false;
+        for (; ; ) {
+          let l2;
+          if (null === this.__curline_startchar ? l2 = null === (r2 = yield null === (e2 = this.__f) || void 0 === e2 ? void 0 : e2.next()) || void 0 === r2 ? void 0 : r2.value : (l2 = this.__curline_startchar, this.__curline_startchar = null), null == l2)
+            return console.warn("This font does not have 'ENDFONT' keyword"), void this.__prepare_glyphs_after();
+          const h2 = l2.split(/ (.+)/, 2), c = h2.length;
+          if (2 === c) {
+            const e3 = h2[0], r3 = h2[1].trim();
+            let s3;
+            switch (e3) {
+              case "STARTCHAR":
+                i2 = [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null], i2[0] = r3, o2 = false;
+                break;
+              case "ENCODING":
+                t2 = parseInt(r3, 10), i2[1] = t2;
+                break;
+              case "BBX":
+                s3 = r3.split(" "), i2[2] = parseInt(s3[0], 10), i2[3] = parseInt(s3[1], 10), i2[4] = parseInt(s3[2], 10), i2[5] = parseInt(s3[3], 10);
+                break;
+              case "SWIDTH":
+                s3 = r3.split(" "), i2[6] = parseInt(s3[0], 10), i2[7] = parseInt(s3[1], 10);
+                break;
+              case "DWIDTH":
+                s3 = r3.split(" "), i2[8] = parseInt(s3[0], 10), i2[9] = parseInt(s3[1], 10);
+                break;
+              case "SWIDTH1":
+                s3 = r3.split(" "), i2[10] = parseInt(s3[0], 10), i2[11] = parseInt(s3[1], 10);
+                break;
+              case "DWIDTH1":
+                s3 = r3.split(" "), i2[12] = parseInt(s3[0], 10), i2[13] = parseInt(s3[1], 10);
+                break;
+              case "VVECTOR":
+                s3 = n.split(r3), i2[14] = parseInt(s3[0], 10), i2[15] = parseInt(s3[1], 10);
+            }
+          } else if (1 === c) {
+            const e3 = h2[0].trim();
+            switch (e3) {
+              case "BITMAP":
+                s2 = [], a2 = true;
+                break;
+              case "ENDCHAR":
+                a2 = false, i2[16] = s2, this.glyphs.set(t2, i2), o2 = true;
+                break;
+              case "ENDFONT":
+                if (o2)
+                  return void this.__prepare_glyphs_after();
+              default:
+                a2 && s2.push(e3);
+            }
+          }
+        }
+      });
+    }
+    __prepare_glyphs_after() {
+      const t2 = this.glyphs.size;
+      this.__glyph_count_to_check !== t2 && (null === this.__glyph_count_to_check ? console.warn("The glyph count next to 'CHARS' keyword does not exist") : console.warn(`The glyph count next to 'CHARS' keyword is ${this.__glyph_count_to_check.toString()}, which does not match the actual glyph count ${t2.toString()}`));
+    }
+    get length() {
+      return this.glyphs.size;
+    }
+    itercps(t2, e2) {
+      const n2 = null != t2 ? t2 : 1, r2 = null != e2 ? e2 : null;
+      let i2;
+      const s2 = [...this.glyphs.keys()];
+      switch (n2) {
+        case 1:
+          i2 = s2.sort((t3, e3) => t3 - e3);
+          break;
+        case 0:
+          i2 = s2;
+          break;
+        case 2:
+          i2 = s2.sort((t3, e3) => e3 - t3);
+          break;
+        case -1:
+          i2 = s2.reverse();
+      }
+      if (null !== r2) {
+        const t3 = (t4) => {
+          if ("number" == typeof r2)
+            return t4 < r2;
+          if (Array.isArray(r2) && 2 === r2.length && "number" == typeof r2[0] && "number" == typeof r2[1])
+            return t4 <= r2[1] && t4 >= r2[0];
+          if (Array.isArray(r2) && Array.isArray(r2[0]))
+            for (const e3 of r2) {
+              const [n3, r3] = e3;
+              if (t4 <= r3 && t4 >= n3)
+                return true;
+            }
+          return false;
+        };
+        i2 = i2.filter(t3);
+      }
+      return i2;
+    }
+    *iterglyphs(t2, e2) {
+      for (const n2 of this.itercps(t2, e2))
+        yield this.glyphbycp(n2);
+    }
+    glyphbycp(t2) {
+      const e2 = this.glyphs.get(t2);
+      if (null == e2)
+        return console.warn(`Glyph "${String.fromCodePoint(t2)}" (codepoint ${t2.toString()}) does not exist in the font. Will return 'null'`), null;
+      {
+        const t3 = {};
+        return i.forEach((n2, r2) => {
+          var i2, s2, a2;
+          i2 = t3, s2 = n2, a2 = e2[r2], i2[s2] = a2;
+        }), new l(t3, this);
+      }
+    }
+    glyph(t2) {
+      const e2 = t2.codePointAt(0);
+      return void 0 === e2 ? null : this.glyphbycp(e2);
+    }
+    lacksglyphs(t2) {
+      const e2 = [], n2 = t2.length;
+      for (let r2, i2 = 0; i2 < n2; i2++) {
+        r2 = t2[i2];
+        const n3 = r2.codePointAt(0);
+        void 0 !== n3 && this.glyphs.has(n3) || e2.push(r2);
+      }
+      return 0 !== e2.length ? e2 : null;
+    }
+    drawcps(t2, e2 = {}) {
+      var n2, i2, o2, c, d, _, p;
+      const u = null !== (n2 = e2.linelimit) && void 0 !== n2 ? n2 : 512, f = null !== (i2 = e2.mode) && void 0 !== i2 ? i2 : 1, b = null !== (o2 = e2.direction) && void 0 !== o2 ? o2 : "lrtb", y = null !== (c = e2.usecurrentglyphspacing) && void 0 !== c && c, g = null !== (d = e2.missing) && void 0 !== d ? d : null;
+      if (void 0 === this.headers)
+        throw new Error("Font is not loaded");
+      let v, w, m, I, S, k, x, T, E, A, R, N, O, D, P, C, $, H;
+      const M = null !== (_ = s[b]) && void 0 !== _ ? _ : b, F = M.slice(0, 2), W = M.slice(2, 4);
+      F in a && W in a ? (k = a[F], x = a[W]) : (k = 1, x = 0), 0 === x || 2 === x ? v = 1 : 1 !== x && -1 !== x || (v = 0), 1 === k || -1 === k ? w = 1 : 2 !== k && 0 !== k || (w = 0), 1 === f && (T = k > 0 ? this.headers.fbbx : this.headers.fbby, k > 0 ? (N = "dwx0", O = "dwy0") : (N = "dwx1", O = "dwy1"), R = N in this.headers ? this.headers[N] : O in this.headers ? this.headers[O] : null);
+      const j = [];
+      I = [];
+      const B = [];
+      P = [], C = 0;
+      const G = () => {
+        j.push(I), y ? P.shift() : P.pop(), B.push(P);
+      }, V = t2[Symbol.iterator]();
+      for ($ = false; ; ) {
+        if ($)
+          $ = false;
+        else {
+          if (S = null === (p = V.next()) || void 0 === p ? void 0 : p.value, void 0 === S)
+            break;
+          const t3 = this.glyphbycp(S);
+          E = null !== t3 ? t3 : g ? g instanceof l ? g : new l(g, this) : new l(r, this), m = E.draw(), H = m.width(), D = 0, 1 === f && void 0 !== N && void 0 !== O && (A = E.meta[N] || E.meta[O], null == A && (A = R), null != A && void 0 !== T && (D = A - T));
+        }
+        if (void 0 !== H && void 0 !== D && void 0 !== m && void 0 !== E && void 0 !== S)
+          if (C += H + D, C <= u)
+            I.push(m), P.push(D);
+          else {
+            if (0 === I.length)
+              throw new Error(`\`_linelimit\` (${u}) is too small the line can't even contain one glyph: "${E.chr()}" (codepoint ${S}, width: ${H})`);
+            G(), C = 0, I = [], P = [], $ = true;
+          }
+      }
+      0 !== I.length && G();
+      const z = j.map((t3, e3) => h.concatall(t3, { direction: k, align: v, offsetlist: B[e3] }));
+      return h.concatall(z, { direction: x, align: w });
+    }
+    draw(t2, e2 = {}) {
+      const { linelimit: n2, mode: r2, direction: i2, usecurrentglyphspacing: s2, missing: a2 } = e2;
+      return this.drawcps(t2.split("").map((t3) => {
+        const e3 = t3.codePointAt(0);
+        return void 0 === e3 ? 8203 : e3;
+      }), { linelimit: n2, mode: r2, direction: i2, usecurrentglyphspacing: s2, missing: a2 });
+    }
+    drawall(t2 = {}) {
+      const { order: e2, r: n2, linelimit: r2, mode: i2, direction: s2, usecurrentglyphspacing: a2 } = t2, o2 = null != i2 ? i2 : 0;
+      return this.drawcps(this.itercps(e2, n2), { linelimit: r2, mode: o2, direction: s2, usecurrentglyphspacing: a2 });
+    }
+  };
+  var l = class {
+    constructor(t2, e2) {
+      this.meta = t2, this.font = e2;
+    }
+    toString() {
+      return this.draw().toString();
+    }
+    repr() {
+      var t2;
+      return "Glyph(" + JSON.stringify(this.meta, null, 2) + ", Font(<" + (null === (t2 = this.font.headers) || void 0 === t2 ? void 0 : t2.fontname) + ">)";
+    }
+    cp() {
+      return this.meta.codepoint;
+    }
+    chr() {
+      return String.fromCodePoint(this.cp());
+    }
+    draw(t2, e2) {
+      const n2 = null != e2 ? e2 : null;
+      let r2;
+      switch (null != t2 ? t2 : 0) {
+        case 0:
+          r2 = this.__draw_fbb();
+          break;
+        case 1:
+          r2 = this.__draw_bb();
+          break;
+        case 2:
+          r2 = this.__draw_original();
+          break;
+        case -1:
+          if (null === n2)
+            throw new Error("Parameter bb in draw() method must be set when mode=-1");
+          r2 = this.__draw_user_specified(n2);
+      }
+      return r2;
+    }
+    __draw_user_specified(t2) {
+      const e2 = this.meta.bbxoff, n2 = this.meta.bbyoff, [r2, i2, s2, a2] = t2;
+      return this.__draw_bb().crop(r2, i2, -e2 + s2, -n2 + a2);
+    }
+    __draw_original() {
+      return new h(this.meta.hexdata.map((t2) => t2 ? parseInt(t2, 16).toString(2).padStart(4 * t2.length, "0") : ""));
+    }
+    __draw_bb() {
+      const t2 = this.meta.bbw, e2 = this.meta.bbh, n2 = this.__draw_original(), r2 = n2.bindata, i2 = r2.length;
+      return i2 !== e2 && console.warn(`Glyph "${this.meta.glyphname.toString()}" (codepoint ${this.meta.codepoint.toString()})'s bbh, ${e2.toString()}, does not match its hexdata line count, ${i2.toString()}`), n2.bindata = r2.map((e3) => e3.slice(0, t2)), n2;
+    }
+    __draw_fbb() {
+      const t2 = this.font.headers;
+      if (void 0 === t2)
+        throw new Error("Font is not loaded");
+      return this.__draw_user_specified([t2.fbbx, t2.fbby, t2.fbbxoff, t2.fbbyoff]);
+    }
+    origin(t2 = {}) {
+      var e2, n2, r2, i2;
+      const s2 = null !== (e2 = t2.mode) && void 0 !== e2 ? e2 : 0, a2 = null !== (n2 = t2.fromorigin) && void 0 !== n2 && n2, o2 = null !== (r2 = t2.xoff) && void 0 !== r2 ? r2 : null, l2 = null !== (i2 = t2.yoff) && void 0 !== i2 ? i2 : null;
+      let h2;
+      const c = this.meta.bbxoff, d = this.meta.bbyoff;
+      switch (s2) {
+        case 0:
+          const t3 = this.font.headers;
+          if (void 0 === t3)
+            throw new Error("Font is not loaded");
+          h2 = [t3.fbbxoff, t3.fbbyoff];
+          break;
+        case 1:
+        case 2:
+          h2 = [c, d];
+          break;
+        case -1:
+          if (null === o2 || null === l2)
+            throw new Error("Parameter xoff and yoff in origin() method must be all set when mode=-1");
+          h2 = [o2, l2];
+      }
+      return a2 ? h2 : [0 - h2[0], 0 - h2[1]];
+    }
+  };
+  var h = class _h {
+    constructor(t2) {
+      this.bindata = t2;
+    }
+    toString() {
+      return this.bindata.join("\n").replace(/0/g, ".").replace(/1/g, "#").replace(/2/g, "&");
+    }
+    repr() {
+      return `Bitmap(${JSON.stringify(this.bindata, null, 2)})`;
+    }
+    width() {
+      return this.bindata[0].length;
+    }
+    height() {
+      return this.bindata.length;
+    }
+    clone() {
+      return new _h([...this.bindata]);
+    }
+    static __crop_string(t2, e2, n2) {
+      let r2 = t2;
+      const i2 = t2.length;
+      let s2 = 0;
+      e2 < 0 && (s2 = 0 - e2, r2 = r2.padStart(s2 + i2, "0")), e2 + n2 > i2 && (r2 = r2.padEnd(e2 + n2 - i2 + r2.length, "0"));
+      const a2 = e2 + s2;
+      return r2.slice(a2, a2 + n2);
+    }
+    static __string_offset_concat(t2, e2, n2) {
+      const r2 = null != n2 ? n2 : 0;
+      if (0 === r2)
+        return t2 + e2;
+      const i2 = t2.length, s2 = i2 + r2, a2 = s2 + e2.length, o2 = Math.min(0, s2), l2 = Math.max(i2, a2), c = _h.__crop_string(t2, o2, l2 - o2), d = _h.__crop_string(e2, o2 - s2, l2 - o2);
+      return c.split("").map((t3, e3) => (parseInt(d[e3], 10) || parseInt(t3, 10)).toString()).join("");
+    }
+    static __listofstr_offset_concat(t2, e2, n2) {
+      const r2 = null != n2 ? n2 : 0;
+      let i2, s2;
+      if (0 === r2)
+        return t2.concat(e2);
+      const a2 = t2[0].length, o2 = t2.length, l2 = o2 + r2, h2 = l2 + e2.length, c = Math.min(0, l2), d = Math.max(o2, h2), _ = [];
+      for (let n3 = c; n3 < d; n3++)
+        i2 = n3 < 0 || n3 >= o2 ? "0".repeat(a2) : t2[n3], s2 = n3 < l2 || n3 >= h2 ? "0".repeat(a2) : e2[n3 - l2], _.push(i2.split("").map((t3, e3) => (parseInt(s2[e3], 10) || parseInt(t3, 10)).toString()).join(""));
+      return _;
+    }
+    static __crop_bitmap(t2, e2, n2, r2, i2) {
+      let s2;
+      const a2 = [], o2 = t2.length;
+      for (let l2 = 0; l2 < n2; l2++)
+        s2 = o2 - i2 - n2 + l2, s2 < 0 || s2 >= o2 ? a2.push("0".repeat(e2)) : a2.push(_h.__crop_string(t2[s2], r2, e2));
+      return a2;
+    }
+    crop(t2, e2, n2, r2) {
+      const i2 = null != n2 ? n2 : 0, s2 = null != r2 ? r2 : 0;
+      return this.bindata = _h.__crop_bitmap(this.bindata, t2, e2, i2, s2), this;
+    }
+    overlay(t2) {
+      const e2 = this.bindata, n2 = t2.bindata;
+      return e2.length !== n2.length && console.warn("the bitmaps to overlay have different height"), e2[0].length !== n2[0].length && console.warn("the bitmaps to overlay have different width"), this.bindata = e2.map((t3, e3) => {
+        const r2 = t3, i2 = n2[e3];
+        return r2.split("").map((t4, e4) => (parseInt(i2[e4], 10) || parseInt(t4, 10)).toString()).join("");
+      }), this;
+    }
+    static concatall(t2, e2 = {}) {
+      var n2, r2, i2;
+      const s2 = null !== (n2 = e2.direction) && void 0 !== n2 ? n2 : 1, a2 = null !== (r2 = e2.align) && void 0 !== r2 ? r2 : 1, o2 = null !== (i2 = e2.offsetlist) && void 0 !== i2 ? i2 : null;
+      let l2, c, d, _, p, u, f;
+      if (s2 > 0) {
+        d = Math.max(...t2.map((t3) => t3.height())), p = Array(d).fill("");
+        const e3 = (t3, e4, n3) => 1 === s2 ? _h.__string_offset_concat(t3, e4, n3) : _h.__string_offset_concat(e4, t3, n3);
+        for (let n3 = 0; n3 < d; n3++) {
+          c = a2 ? -n3 - 1 : n3, _ = 0;
+          const r3 = t2.length;
+          for (let i3 = 0; i3 < r3; i3++) {
+            const r4 = t2[i3];
+            o2 && 0 !== i3 && (_ = o2[i3 - 1]), n3 < r4.height() ? c >= 0 ? p[c] = e3(p[c], r4.bindata[c], _) : p[d + c] = e3(p[d + c], r4.bindata[r4.height() + c], _) : c >= 0 ? p[c] = e3(p[c], "0".repeat(r4.width()), _) : p[d + c] = e3(p[d + c], "0".repeat(r4.width()), _);
+          }
+        }
+      } else {
+        d = Math.max(...t2.map((t3) => t3.width())), p = [], _ = 0;
+        const e3 = t2.length;
+        for (let n3 = 0; n3 < e3; n3++) {
+          const e4 = t2[n3];
+          o2 && 0 !== n3 && (_ = o2[n3 - 1]), l2 = e4.bindata, u = e4.width(), u !== d && (f = a2 ? 0 : u - d, l2 = this.__crop_bitmap(l2, d, e4.height(), f, 0)), p = 0 === s2 ? _h.__listofstr_offset_concat(p, l2, _) : _h.__listofstr_offset_concat(l2, p, _);
+        }
+      }
+      return new this(p);
+    }
+    concat(t2, e2 = {}) {
+      const { direction: n2, align: r2, offset: i2 } = e2, s2 = null != i2 ? i2 : 0;
+      return this.bindata = _h.concatall([this, t2], { direction: n2, align: r2, offsetlist: [s2] }).bindata, this;
+    }
+    static __enlarge_bindata(t2, e2, n2) {
+      const r2 = null != e2 ? e2 : 1, i2 = null != n2 ? n2 : 1;
+      let s2 = [...t2];
+      return r2 > 1 && (s2 = s2.map((t3) => t3.split("").reduce((t4, e3) => t4.concat(Array(r2).fill(e3)), []).join(""))), i2 > 1 && (s2 = s2.reduce((t3, e3) => t3.concat(Array(i2).fill(e3)), [])), s2;
+    }
+    enlarge(t2, e2) {
+      return this.bindata = _h.__enlarge_bindata(this.bindata, t2, e2), this;
+    }
+    replace(t2, e2) {
+      const n2 = "number" == typeof t2 ? t2.toString() : t2, r2 = "number" == typeof e2 ? e2.toString() : e2;
+      return this.bindata = this.bindata.map((t3) => ((t4, e3, n3) => {
+        if ("replaceAll" in String.prototype)
+          return t4.replaceAll(e3, n3);
+        {
+          const r3 = (t5) => t5.replace(/[.*+\-?^${}()|[\]\\]/g, "\\$&");
+          return t4.replace(new RegExp(r3(e3), "g"), n3);
+        }
+      })(t3, n2, r2)), this;
+    }
+    shadow(t2, e2) {
+      const n2 = null != t2 ? t2 : 1, r2 = null != e2 ? e2 : -1;
+      let i2, s2, a2, o2, l2, h2;
+      const c = this.clone();
+      return h2 = this.width(), i2 = this.height(), h2 += Math.abs(n2), i2 += Math.abs(r2), c.bindata = c.bindata.map((t3) => t3.replace(/1/g, "2")), n2 > 0 ? (s2 = 0, o2 = -n2) : (s2 = n2, o2 = 0), r2 > 0 ? (a2 = 0, l2 = -r2) : (a2 = r2, l2 = 0), this.crop(h2, i2, s2, a2), c.crop(h2, i2, o2, l2), c.overlay(this), this.bindata = c.bindata, this;
+    }
+    glow(t2) {
+      var e2, n2, r2, i2, s2, a2, o2, l2, h2, c, d, _, p, u;
+      const f = null != t2 ? t2 : 0;
+      let b, y, g, v;
+      g = this.width(), v = this.height(), g += 2, v += 2, this.crop(g, v, -1, -1);
+      const w = this.todata(2), m = w.length;
+      for (let t3 = 0; t3 < m; t3++) {
+        b = w[t3];
+        const g2 = b.length;
+        for (let v2 = 0; v2 < g2; v2++)
+          y = b[v2], 1 === y && ((e2 = w[t3])[n2 = v2 - 1] || (e2[n2] = 2), (r2 = w[t3])[i2 = v2 + 1] || (r2[i2] = 2), (s2 = w[t3 - 1])[v2] || (s2[v2] = 2), (a2 = w[t3 + 1])[v2] || (a2[v2] = 2), 1 === f && ((o2 = w[t3 - 1])[l2 = v2 - 1] || (o2[l2] = 2), (h2 = w[t3 - 1])[c = v2 + 1] || (h2[c] = 2), (d = w[t3 + 1])[_ = v2 - 1] || (d[_] = 2), (p = w[t3 + 1])[u = v2 + 1] || (p[u] = 2)));
+      }
+      return this.bindata = w.map((t3) => t3.map((t4) => t4.toString()).join("")), this;
+    }
+    bytepad(t2) {
+      const e2 = null != t2 ? t2 : 8, n2 = this.width(), r2 = this.height(), i2 = n2 % e2;
+      return 0 === i2 ? this : this.crop(n2 + e2 - i2, r2);
+    }
+    todata(t2) {
+      let e2;
+      switch (null != t2 ? t2 : 1) {
+        case 0:
+          e2 = this.bindata.join("\n");
+          break;
+        case 1:
+          e2 = this.bindata;
+          break;
+        case 2:
+          e2 = this.bindata.map((t3) => t3.split("").map((t4) => parseInt(t4, 10)));
+          break;
+        case 3:
+          e2 = [].concat(...this.todata(2));
+          break;
+        case 4:
+          e2 = this.bindata.map((t3) => {
+            if (!/^[01]+$/.test(t3))
+              throw new Error(`Invalid binary string: ${t3}`);
+            return parseInt(t3, 2).toString(16).padStart(-1 * Math.floor(-1 * this.width() / 4), "0");
+          });
+          break;
+        case 5:
+          e2 = this.bindata.map((t3) => {
+            if (!/^[01]+$/.test(t3))
+              throw new Error(`Invalid binary string: ${t3}`);
+            return parseInt(t3, 2);
+          });
+      }
+      return e2;
+    }
+    draw2canvas(t2, e2) {
+      const n2 = null != e2 ? e2 : { 0: null, 1: "black", 2: "red" };
+      return this.todata(2).forEach((e3, r2) => {
+        e3.forEach((e4, i2) => {
+          const s2 = e4.toString();
+          if ("0" === s2 || "1" === s2 || "2" === s2) {
+            const e5 = n2[s2];
+            null != e5 && (t2.fillStyle = e5, t2.fillRect(i2, r2, 1, 1));
+          }
+        });
+      }), this;
+    }
+  };
+  var $Font = (e2) => t(void 0, void 0, void 0, function* () {
+    return yield new o().load_filelines(e2);
+  });
+
+  // src/bdf-font.js
+  var BDF_FONT_CONFIG = {
+    "VCR_OSD_MONO": {
+      16: { file: "VCR_OSD_MONO_16.bdf", yOffset: 0 },
+      24: { file: "VCR_OSD_MONO_24.bdf", yOffset: 0 },
+      32: { file: "VCR_OSD_MONO_32.bdf", yOffset: 2 }
+      // Match pypixelcolor offset
+    },
+    "CUSONG": {
+      16: { file: "CUSONG_16.bdf", yOffset: -1 },
+      // Match pypixelcolor offset
+      24: { file: "CUSONG_24.bdf", yOffset: 0 },
+      32: { file: "CUSONG_32.bdf", yOffset: 0 }
+    }
+  };
+  var fontCache = /* @__PURE__ */ new Map();
+  var fontLoadPromises2 = /* @__PURE__ */ new Map();
+  function getBdfFontUrl(filename) {
+    if (window.location.pathname.includes("preview.html") || window.location.port === "8080") {
+      return `./fonts/${filename}`;
+    }
+    return `/hacsfiles/ipixel_color/fonts/${filename}`;
+  }
+  function getHeightKey2(height) {
+    if (height <= 18)
+      return 16;
+    if (height <= 28)
+      return 24;
+    return 32;
+  }
+  async function loadBdfFont(fontName, heightKey = 16) {
+    const cacheKey = `${fontName}_${heightKey}`;
+    if (fontCache.has(cacheKey)) {
+      return fontCache.get(cacheKey);
+    }
+    if (fontLoadPromises2.has(cacheKey)) {
+      return fontLoadPromises2.get(cacheKey);
+    }
+    const fontConfig = BDF_FONT_CONFIG[fontName];
+    if (!fontConfig || !fontConfig[heightKey]) {
+      console.warn(`iPIXEL BDF: No config for font ${fontName} at height ${heightKey}`);
+      return null;
+    }
+    const config = fontConfig[heightKey];
+    const loadPromise = (async () => {
+      try {
+        const fontUrl = getBdfFontUrl(config.file);
+        console.log(`iPIXEL BDF: Loading ${fontUrl}...`);
+        const font = await $Font($fetchline(fontUrl));
+        const result = { font, config };
+        fontCache.set(cacheKey, result);
+        console.log(`iPIXEL BDF: Font ${fontName} (${heightKey}px) loaded successfully`);
+        return result;
+      } catch (e2) {
+        console.warn(`iPIXEL BDF: Failed to load font ${fontName} (${heightKey}px):`, e2);
+        fontLoadPromises2.delete(cacheKey);
+        return null;
+      }
+    })();
+    fontLoadPromises2.set(cacheKey, loadPromise);
+    return loadPromise;
+  }
+  function isBdfFontLoaded(fontName, heightKey = 16) {
+    const cacheKey = `${fontName}_${heightKey}`;
+    return fontCache.has(cacheKey);
+  }
+  function textToPixelsBdf(text, width, height, fgColor = "#ff6600", bgColor = "#111", fontName = "VCR_OSD_MONO") {
+    const heightKey = getHeightKey2(height);
+    const cacheKey = `${fontName}_${heightKey}`;
+    const cached = fontCache.get(cacheKey);
+    if (!cached) {
+      loadBdfFont(fontName, heightKey);
+      return null;
+    }
+    const { font, config } = cached;
+    const pixels = new Array(width * height).fill(bgColor);
+    if (!text || text.trim() === "") {
+      return pixels;
+    }
+    try {
+      const bitmap = font.draw(text, { direction: "lrtb", mode: 1 });
+      const bindata = bitmap.bindata;
+      const textWidth = bitmap.width();
+      const textHeight = bitmap.height();
+      const xOffset = Math.floor((width - textWidth) / 2);
+      const yOffset = Math.floor((height - textHeight) / 2) + (config.yOffset || 0);
+      for (let row = 0; row < textHeight; row++) {
+        const rowData = bindata[row] || "";
+        for (let col = 0; col < rowData.length; col++) {
+          const px = xOffset + col;
+          const py = yOffset + row;
+          if (px >= 0 && px < width && py >= 0 && py < height) {
+            const idx = py * width + px;
+            pixels[idx] = rowData[col] === "1" ? fgColor : bgColor;
+          }
+        }
+      }
+    } catch (e2) {
+      console.warn("iPIXEL BDF: Error rendering text:", e2);
+      return null;
+    }
+    return pixels;
+  }
+  function textToScrollPixelsBdf(text, displayWidth, height, fgColor = "#ff6600", bgColor = "#111", fontName = "VCR_OSD_MONO") {
+    const heightKey = getHeightKey2(height);
+    const cacheKey = `${fontName}_${heightKey}`;
+    const cached = fontCache.get(cacheKey);
+    if (!cached) {
+      loadBdfFont(fontName, heightKey);
+      return null;
+    }
+    const { font, config } = cached;
+    if (!text || text.trim() === "") {
+      const extendedWidth = displayWidth * 3;
+      const pixels = new Array(extendedWidth * height).fill(bgColor);
+      return { pixels, width: extendedWidth };
+    }
+    try {
+      const bitmap = font.draw(text, { direction: "lrtb", mode: 1 });
+      const bindata = bitmap.bindata;
+      const textWidth = bitmap.width();
+      const textHeight = bitmap.height();
+      const extendedWidth = displayWidth + textWidth + displayWidth;
+      const pixels = new Array(extendedWidth * height).fill(bgColor);
+      const xStart = displayWidth;
+      const yOffset = Math.floor((height - textHeight) / 2) + (config.yOffset || 0);
+      for (let row = 0; row < textHeight; row++) {
+        const rowData = bindata[row] || "";
+        for (let col = 0; col < rowData.length; col++) {
+          const px = xStart + col;
+          const py = yOffset + row;
+          if (px >= 0 && px < extendedWidth && py >= 0 && py < height) {
+            const idx = py * extendedWidth + px;
+            pixels[idx] = rowData[col] === "1" ? fgColor : bgColor;
+          }
+        }
+      }
+      return { pixels, width: extendedWidth };
+    } catch (e2) {
+      console.warn("iPIXEL BDF: Error rendering scroll text:", e2);
+      return null;
+    }
+  }
+
+  // src/effects/text-effects.js
+  var TextEffects = class {
+    constructor(renderer) {
+      this.renderer = renderer;
+    }
+    /**
+     * Initialize effect state
+     */
+    init(effectName, state) {
+      const { width, height } = this.renderer;
+      switch (effectName) {
+        case "scroll_ltr":
+        case "scroll_rtl":
+          state.offset = 0;
+          break;
+        case "blink":
+          state.visible = true;
+          break;
+        case "snow":
+        case "breeze":
+          state.phases = [];
+          for (let i2 = 0; i2 < width * height; i2++) {
+            state.phases[i2] = Math.random() * Math.PI * 2;
+          }
+          break;
+        case "laser":
+          state.position = 0;
+          break;
+        case "fade":
+          state.opacity = 0;
+          state.direction = 1;
+          break;
+        case "typewriter":
+          state.charIndex = 0;
+          state.cursorVisible = true;
+          break;
+        case "bounce":
+          state.offset = 0;
+          state.direction = 1;
+          break;
+        case "sparkle":
+          state.sparkles = [];
+          for (let i2 = 0; i2 < Math.floor(width * height * 0.1); i2++) {
+            state.sparkles.push({
+              x: Math.floor(Math.random() * width),
+              y: Math.floor(Math.random() * height),
+              brightness: Math.random(),
+              speed: 0.05 + Math.random() * 0.1
+            });
+          }
+          break;
+      }
+    }
+    /**
+     * Step effect forward
+     */
+    step(effectName, state) {
+      const { width, extendedWidth } = this.renderer;
+      switch (effectName) {
+        case "scroll_ltr":
+          state.offset -= 1;
+          if (state.offset <= -(extendedWidth || width)) {
+            state.offset = width;
+          }
+          break;
+        case "scroll_rtl":
+          state.offset += 1;
+          if (state.offset >= (extendedWidth || width)) {
+            state.offset = -width;
+          }
+          break;
+        case "blink":
+          state.visible = !state.visible;
+          break;
+        case "laser":
+          state.position = (state.position + 1) % width;
+          break;
+        case "fade":
+          state.opacity += state.direction * 0.05;
+          if (state.opacity >= 1) {
+            state.opacity = 1;
+            state.direction = -1;
+          } else if (state.opacity <= 0) {
+            state.opacity = 0;
+            state.direction = 1;
+          }
+          break;
+        case "typewriter":
+          if (state.tick % 3 === 0) {
+            state.charIndex++;
+          }
+          state.cursorVisible = state.tick % 10 < 5;
+          break;
+        case "bounce":
+          state.offset += state.direction;
+          const maxOffset = Math.max(0, (extendedWidth || width) - width);
+          if (state.offset >= maxOffset) {
+            state.offset = maxOffset;
+            state.direction = -1;
+          } else if (state.offset <= 0) {
+            state.offset = 0;
+            state.direction = 1;
+          }
+          break;
+        case "sparkle":
+          for (const sparkle of state.sparkles) {
+            sparkle.brightness += sparkle.speed;
+            if (sparkle.brightness > 1) {
+              sparkle.brightness = 0;
+              sparkle.x = Math.floor(Math.random() * width);
+              sparkle.y = Math.floor(Math.random() * this.renderer.height);
+            }
+          }
+          break;
+      }
+    }
+    /**
+     * Render effect to buffer
+     */
+    render(effectName, state, pixels, extendedPixels, extendedWidth) {
+      const { width, height } = this.renderer;
+      const srcPixels = extendedPixels || pixels || [];
+      const displayPixels = pixels || [];
+      const srcWidth = extendedWidth || width;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          let color;
+          let sourceX = x;
+          if (effectName === "scroll_ltr" || effectName === "scroll_rtl" || effectName === "bounce") {
+            sourceX = x - (state.offset || 0);
+            while (sourceX < 0)
+              sourceX += srcWidth;
+            while (sourceX >= srcWidth)
+              sourceX -= srcWidth;
+            color = srcPixels[y * srcWidth + sourceX] || "#111";
+          } else if (effectName === "typewriter") {
+            const charWidth = 6;
+            const maxX = (state.charIndex || 0) * charWidth;
+            if (x < maxX) {
+              color = displayPixels[y * width + x] || "#111";
+            } else if (x === maxX && state.cursorVisible) {
+              color = "#ffffff";
+            } else {
+              color = "#111";
+            }
+          } else {
+            color = displayPixels[y * width + x] || "#111";
+          }
+          let [r2, g, b] = this._hexToRgb(color);
+          const isLit = r2 > 20 || g > 20 || b > 20;
+          if (isLit) {
+            switch (effectName) {
+              case "blink":
+                if (!state.visible) {
+                  r2 = g = b = 17;
+                }
+                break;
+              case "snow": {
+                const phase = state.phases?.[y * width + x] || 0;
+                const tick = state.tick || 0;
+                const factor = 0.3 + 0.7 * Math.abs(Math.sin(phase + tick * 0.3));
+                r2 *= factor;
+                g *= factor;
+                b *= factor;
+                break;
+              }
+              case "breeze": {
+                const phase = state.phases?.[y * width + x] || 0;
+                const tick = state.tick || 0;
+                const factor = 0.4 + 0.6 * Math.abs(Math.sin(phase + tick * 0.15 + x * 0.2));
+                r2 *= factor;
+                g *= factor;
+                b *= factor;
+                break;
+              }
+              case "laser": {
+                const pos = state.position || 0;
+                const dist = Math.abs(x - pos);
+                const factor = dist < 3 ? 1 : 0.3;
+                r2 *= factor;
+                g *= factor;
+                b *= factor;
+                break;
+              }
+              case "fade": {
+                const opacity = state.opacity || 1;
+                r2 *= opacity;
+                g *= opacity;
+                b *= opacity;
+                break;
+              }
+            }
+          }
+          if (effectName === "sparkle" && state.sparkles) {
+            for (const sparkle of state.sparkles) {
+              if (sparkle.x === x && sparkle.y === y) {
+                const sparkleIntensity = Math.sin(sparkle.brightness * Math.PI);
+                r2 = Math.min(255, r2 + sparkleIntensity * 200);
+                g = Math.min(255, g + sparkleIntensity * 200);
+                b = Math.min(255, b + sparkleIntensity * 200);
+              }
+            }
+          }
+          this.renderer.setPixel(x, y, [r2, g, b]);
+        }
+      }
+    }
+    /**
+     * Convert hex color to RGB array
+     */
+    _hexToRgb(hex) {
+      if (!hex || hex === "#111" || hex === "#000")
+        return [17, 17, 17];
+      if (hex === "#050505")
+        return [5, 5, 5];
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)] : [17, 17, 17];
+    }
+  };
+
+  // src/effects/ambient-effects.js
+  function hsvToRgb(h2, s2, v) {
+    let r2, g, b;
+    const i2 = Math.floor(h2 * 6);
+    const f = h2 * 6 - i2;
+    const p = v * (1 - s2);
+    const q = v * (1 - f * s2);
+    const t2 = v * (1 - (1 - f) * s2);
+    switch (i2 % 6) {
+      case 0:
+        r2 = v;
+        g = t2;
+        b = p;
+        break;
+      case 1:
+        r2 = q;
+        g = v;
+        b = p;
+        break;
+      case 2:
+        r2 = p;
+        g = v;
+        b = t2;
+        break;
+      case 3:
+        r2 = p;
+        g = q;
+        b = v;
+        break;
+      case 4:
+        r2 = t2;
+        g = p;
+        b = v;
+        break;
+      case 5:
+        r2 = v;
+        g = p;
+        b = q;
+        break;
+    }
+    return [r2 * 255, g * 255, b * 255];
+  }
+  var AmbientEffects = class {
+    constructor(renderer) {
+      this.renderer = renderer;
+    }
+    /**
+     * Initialize effect state
+     */
+    init(effectName, state) {
+      const { width, height } = this.renderer;
+      switch (effectName) {
+        case "rainbow":
+          state.position = 0;
+          break;
+        case "matrix":
+          const colorModes = [
+            [0, 255, 0],
+            // Matrix green
+            [0, 255, 255],
+            // Cyan
+            [255, 0, 255]
+            // Purple
+          ];
+          state.colorMode = colorModes[Math.floor(Math.random() * colorModes.length)];
+          state.buffer = [];
+          for (let y = 0; y < height; y++) {
+            state.buffer.push(Array(width).fill(null).map(() => [0, 0, 0]));
+          }
+          break;
+        case "plasma":
+          state.time = 0;
+          break;
+        case "gradient":
+          state.time = 0;
+          break;
+        case "fire":
+          state.heat = [];
+          for (let i2 = 0; i2 < width * height; i2++) {
+            state.heat[i2] = 0;
+          }
+          state.palette = this._createFirePalette();
+          break;
+        case "water":
+          state.current = [];
+          state.previous = [];
+          for (let i2 = 0; i2 < width * height; i2++) {
+            state.current[i2] = 0;
+            state.previous[i2] = 0;
+          }
+          state.damping = 0.95;
+          break;
+        case "stars":
+          state.stars = [];
+          const numStars = Math.floor(width * height * 0.15);
+          for (let i2 = 0; i2 < numStars; i2++) {
+            state.stars.push({
+              x: Math.floor(Math.random() * width),
+              y: Math.floor(Math.random() * height),
+              brightness: Math.random(),
+              speed: 0.02 + Math.random() * 0.05,
+              phase: Math.random() * Math.PI * 2
+            });
+          }
+          break;
+        case "confetti":
+          state.particles = [];
+          for (let i2 = 0; i2 < 20; i2++) {
+            state.particles.push(this._createConfettiParticle(width, height, true));
+          }
+          break;
+        case "plasma_wave":
+          state.time = 0;
+          break;
+        case "radial_pulse":
+          state.time = 0;
+          break;
+        case "hypnotic":
+          state.time = 0;
+          break;
+        case "lava":
+          state.time = 0;
+          state.noise = [];
+          for (let i2 = 0; i2 < width * height; i2++) {
+            state.noise[i2] = Math.random() * Math.PI * 2;
+          }
+          break;
+        case "aurora":
+          state.time = 0;
+          break;
+      }
+    }
+    /**
+     * Step effect forward
+     */
+    step(effectName, state) {
+      const { width, height } = this.renderer;
+      switch (effectName) {
+        case "rainbow":
+          state.position = (state.position + 0.01) % 1;
+          break;
+        case "matrix":
+          this._stepMatrix(state, width, height);
+          break;
+        case "plasma":
+        case "gradient":
+          state.time = (state.time || 0) + 0.05;
+          break;
+        case "fire":
+          this._stepFire(state, width, height);
+          break;
+        case "water":
+          this._stepWater(state, width, height);
+          break;
+        case "stars":
+          for (const star of state.stars) {
+            star.phase += star.speed;
+          }
+          break;
+        case "confetti":
+          for (let i2 = 0; i2 < state.particles.length; i2++) {
+            const p = state.particles[i2];
+            p.y += p.speed;
+            p.x += p.drift;
+            p.rotation += p.rotationSpeed;
+            if (p.y > height) {
+              state.particles[i2] = this._createConfettiParticle(width, height, false);
+            }
+          }
+          break;
+        case "plasma_wave":
+        case "radial_pulse":
+        case "hypnotic":
+        case "lava":
+        case "aurora":
+          state.time = (state.time || 0) + 0.03;
+          break;
+      }
+    }
+    /**
+     * Render effect to buffer
+     */
+    render(effectName, state) {
+      switch (effectName) {
+        case "rainbow":
+          this._renderRainbow(state);
+          break;
+        case "matrix":
+          this._renderMatrix(state);
+          break;
+        case "plasma":
+          this._renderPlasma(state);
+          break;
+        case "gradient":
+          this._renderGradient(state);
+          break;
+        case "fire":
+          this._renderFire(state);
+          break;
+        case "water":
+          this._renderWater(state);
+          break;
+        case "stars":
+          this._renderStars(state);
+          break;
+        case "confetti":
+          this._renderConfetti(state);
+          break;
+        case "plasma_wave":
+          this._renderPlasmaWave(state);
+          break;
+        case "radial_pulse":
+          this._renderRadialPulse(state);
+          break;
+        case "hypnotic":
+          this._renderHypnotic(state);
+          break;
+        case "lava":
+          this._renderLava(state);
+          break;
+        case "aurora":
+          this._renderAurora(state);
+          break;
+      }
+    }
+    // === Effect implementations ===
+    _renderRainbow(state) {
+      const { width, height } = this.renderer;
+      const position = state.position || 0;
+      for (let x = 0; x < width; x++) {
+        const hue = (position + x / width) % 1;
+        const [r2, g, b] = hsvToRgb(hue, 1, 0.6);
+        for (let y = 0; y < height; y++) {
+          this.renderer.setPixel(x, y, [r2, g, b]);
+        }
+      }
+    }
+    _stepMatrix(state, width, height) {
+      const buffer = state.buffer;
+      const colorMode = state.colorMode;
+      const fadeAmount = 0.15;
+      buffer.pop();
+      const newRow = buffer[0].map(([r2, g, b]) => [
+        r2 * (1 - fadeAmount),
+        g * (1 - fadeAmount),
+        b * (1 - fadeAmount)
+      ]);
+      buffer.unshift(JSON.parse(JSON.stringify(newRow)));
+      for (let x = 0; x < width; x++) {
+        if (Math.random() < 0.08) {
+          buffer[0][x] = [
+            Math.floor(Math.random() * colorMode[0]),
+            Math.floor(Math.random() * colorMode[1]),
+            Math.floor(Math.random() * colorMode[2])
+          ];
+        }
+      }
+    }
+    _renderMatrix(state) {
+      const { width, height } = this.renderer;
+      const buffer = state.buffer;
+      if (!buffer)
+        return;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const [r2, g, b] = buffer[y]?.[x] || [0, 0, 0];
+          this.renderer.setPixel(x, y, [r2, g, b]);
+        }
+      }
+    }
+    _renderPlasma(state) {
+      const { width, height } = this.renderer;
+      const time = state.time || 0;
+      const centerX = width / 2;
+      const centerY = height / 2;
+      for (let x = 0; x < width; x++) {
+        for (let y = 0; y < height; y++) {
+          const dx = x - centerX;
+          const dy = y - centerY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const v1 = Math.sin(x / 8 + time);
+          const v2 = Math.sin(y / 6 + time * 0.8);
+          const v3 = Math.sin(dist / 6 - time * 1.2);
+          const v4 = Math.sin((x + y) / 10 + time * 0.5);
+          const value = (v1 + v2 + v3 + v4 + 4) / 8;
+          const r2 = Math.sin(value * Math.PI * 2) * 0.5 + 0.5;
+          const g = Math.sin(value * Math.PI * 2 + 2) * 0.5 + 0.5;
+          const b = Math.sin(value * Math.PI * 2 + 4) * 0.5 + 0.5;
+          this.renderer.setPixel(x, y, [r2 * 255, g * 255, b * 255]);
+        }
+      }
+    }
+    _renderGradient(state) {
+      const { width, height } = this.renderer;
+      const time = state.time || 0;
+      const t2 = time * 10;
+      for (let x = 0; x < width; x++) {
+        for (let y = 0; y < height; y++) {
+          const r2 = (Math.sin((x + t2) * 0.05) * 0.5 + 0.5) * 255;
+          const g = (Math.cos((y + t2) * 0.05) * 0.5 + 0.5) * 255;
+          const b = (Math.sin((x + y + t2) * 0.03) * 0.5 + 0.5) * 255;
+          this.renderer.setPixel(x, y, [r2, g, b]);
+        }
+      }
+    }
+    _createFirePalette() {
+      const palette = [];
+      for (let i2 = 0; i2 < 256; i2++) {
+        let r2, g, b;
+        if (i2 < 64) {
+          r2 = i2 * 4;
+          g = 0;
+          b = 0;
+        } else if (i2 < 128) {
+          r2 = 255;
+          g = (i2 - 64) * 4;
+          b = 0;
+        } else if (i2 < 192) {
+          r2 = 255;
+          g = 255;
+          b = (i2 - 128) * 4;
+        } else {
+          r2 = 255;
+          g = 255;
+          b = 255;
+        }
+        palette.push([r2, g, b]);
+      }
+      return palette;
+    }
+    _stepFire(state, width, height) {
+      const heat = state.heat;
+      for (let i2 = 0; i2 < width * height; i2++) {
+        heat[i2] = Math.max(0, heat[i2] - Math.random() * 10);
+      }
+      for (let y = 0; y < height - 1; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = y * width + x;
+          const below = (y + 1) * width + x;
+          const left = y * width + Math.max(0, x - 1);
+          const right = y * width + Math.min(width - 1, x + 1);
+          heat[idx] = (heat[below] + heat[left] + heat[right]) / 3.05;
+        }
+      }
+      for (let x = 0; x < width; x++) {
+        if (Math.random() < 0.6) {
+          heat[(height - 1) * width + x] = 180 + Math.random() * 75;
+        }
+      }
+    }
+    _renderFire(state) {
+      const { width, height } = this.renderer;
+      const heat = state.heat;
+      const palette = state.palette;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = y * width + x;
+          const h2 = Math.floor(Math.min(255, heat[idx]));
+          const [r2, g, b] = palette[h2];
+          this.renderer.setPixel(x, y, [r2, g, b]);
+        }
+      }
+    }
+    _stepWater(state, width, height) {
+      const { current, previous, damping } = state;
+      const temp = [...previous];
+      for (let i2 = 0; i2 < current.length; i2++) {
+        previous[i2] = current[i2];
+      }
+      for (let y = 1; y < height - 1; y++) {
+        for (let x = 1; x < width - 1; x++) {
+          const idx = y * width + x;
+          current[idx] = (temp[(y - 1) * width + x] + temp[(y + 1) * width + x] + temp[y * width + (x - 1)] + temp[y * width + (x + 1)]) / 2 - current[idx];
+          current[idx] *= damping;
+        }
+      }
+      if (Math.random() < 0.1) {
+        const x = Math.floor(Math.random() * (width - 2)) + 1;
+        const y = Math.floor(Math.random() * (height - 2)) + 1;
+        current[y * width + x] = 255;
+      }
+    }
+    _renderWater(state) {
+      const { width, height } = this.renderer;
+      const current = state.current;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = y * width + x;
+          const value = Math.abs(current[idx]);
+          const intensity = Math.min(255, value * 2);
+          const r2 = intensity > 200 ? intensity : 0;
+          const g = intensity > 150 ? intensity * 0.8 : intensity * 0.3;
+          const b = Math.min(255, 50 + intensity);
+          this.renderer.setPixel(x, y, [r2, g, b]);
+        }
+      }
+    }
+    _renderStars(state) {
+      const { width, height } = this.renderer;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          this.renderer.setPixel(x, y, [5, 5, 15]);
+        }
+      }
+      for (const star of state.stars) {
+        const brightness = (Math.sin(star.phase) * 0.5 + 0.5) * 255;
+        const x = Math.floor(star.x);
+        const y = Math.floor(star.y);
+        if (x >= 0 && x < width && y >= 0 && y < height) {
+          this.renderer.setPixel(x, y, [brightness, brightness, brightness * 0.9]);
+        }
+      }
+    }
+    _createConfettiParticle(width, height, randomY) {
+      const colors = [
+        [255, 0, 0],
+        // Red
+        [0, 255, 0],
+        // Green
+        [0, 0, 255],
+        // Blue
+        [255, 255, 0],
+        // Yellow
+        [255, 0, 255],
+        // Magenta
+        [0, 255, 255],
+        // Cyan
+        [255, 128, 0],
+        // Orange
+        [255, 192, 203]
+        // Pink
+      ];
+      return {
+        x: Math.random() * width,
+        y: randomY ? Math.random() * height : -2,
+        speed: 0.2 + Math.random() * 0.3,
+        drift: (Math.random() - 0.5) * 0.3,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        size: 1 + Math.random(),
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.2
+      };
+    }
+    _renderConfetti(state) {
+      const { width, height } = this.renderer;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          this.renderer.setPixel(x, y, [10, 10, 10]);
+        }
+      }
+      for (const p of state.particles) {
+        const x = Math.floor(p.x);
+        const y = Math.floor(p.y);
+        if (x >= 0 && x < width && y >= 0 && y < height) {
+          this.renderer.setPixel(x, y, p.color);
+          const shimmer = Math.abs(Math.sin(p.rotation)) * 0.5 + 0.5;
+          const [r2, g, b] = p.color;
+          this.renderer.setPixel(x, y, [r2 * shimmer, g * shimmer, b * shimmer]);
+        }
+      }
+    }
+    // === Shader-inspired effects (ported from ipixel-shader GLSL) ===
+    /**
+     * Plasma Wave - Multi-frequency sine wave pattern
+     * Based on the shader.frag example from ipixel-shader
+     */
+    _renderPlasmaWave(state) {
+      const { width, height } = this.renderer;
+      const time = state.time || 0;
+      for (let x = 0; x < width; x++) {
+        for (let y = 0; y < height; y++) {
+          const uvX = x / width;
+          const uvY = y / height;
+          const v = Math.sin(uvX * 10 + time) + Math.sin(uvY * 10 + time) + Math.sin((uvX + uvY) * 10 + time) + Math.sin(Math.sqrt((uvX - 0.5) ** 2 + (uvY - 0.5) ** 2) * 20 - time * 2);
+          const r2 = Math.sin(v * Math.PI) * 0.5 + 0.5;
+          const g = Math.sin(v * Math.PI + 2.094) * 0.5 + 0.5;
+          const b = Math.sin(v * Math.PI + 4.188) * 0.5 + 0.5;
+          this.renderer.setPixel(x, y, [r2 * 255, g * 255, b * 255]);
+        }
+      }
+    }
+    /**
+     * Radial Pulse - Concentric rings emanating from center
+     */
+    _renderRadialPulse(state) {
+      const { width, height } = this.renderer;
+      const time = state.time || 0;
+      const centerX = width / 2;
+      const centerY = height / 2;
+      for (let x = 0; x < width; x++) {
+        for (let y = 0; y < height; y++) {
+          const dx = x - centerX;
+          const dy = y - centerY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const wave = Math.sin(dist * 0.8 - time * 3) * 0.5 + 0.5;
+          const pulse = Math.sin(time * 2) * 0.3 + 0.7;
+          const hue = (dist / 20 + time * 0.5) % 1;
+          const [r2, g, b] = hsvToRgb(hue, 0.8, wave * pulse);
+          this.renderer.setPixel(x, y, [r2, g, b]);
+        }
+      }
+    }
+    /**
+     * Hypnotic - Spiral pattern
+     */
+    _renderHypnotic(state) {
+      const { width, height } = this.renderer;
+      const time = state.time || 0;
+      const centerX = width / 2;
+      const centerY = height / 2;
+      for (let x = 0; x < width; x++) {
+        for (let y = 0; y < height; y++) {
+          const dx = x - centerX;
+          const dy = y - centerY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const angle = Math.atan2(dy, dx);
+          const spiral = Math.sin(angle * 4 + dist * 0.5 - time * 2);
+          const intensity = spiral * 0.5 + 0.5;
+          const r2 = intensity * (Math.sin(time) * 0.5 + 0.5);
+          const g = intensity * (Math.sin(time + 2.094) * 0.5 + 0.5);
+          const b = intensity * (Math.sin(time + 4.188) * 0.5 + 0.5);
+          this.renderer.setPixel(x, y, [r2 * 255, g * 255, b * 255]);
+        }
+      }
+    }
+    /**
+     * Lava - Organic flowing lava/magma effect
+     */
+    _renderLava(state) {
+      const { width, height } = this.renderer;
+      const time = state.time || 0;
+      for (let x = 0; x < width; x++) {
+        for (let y = 0; y < height; y++) {
+          const uvX = x / width;
+          const uvY = y / height;
+          const n1 = Math.sin(uvX * 8 + time * 0.7) * Math.cos(uvY * 6 + time * 0.5);
+          const n2 = Math.sin(uvX * 12 - time * 0.3) * Math.sin(uvY * 10 + time * 0.8);
+          const n3 = Math.cos((uvX + uvY) * 5 + time);
+          const value = (n1 + n2 + n3 + 3) / 6;
+          let r2, g, b;
+          if (value < 0.3) {
+            r2 = value * 3 * 100;
+            g = 0;
+            b = 0;
+          } else if (value < 0.6) {
+            r2 = 100 + (value - 0.3) * 3 * 155;
+            g = (value - 0.3) * 3 * 100;
+            b = 0;
+          } else {
+            r2 = 255;
+            g = 100 + (value - 0.6) * 2.5 * 155;
+            b = (value - 0.6) * 2.5 * 100;
+          }
+          this.renderer.setPixel(x, y, [r2, g, b]);
+        }
+      }
+    }
+    /**
+     * Aurora - Northern lights effect
+     */
+    _renderAurora(state) {
+      const { width, height } = this.renderer;
+      const time = state.time || 0;
+      for (let x = 0; x < width; x++) {
+        for (let y = 0; y < height; y++) {
+          const uvX = x / width;
+          const uvY = y / height;
+          const wave1 = Math.sin(uvX * 6 + time) * 0.3;
+          const wave2 = Math.sin(uvX * 4 - time * 0.7) * 0.2;
+          const wave3 = Math.sin(uvX * 8 + time * 1.3) * 0.15;
+          const waveLine = 0.5 + wave1 + wave2 + wave3;
+          const distFromWave = Math.abs(uvY - waveLine);
+          const intensity = Math.max(0, 1 - distFromWave * 4);
+          const glow = Math.pow(intensity, 1.5);
+          const colorShift = Math.sin(uvX * 3 + time * 0.5);
+          const r2 = glow * (0.2 + colorShift * 0.3) * 255;
+          const g = glow * (0.8 + Math.sin(time + uvX) * 0.2) * 255;
+          const b = glow * (0.6 + colorShift * 0.4) * 255;
+          const starChance = Math.sin(x * 127.1 + y * 311.7) * 0.5 + 0.5;
+          const starTwinkle = Math.sin(time * 3 + x + y) * 0.5 + 0.5;
+          let finalR = r2;
+          let finalG = g;
+          let finalB = b;
+          if (starChance > 0.98 && intensity < 0.3) {
+            const starBright = starTwinkle * 180;
+            finalR = Math.max(r2, starBright);
+            finalG = Math.max(g, starBright);
+            finalB = Math.max(b, starBright * 0.9);
+          }
+          this.renderer.setPixel(x, y, [finalR, finalG, finalB]);
+        }
+      }
+    }
+  };
+
+  // src/effects/color-effects.js
+  function hsvToRgb2(h2, s2, v) {
+    let r2, g, b;
+    const i2 = Math.floor(h2 * 6);
+    const f = h2 * 6 - i2;
+    const p = v * (1 - s2);
+    const q = v * (1 - f * s2);
+    const t2 = v * (1 - (1 - f) * s2);
+    switch (i2 % 6) {
+      case 0:
+        r2 = v;
+        g = t2;
+        b = p;
+        break;
+      case 1:
+        r2 = q;
+        g = v;
+        b = p;
+        break;
+      case 2:
+        r2 = p;
+        g = v;
+        b = t2;
+        break;
+      case 3:
+        r2 = p;
+        g = q;
+        b = v;
+        break;
+      case 4:
+        r2 = t2;
+        g = p;
+        b = v;
+        break;
+      case 5:
+        r2 = v;
+        g = p;
+        b = q;
+        break;
+    }
+    return [r2 * 255, g * 255, b * 255];
+  }
+  var ColorEffects = class {
+    constructor(renderer) {
+      this.renderer = renderer;
+    }
+    /**
+     * Initialize effect state
+     */
+    init(effectName, state) {
+      switch (effectName) {
+        case "color_cycle":
+          state.hue = 0;
+          break;
+        case "rainbow_text":
+          state.offset = 0;
+          break;
+        case "neon":
+          state.glowIntensity = 0;
+          state.direction = 1;
+          state.baseColor = state.fgColor || "#ff00ff";
+          break;
+      }
+    }
+    /**
+     * Step effect forward
+     */
+    step(effectName, state) {
+      switch (effectName) {
+        case "color_cycle":
+          state.hue = (state.hue + 0.01) % 1;
+          break;
+        case "rainbow_text":
+          state.offset = (state.offset + 0.02) % 1;
+          break;
+        case "neon":
+          state.glowIntensity += state.direction * 0.05;
+          if (state.glowIntensity >= 1) {
+            state.glowIntensity = 1;
+            state.direction = -1;
+          } else if (state.glowIntensity <= 0.3) {
+            state.glowIntensity = 0.3;
+            state.direction = 1;
+          }
+          break;
+      }
+    }
+    /**
+     * Render effect to buffer
+     */
+    render(effectName, state, pixels) {
+      const { width, height } = this.renderer;
+      const displayPixels = pixels || [];
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const color = displayPixels[y * width + x] || "#111";
+          let [r2, g, b] = this._hexToRgb(color);
+          const isLit = r2 > 20 || g > 20 || b > 20;
+          if (isLit) {
+            switch (effectName) {
+              case "color_cycle": {
+                const [nr, ng, nb] = hsvToRgb2(state.hue, 1, 0.8);
+                const brightness = (r2 + g + b) / (3 * 255);
+                r2 = nr * brightness;
+                g = ng * brightness;
+                b = nb * brightness;
+                break;
+              }
+              case "rainbow_text": {
+                const hue = (state.offset + x / width) % 1;
+                const [nr, ng, nb] = hsvToRgb2(hue, 1, 0.8);
+                const brightness = (r2 + g + b) / (3 * 255);
+                r2 = nr * brightness;
+                g = ng * brightness;
+                b = nb * brightness;
+                break;
+              }
+              case "neon": {
+                const baseColor = this._hexToRgb(state.baseColor || "#ff00ff");
+                const intensity = state.glowIntensity || 0.5;
+                r2 = baseColor[0] * intensity;
+                g = baseColor[1] * intensity;
+                b = baseColor[2] * intensity;
+                if (intensity > 0.8) {
+                  const whiteMix = (intensity - 0.8) * 5;
+                  r2 = r2 + (255 - r2) * whiteMix * 0.3;
+                  g = g + (255 - g) * whiteMix * 0.3;
+                  b = b + (255 - b) * whiteMix * 0.3;
+                }
+                break;
+              }
+            }
+          }
+          this.renderer.setPixel(x, y, [r2, g, b]);
+        }
+      }
+    }
+    /**
+     * Convert hex color to RGB array
+     */
+    _hexToRgb(hex) {
+      if (!hex || hex === "#111" || hex === "#000")
+        return [17, 17, 17];
+      if (hex === "#050505")
+        return [5, 5, 5];
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)] : [17, 17, 17];
+    }
+  };
+
+  // src/effects/index.js
+  var EFFECT_CATEGORIES = {
+    TEXT: "text",
+    // Effects that modify displayed text
+    AMBIENT: "ambient",
+    // Standalone visual effects (ignore text)
+    COLOR: "color"
+    // Color modifications applied to text
+  };
+  var EFFECTS = {
+    // Text effects - modify how text is displayed
+    fixed: { category: EFFECT_CATEGORIES.TEXT, name: "Fixed", description: "Static display" },
+    scroll_ltr: { category: EFFECT_CATEGORIES.TEXT, name: "Scroll Left", description: "Text scrolls left to right" },
+    scroll_rtl: { category: EFFECT_CATEGORIES.TEXT, name: "Scroll Right", description: "Text scrolls right to left" },
+    blink: { category: EFFECT_CATEGORIES.TEXT, name: "Blink", description: "Text blinks on/off" },
+    breeze: { category: EFFECT_CATEGORIES.TEXT, name: "Breeze", description: "Gentle wave brightness" },
+    snow: { category: EFFECT_CATEGORIES.TEXT, name: "Snow", description: "Sparkle effect" },
+    laser: { category: EFFECT_CATEGORIES.TEXT, name: "Laser", description: "Scanning beam" },
+    fade: { category: EFFECT_CATEGORIES.TEXT, name: "Fade", description: "Fade in/out" },
+    typewriter: { category: EFFECT_CATEGORIES.TEXT, name: "Typewriter", description: "Characters appear one by one" },
+    bounce: { category: EFFECT_CATEGORIES.TEXT, name: "Bounce", description: "Text bounces back and forth" },
+    sparkle: { category: EFFECT_CATEGORIES.TEXT, name: "Sparkle", description: "Random sparkle overlay" },
+    // Ambient effects - standalone visual displays
+    rainbow: { category: EFFECT_CATEGORIES.AMBIENT, name: "Rainbow", description: "HSV rainbow gradient" },
+    matrix: { category: EFFECT_CATEGORIES.AMBIENT, name: "Matrix", description: "Digital rain effect" },
+    plasma: { category: EFFECT_CATEGORIES.AMBIENT, name: "Plasma", description: "Classic plasma waves" },
+    gradient: { category: EFFECT_CATEGORIES.AMBIENT, name: "Gradient", description: "Moving color gradients" },
+    fire: { category: EFFECT_CATEGORIES.AMBIENT, name: "Fire", description: "Fire/flame simulation" },
+    water: { category: EFFECT_CATEGORIES.AMBIENT, name: "Water", description: "Ripple/wave effect" },
+    stars: { category: EFFECT_CATEGORIES.AMBIENT, name: "Stars", description: "Twinkling starfield" },
+    confetti: { category: EFFECT_CATEGORIES.AMBIENT, name: "Confetti", description: "Falling colored particles" },
+    // Shader-inspired effects (ported from ipixel-shader GLSL)
+    plasma_wave: { category: EFFECT_CATEGORIES.AMBIENT, name: "Plasma Wave", description: "Multi-frequency sine waves" },
+    radial_pulse: { category: EFFECT_CATEGORIES.AMBIENT, name: "Radial Pulse", description: "Expanding ring patterns" },
+    hypnotic: { category: EFFECT_CATEGORIES.AMBIENT, name: "Hypnotic", description: "Spiral pattern" },
+    lava: { category: EFFECT_CATEGORIES.AMBIENT, name: "Lava", description: "Flowing lava/magma" },
+    aurora: { category: EFFECT_CATEGORIES.AMBIENT, name: "Aurora", description: "Northern lights" },
+    // Color effects - applied to text colors
+    color_cycle: { category: EFFECT_CATEGORIES.COLOR, name: "Color Cycle", description: "Cycle through colors" },
+    rainbow_text: { category: EFFECT_CATEGORIES.COLOR, name: "Rainbow Text", description: "Rainbow gradient on text" },
+    neon: { category: EFFECT_CATEGORIES.COLOR, name: "Neon", description: "Pulsing neon glow" }
+  };
+  var EffectManager = class {
+    constructor(renderer) {
+      this.renderer = renderer;
+      this.textEffects = new TextEffects(renderer);
+      this.ambientEffects = new AmbientEffects(renderer);
+      this.colorEffects = new ColorEffects(renderer);
+      this.currentEffect = "fixed";
+      this.effectState = {};
+    }
+    /**
+     * Get effect metadata
+     */
+    getEffectInfo(effectName) {
+      return EFFECTS[effectName] || EFFECTS.fixed;
+    }
+    /**
+     * Get all effects by category
+     */
+    getEffectsByCategory(category) {
+      return Object.entries(EFFECTS).filter(([_, info]) => info.category === category).map(([name, info]) => ({ name, ...info }));
+    }
+    /**
+     * Initialize an effect
+     */
+    initEffect(effectName, options = {}) {
+      const info = this.getEffectInfo(effectName);
+      this.currentEffect = effectName;
+      this.effectState = { tick: 0, ...options };
+      switch (info.category) {
+        case EFFECT_CATEGORIES.TEXT:
+          this.textEffects.init(effectName, this.effectState);
+          break;
+        case EFFECT_CATEGORIES.AMBIENT:
+          this.ambientEffects.init(effectName, this.effectState);
+          break;
+        case EFFECT_CATEGORIES.COLOR:
+          this.colorEffects.init(effectName, this.effectState);
+          break;
+      }
+      return this.effectState;
+    }
+    /**
+     * Step the effect forward (called on frame interval)
+     */
+    step() {
+      const info = this.getEffectInfo(this.currentEffect);
+      this.effectState.tick = (this.effectState.tick || 0) + 1;
+      switch (info.category) {
+        case EFFECT_CATEGORIES.TEXT:
+          this.textEffects.step(this.currentEffect, this.effectState);
+          break;
+        case EFFECT_CATEGORIES.AMBIENT:
+          this.ambientEffects.step(this.currentEffect, this.effectState);
+          break;
+        case EFFECT_CATEGORIES.COLOR:
+          this.colorEffects.step(this.currentEffect, this.effectState);
+          break;
+      }
+    }
+    /**
+     * Render the current frame
+     */
+    render(pixels, extendedPixels, extendedWidth) {
+      const info = this.getEffectInfo(this.currentEffect);
+      switch (info.category) {
+        case EFFECT_CATEGORIES.AMBIENT:
+          this.ambientEffects.render(this.currentEffect, this.effectState);
+          break;
+        case EFFECT_CATEGORIES.TEXT:
+          this.textEffects.render(this.currentEffect, this.effectState, pixels, extendedPixels, extendedWidth);
+          break;
+        case EFFECT_CATEGORIES.COLOR:
+          this.colorEffects.render(this.currentEffect, this.effectState, pixels);
+          break;
+      }
+    }
+    /**
+     * Check if effect is ambient (standalone, ignores text)
+     */
+    isAmbient(effectName) {
+      return this.getEffectInfo(effectName).category === EFFECT_CATEGORIES.AMBIENT;
+    }
+    /**
+     * Check if effect needs animation loop
+     */
+    needsAnimation(effectName) {
+      return effectName !== "fixed";
+    }
+  };
+  var TEXT_EFFECTS = Object.entries(EFFECTS).filter(([_, info]) => info.category === EFFECT_CATEGORIES.TEXT).map(([name]) => name);
+  var AMBIENT_EFFECTS = Object.entries(EFFECTS).filter(([_, info]) => info.category === EFFECT_CATEGORIES.AMBIENT).map(([name]) => name);
+  var COLOR_EFFECTS = Object.entries(EFFECTS).filter(([_, info]) => info.category === EFFECT_CATEGORIES.COLOR).map(([name]) => name);
+  var ALL_EFFECTS = Object.keys(EFFECTS);
+
+  // src/renderer.js
+  var LEDMatrixRenderer = class {
+    constructor(container, options = {}) {
+      this.container = container;
+      this.width = options.width || 64;
+      this.height = options.height || 16;
+      this.pixelGap = options.pixelGap || 0.1;
+      this.buffer = [];
+      this.prevBuffer = [];
+      this._initBuffer();
+      this._colorPixels = [];
+      this._extendedColorPixels = [];
+      this.extendedWidth = this.width;
+      this.effect = "fixed";
+      this.speed = 50;
+      this.animationId = null;
+      this.lastFrameTime = 0;
+      this._isRunning = false;
+      this.pixelElements = [];
+      this.svgCreated = false;
+      this._svg = null;
+      this.effectManager = new EffectManager(this);
+    }
+    _initBuffer() {
+      this.buffer = [];
+      this.prevBuffer = [];
+      for (let i2 = 0; i2 < this.width * this.height; i2++) {
+        this.buffer.push([0, 0, 0]);
+        this.prevBuffer.push([-1, -1, -1]);
+      }
+    }
+    /**
+     * Create the SVG with all pixel rect elements
+     */
+    _createSvg() {
+      const svgWidth = 100;
+      const pxWidth = svgWidth / this.width;
+      const pxHeight = pxWidth;
+      const svgHeight = this.height * pxHeight;
+      const gap = this.pixelGap;
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("viewBox", `0 0 ${svgWidth} ${svgHeight}`);
+      svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+      svg.style.width = "100%";
+      svg.style.height = "100%";
+      svg.style.display = "block";
+      this.pixelElements = [];
+      for (let y = 0; y < this.height; y++) {
+        for (let x = 0; x < this.width; x++) {
+          const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+          rect.setAttribute("x", x * pxWidth);
+          rect.setAttribute("y", y * pxHeight);
+          rect.setAttribute("width", pxWidth - gap);
+          rect.setAttribute("height", pxHeight - gap);
+          rect.setAttribute("rx", "0.3");
+          rect.setAttribute("fill", "rgb(17, 17, 17)");
+          svg.appendChild(rect);
+          this.pixelElements.push(rect);
+        }
+      }
+      if (this.container && this.container.isConnected !== false) {
+        this.container.innerHTML = "";
+        this.container.appendChild(svg);
+      }
+      this._svg = svg;
+      this.svgCreated = true;
+    }
+    /**
+     * Ensure SVG is in the container (handles re-renders)
+     */
+    _ensureSvgInContainer() {
+      if (!this.container)
+        return false;
+      if (this._svg && this._svg.parentNode === this.container) {
+        return true;
+      }
+      if (this._svg && this.container.isConnected !== false) {
+        this.container.innerHTML = "";
+        this.container.appendChild(this._svg);
+        return true;
+      }
+      return false;
+    }
+    /**
+     * Set pixel in buffer (call flush() to update display)
+     */
+    setPixel(x, y, color) {
+      if (x >= 0 && x < this.width && y >= 0 && y < this.height) {
+        const idx = y * this.width + x;
+        if (idx < this.buffer.length) {
+          this.buffer[idx] = color;
+        }
+      }
+    }
+    /**
+     * Clear buffer to black
+     */
+    clear() {
+      for (let i2 = 0; i2 < this.buffer.length; i2++) {
+        this.buffer[i2] = [0, 0, 0];
+      }
+    }
+    /**
+     * Flush buffer to display (only updates changed pixels)
+     */
+    flush() {
+      if (!this.svgCreated) {
+        this._createSvg();
+      } else if (!this._ensureSvgInContainer()) {
+        this._createSvg();
+      }
+      for (let i2 = 0; i2 < this.buffer.length; i2++) {
+        const bufferItem = this.buffer[i2];
+        const prevItem = this.prevBuffer[i2];
+        if (!bufferItem || !Array.isArray(bufferItem))
+          continue;
+        if (!prevItem || !Array.isArray(prevItem)) {
+          this.prevBuffer[i2] = [-1, -1, -1];
+          continue;
+        }
+        const [r2, g, b] = bufferItem;
+        const [pr, pg, pb] = prevItem;
+        if (r2 !== pr || g !== pg || b !== pb) {
+          const rect = this.pixelElements[i2];
+          if (rect) {
+            const isLit = r2 > 20 || g > 20 || b > 20;
+            rect.setAttribute("fill", `rgb(${Math.round(r2)}, ${Math.round(g)}, ${Math.round(b)})`);
+            if (isLit) {
+              rect.style.filter = `drop-shadow(0 0 2px rgb(${Math.round(r2)}, ${Math.round(g)}, ${Math.round(b)}))`;
+            } else {
+              rect.style.filter = "";
+            }
+          }
+          this.prevBuffer[i2] = [r2, g, b];
+        }
+      }
+    }
+    /**
+     * Set pixel data from color string array
+     */
+    setData(pixels, extendedPixels = null, extendedWidth = null) {
+      this._colorPixels = pixels || [];
+      if (extendedPixels) {
+        this._extendedColorPixels = extendedPixels;
+        this.extendedWidth = extendedWidth || this.width;
+      } else {
+        this._extendedColorPixels = pixels || [];
+        this.extendedWidth = this.width;
+      }
+    }
+    /**
+     * Set animation effect and speed
+     */
+    setEffect(effect, speed = 50) {
+      const wasRunning = this._isRunning;
+      if (this.effect !== effect) {
+        this.effect = effect;
+        this.effectManager.initEffect(effect, { speed });
+      }
+      this.speed = speed;
+      if (wasRunning && effect !== "fixed") {
+        this.start();
+      }
+    }
+    /**
+     * Start the animation loop
+     */
+    start() {
+      if (this._isRunning)
+        return;
+      this._isRunning = true;
+      this.lastFrameTime = performance.now();
+      this._animate();
+    }
+    /**
+     * Stop the animation loop
+     */
+    stop() {
+      this._isRunning = false;
+      if (this.animationId) {
+        cancelAnimationFrame(this.animationId);
+        this.animationId = null;
+      }
+    }
+    /**
+     * Check if animation is running
+     */
+    get isRunning() {
+      return this._isRunning;
+    }
+    /**
+     * Animation loop
+     */
+    _animate() {
+      if (!this._isRunning)
+        return;
+      const now = performance.now();
+      const frameInterval = 500 - (this.speed - 1) * 4.7;
+      if (now - this.lastFrameTime >= frameInterval) {
+        this.lastFrameTime = now;
+        this.effectManager.step();
+      }
+      this._renderFrame();
+      this.animationId = requestAnimationFrame(() => this._animate());
+    }
+    /**
+     * Render current frame to buffer and flush
+     */
+    _renderFrame() {
+      this.effectManager.render(
+        this._colorPixels,
+        this._extendedColorPixels,
+        this.extendedWidth
+      );
+      this.flush();
+    }
+    /**
+     * Render a single static frame
+     */
+    renderStatic() {
+      if (!this.svgCreated) {
+        this._createSvg();
+      }
+      this._renderFrame();
+    }
+    /**
+     * Update dimensions (recreates buffers if needed)
+     */
+    setDimensions(width, height) {
+      if (width !== this.width || height !== this.height) {
+        this.width = width;
+        this.height = height;
+        this.extendedWidth = width;
+        this._initBuffer();
+        this.svgCreated = false;
+        this.effectManager = new EffectManager(this);
+        if (this.effect !== "fixed") {
+          this.effectManager.initEffect(this.effect, { speed: this.speed });
+        }
+      }
+    }
+    /**
+     * Update container reference (for re-renders)
+     */
+    setContainer(container) {
+      if (container !== this.container) {
+        this.container = container;
+        if (this._svg && container) {
+          container.innerHTML = "";
+          container.appendChild(this._svg);
+        }
+      }
+    }
+    /**
+     * Destroy renderer and clean up
+     */
+    destroy() {
+      this.stop();
+      this.pixelElements = [];
+      this._svg = null;
+      this.svgCreated = false;
+    }
+  };
+  function createPixelSvg(width, height, pixels, pixelGap = 1) {
+    const svgWidth = 100;
+    const pxWidth = svgWidth / width;
+    const pxHeight = pxWidth;
+    const svgHeight = height * pxHeight;
+    const gap = pixelGap * 0.1;
+    let rects = "";
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const color = pixels[y * width + x] || "#111";
+        const isLit = color !== "#111" && color !== "#000" && color !== "#1a1a1a" && color !== "#050505";
+        const style = isLit ? `filter:drop-shadow(0 0 2px ${color});` : "";
+        rects += `<rect x="${x * pxWidth}" y="${y * pxHeight}" width="${pxWidth - gap}" height="${pxHeight - gap}" fill="${color}" rx="0.3" style="${style}"/>`;
+      }
+    }
+    return `
+    <svg viewBox="0 0 ${svgWidth} ${svgHeight}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block;">
+      ${rects}
+    </svg>`;
+  }
+
+  // src/state.js
+  var IPIXEL_STORAGE_KEY = "iPIXEL_DisplayState";
+  var DEFAULT_STATE = {
+    text: "",
+    mode: "text",
+    effect: "fixed",
+    speed: 50,
+    fgColor: "#ff6600",
+    bgColor: "#000000",
+    font: "VCR_OSD_MONO",
+    lastUpdate: 0
+  };
+  function loadDisplayState() {
+    try {
+      const saved = localStorage.getItem(IPIXEL_STORAGE_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e2) {
+      console.warn("iPIXEL: Could not load saved state", e2);
+    }
+    return { ...DEFAULT_STATE };
+  }
+  function saveDisplayState(state) {
+    try {
+      localStorage.setItem(IPIXEL_STORAGE_KEY, JSON.stringify(state));
+    } catch (e2) {
+      console.warn("iPIXEL: Could not save state", e2);
+    }
+  }
+  if (!window.iPIXELDisplayState) {
+    window.iPIXELDisplayState = loadDisplayState();
+  }
+  function getDisplayState() {
+    return window.iPIXELDisplayState;
+  }
+  function updateDisplayState(updates) {
+    window.iPIXELDisplayState = {
+      ...window.iPIXELDisplayState,
+      ...updates,
+      lastUpdate: Date.now()
+    };
+    saveDisplayState(window.iPIXELDisplayState);
+    window.dispatchEvent(new CustomEvent("ipixel-display-update", {
+      detail: window.iPIXELDisplayState
+    }));
+    return window.iPIXELDisplayState;
+  }
+
+  // src/cards/display-card.js
+  var rendererCache = /* @__PURE__ */ new Map();
+  var iPIXELDisplayCard = class extends iPIXELCardBase {
+    constructor() {
+      super();
+      this._renderer = null;
+      this._displayContainer = null;
+      this._lastState = null;
+      this._cachedResolution = null;
+      this._rendererId = null;
+      this._handleDisplayUpdate = (e2) => {
+        this._updateDisplay(e2.detail);
+      };
+      window.addEventListener("ipixel-display-update", this._handleDisplayUpdate);
+    }
+    connectedCallback() {
+      if (!this._rendererId) {
+        this._rendererId = `renderer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      }
+      if (rendererCache.has(this._rendererId)) {
+        this._renderer = rendererCache.get(this._rendererId);
+      }
+      loadBdfFont("VCR_OSD_MONO", 16).then(() => {
+        if (this._lastState)
+          this._updateDisplay(this._lastState);
+      });
+      loadBdfFont("VCR_OSD_MONO", 24);
+      loadBdfFont("VCR_OSD_MONO", 32);
+      loadBdfFont("CUSONG", 16);
+      loadBdfFont("CUSONG", 24);
+      loadBdfFont("CUSONG", 32);
+      loadFont("VCR_OSD_MONO");
+      loadFont("CUSONG");
+    }
+    disconnectedCallback() {
+      window.removeEventListener("ipixel-display-update", this._handleDisplayUpdate);
+      if (this._renderer && this._rendererId) {
+        this._renderer.stop();
+        rendererCache.set(this._rendererId, this._renderer);
+      }
+    }
+    /**
+     * Get resolution with caching and fallback
+     */
+    _getResolutionCached() {
+      const [sensorWidth, sensorHeight] = this.getResolution();
+      if (sensorWidth > 0 && sensorHeight > 0 && sensorWidth !== 64) {
+        this._cachedResolution = [sensorWidth, sensorHeight];
+        try {
+          localStorage.setItem("iPIXEL_Resolution", JSON.stringify([sensorWidth, sensorHeight]));
+        } catch (e2) {
+        }
+      }
+      if (this._cachedResolution) {
+        return this._cachedResolution;
+      }
+      try {
+        const saved = localStorage.getItem("iPIXEL_Resolution");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length === 2) {
+            this._cachedResolution = parsed;
+            return parsed;
+          }
+        }
+      } catch (e2) {
+      }
+      if (this._config?.width && this._config?.height) {
+        return [this._config.width, this._config.height];
+      }
+      return [sensorWidth || 64, sensorHeight || 16];
+    }
+    /**
+     * Update the display with new state
+     */
+    _updateDisplay(state) {
+      if (!this._displayContainer)
+        return;
+      const [width, height] = this._getResolutionCached();
+      const isOn = this.isOn();
+      if (!this._renderer) {
+        this._renderer = new LEDMatrixRenderer(this._displayContainer, { width, height });
+        if (this._rendererId) {
+          rendererCache.set(this._rendererId, this._renderer);
+        }
+      } else {
+        this._renderer.setContainer(this._displayContainer);
+        if (this._renderer.width !== width || this._renderer.height !== height) {
+          this._renderer.setDimensions(width, height);
+        }
+      }
+      if (!isOn) {
+        this._renderer.stop();
+        const pixels = textToPixels("", width, height, "#111", "#050505");
+        this._displayContainer.innerHTML = createPixelSvg(width, height, pixels);
+        return;
+      }
+      const text = state?.text || "";
+      const effect = state?.effect || "fixed";
+      const speed = state?.speed || 50;
+      const fgColor = state?.fgColor || "#ff6600";
+      const bgColor = state?.bgColor || "#111";
+      const mode = state?.mode || "text";
+      const font = state?.font || "VCR_OSD_MONO";
+      this._lastState = state;
+      let displayText = text;
+      let displayFg = fgColor;
+      if (mode === "clock") {
+        const now = /* @__PURE__ */ new Date();
+        displayText = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+        displayFg = "#00ff88";
+      } else if (mode === "gif") {
+        displayText = "GIF";
+        displayFg = "#ff44ff";
+      } else if (mode === "rhythm") {
+        displayText = "***";
+        displayFg = "#44aaff";
+      }
+      const effectInfo = EFFECTS[effect];
+      const isAmbient = effectInfo?.category === "ambient";
+      if (isAmbient) {
+        this._renderer.setData([], [], width);
+      } else {
+        const heightKey = getHeightKey2(height);
+        const useBdfFont = font !== "LEGACY" && isBdfFontLoaded(font, heightKey);
+        const useCanvasFont = font !== "LEGACY" && isFontLoaded(font);
+        const getPixels = (text2, w, h2, fg, bg) => {
+          if (useBdfFont) {
+            const bdfPixels = textToPixelsBdf(text2, w, h2, fg, bg, font);
+            if (bdfPixels)
+              return bdfPixels;
+          }
+          if (useCanvasFont) {
+            const canvasPixels = textToPixelsCanvas(text2, w, h2, fg, bg, font);
+            if (canvasPixels)
+              return canvasPixels;
+          }
+          return textToPixels(text2, w, h2, fg, bg);
+        };
+        const getScrollPixels = (text2, displayW, h2, fg, bg) => {
+          if (useBdfFont) {
+            const bdfResult = textToScrollPixelsBdf(text2, displayW, h2, fg, bg, font);
+            if (bdfResult)
+              return bdfResult;
+          }
+          if (useCanvasFont) {
+            const canvasResult = textToScrollPixelsCanvas(text2, displayW, h2, fg, bg, font);
+            if (canvasResult)
+              return canvasResult;
+          }
+          return textToScrollPixels(text2, displayW, h2, fg, bg);
+        };
+        const textPixelWidth = useCanvasFont ? displayText.length * 10 : displayText.length * 6;
+        const needsScroll = (effect === "scroll_ltr" || effect === "scroll_rtl" || effect === "bounce") && textPixelWidth > width;
+        if (needsScroll) {
+          const scrollResult = getScrollPixels(displayText, width, height, displayFg, bgColor);
+          const displayPixels = getPixels(displayText, width, height, displayFg, bgColor);
+          this._renderer.setData(displayPixels, scrollResult.pixels, scrollResult.width);
+        } else {
+          const pixels = getPixels(displayText, width, height, displayFg, bgColor);
+          this._renderer.setData(pixels);
+        }
+      }
+      this._renderer.setEffect(effect, speed);
+      if (effect === "fixed") {
+        this._renderer.stop();
+        this._renderer.renderStatic();
+      } else {
+        this._renderer.start();
+      }
+    }
+    render() {
+      if (!this._hass)
+        return;
+      const [width, height] = this._getResolutionCached();
+      const isOn = this.isOn();
+      const name = this._config.name || this.getEntity()?.attributes?.friendly_name || "iPIXEL Display";
+      const sharedState = getDisplayState();
+      const textEntity = this.getEntity();
+      const entityText = textEntity?.state || "";
+      const modeEntity = this.getRelatedEntity("select", "_mode");
+      const currentMode = modeEntity?.state || sharedState.mode || "text";
+      const currentText = sharedState.text || entityText;
+      const currentEffect = sharedState.effect || "fixed";
+      const currentSpeed = sharedState.speed || 50;
+      const fgColor = sharedState.fgColor || "#ff6600";
+      const bgColor = sharedState.bgColor || "#111";
+      const currentFont = sharedState.font || "VCR_OSD_MONO";
+      const effectInfo = EFFECTS[currentEffect];
+      const isAmbient = effectInfo?.category === "ambient";
+      const textEffects = Object.entries(EFFECTS).filter(([_, info]) => info.category === "text").map(([name2, info]) => `<option value="${name2}">${info.name}</option>`).join("");
+      const ambientEffects = Object.entries(EFFECTS).filter(([_, info]) => info.category === "ambient").map(([name2, info]) => `<option value="${name2}">${info.name}</option>`).join("");
+      const colorEffects = Object.entries(EFFECTS).filter(([_, info]) => info.category === "color").map(([name2, info]) => `<option value="${name2}">${info.name}</option>`).join("");
+      this.shadowRoot.innerHTML = `
+      <style>${iPIXELCardStyles}
         .display-container { background: #000; border-radius: 8px; padding: 8px; border: 2px solid #222; }
         .display-screen {
           background: #000;
@@ -221,32 +3093,200 @@
         <div class="card-content">
           <div class="card-header">
             <div class="card-title">
-              <span class="status-dot ${i?"":"off"}"></span>
-              ${s}
+              <span class="status-dot ${isOn ? "" : "off"}"></span>
+              ${name}
             </div>
-            <button class="icon-btn ${i?"active":""}" id="power-btn">
+            <button class="icon-btn ${isOn ? "active" : ""}" id="power-btn">
               <svg viewBox="0 0 24 24"><path d="M13,3H11V13H13V3M17.83,5.17L16.41,6.59C18.05,7.91 19,9.9 19,12A7,7 0 0,1 12,19A7,7 0 0,1 5,12C5,9.9 5.95,7.91 7.59,6.59L6.17,5.17C4.23,6.82 3,9.26 3,12A9,9 0 0,0 12,21A9,9 0 0,0 21,12C21,9.26 19.77,6.82 17.83,5.17Z"/></svg>
             </button>
           </div>
           <div class="display-container">
             <div class="display-screen" id="display-screen"></div>
             <div class="display-footer">
-              <span>${e} x ${t}</span>
+              <span>${width} x ${height}</span>
               <span>
-                <span class="mode-badge">${i?l:"Off"}</span>
-                ${i&&d!=="fixed"?`<span class="effect-badge">${k[d]?.name||d}</span>`:""}
+                <span class="mode-badge">${isOn ? currentMode : "Off"}</span>
+                ${isOn && currentEffect !== "fixed" ? `<span class="effect-badge">${EFFECTS[currentEffect]?.name || currentEffect}</span>` : ""}
               </span>
             </div>
           </div>
         </div>
-      </ha-card>`,this._displayContainer=this.shadowRoot.getElementById("display-screen"),this._updateDisplay({text:c,effect:d,speed:h,fgColor:f,bgColor:x,mode:l,font:u}),this._attachPowerButton()}_attachPowerButton(){this.shadowRoot.getElementById("power-btn")?.addEventListener("click",()=>{let e=this._switchEntityId;if(!e){let t=this.getRelatedEntity("switch");t&&(this._switchEntityId=t.entity_id,e=t.entity_id)}if(e&&this._hass.states[e])this._hass.callService("switch","toggle",{entity_id:e});else{let t=Object.keys(this._hass.states).filter(n=>n.startsWith("switch.")),i=this._config.entity?.replace(/^[^.]+\./,"").replace(/_?(text|display|gif_url)$/i,"")||"",s=t.find(n=>n.includes(i.substring(0,10)));s?(this._switchEntityId=s,this._hass.callService("switch","toggle",{entity_id:s})):console.warn("iPIXEL: No switch found. Entity:",this._config.entity,"Available:",t)}})}static getConfigElement(){return document.createElement("ipixel-simple-editor")}static getStubConfig(){return{entity:""}}};var at=class extends L{render(){if(!this._hass)return;let e=this.isOn();this.shadowRoot.innerHTML=`
-      <style>${$}</style>
+      </ha-card>`;
+      this._displayContainer = this.shadowRoot.getElementById("display-screen");
+      this._updateDisplay({
+        text: currentText,
+        effect: currentEffect,
+        speed: currentSpeed,
+        fgColor,
+        bgColor,
+        mode: currentMode,
+        font: currentFont
+      });
+      this._attachPowerButton();
+    }
+    _attachPowerButton() {
+      this.shadowRoot.getElementById("power-btn")?.addEventListener("click", () => {
+        let switchId = this._switchEntityId;
+        if (!switchId) {
+          const sw = this.getRelatedEntity("switch");
+          if (sw) {
+            this._switchEntityId = sw.entity_id;
+            switchId = sw.entity_id;
+          }
+        }
+        if (switchId && this._hass.states[switchId]) {
+          this._hass.callService("switch", "toggle", { entity_id: switchId });
+        } else {
+          const allSwitches = Object.keys(this._hass.states).filter((e2) => e2.startsWith("switch."));
+          const baseName = this._config.entity?.replace(/^[^.]+\./, "").replace(/_?(text|display|gif_url)$/i, "") || "";
+          const match = allSwitches.find((s2) => s2.includes(baseName.substring(0, 10)));
+          if (match) {
+            this._switchEntityId = match;
+            this._hass.callService("switch", "toggle", { entity_id: match });
+          } else {
+            console.warn("iPIXEL: No switch found. Entity:", this._config.entity, "Available:", allSwitches);
+          }
+        }
+      });
+    }
+    static getConfigElement() {
+      return document.createElement("ipixel-simple-editor");
+    }
+    static getStubConfig() {
+      return { entity: "" };
+    }
+  };
+
+  // src/cards/controls-card.js
+  var CLOCK_STYLES = [
+    { value: 1, name: "Style 1 (Digital)" },
+    { value: 2, name: "Style 2 (Minimal)" },
+    { value: 3, name: "Style 3 (Bold)" },
+    { value: 4, name: "Style 4 (Retro)" },
+    { value: 5, name: "Style 5 (Neon)" },
+    { value: 6, name: "Style 6 (Matrix)" },
+    { value: 7, name: "Style 7 (Classic)" },
+    { value: 8, name: "Style 8 (Modern)" }
+  ];
+  var ANIMATION_MODES = [
+    { value: 0, name: "Static" },
+    { value: 1, name: "Scroll Left" },
+    { value: 2, name: "Scroll Right" },
+    { value: 3, name: "Scroll Up" },
+    { value: 4, name: "Scroll Down" },
+    { value: 5, name: "Flash" },
+    { value: 6, name: "Fade In/Out" },
+    { value: 7, name: "Bounce" }
+  ];
+  var iPIXELControlsCard = class extends iPIXELCardBase {
+    constructor() {
+      super();
+      this._clockStyle = 1;
+      this._is24Hour = true;
+      this._showDate = false;
+      this._upsideDown = false;
+      this._animationMode = 0;
+    }
+    render() {
+      if (!this._hass)
+        return;
+      const isOn = this.isOn();
+      const upsideDownEntity = this.getRelatedEntity("switch", "_upside_down");
+      if (upsideDownEntity) {
+        this._upsideDown = upsideDownEntity.state === "on";
+      }
+      this.shadowRoot.innerHTML = `
+      <style>${iPIXELCardStyles}
+        .toggle-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 8px 0;
+        }
+        .toggle-label {
+          font-size: 0.85em;
+          color: var(--primary-text-color, #fff);
+        }
+        .toggle-switch {
+          position: relative;
+          width: 44px;
+          height: 24px;
+          background: rgba(255,255,255,0.1);
+          border-radius: 12px;
+          cursor: pointer;
+          transition: background 0.2s;
+        }
+        .toggle-switch.active {
+          background: var(--primary-color, #03a9f4);
+        }
+        .toggle-switch::after {
+          content: '';
+          position: absolute;
+          top: 2px;
+          left: 2px;
+          width: 20px;
+          height: 20px;
+          background: #fff;
+          border-radius: 50%;
+          transition: transform 0.2s;
+        }
+        .toggle-switch.active::after {
+          transform: translateX(20px);
+        }
+        .subsection {
+          background: rgba(255,255,255,0.03);
+          border-radius: 8px;
+          padding: 12px;
+          margin-bottom: 12px;
+        }
+        .subsection-title {
+          font-size: 0.75em;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          opacity: 0.6;
+          margin-bottom: 8px;
+        }
+        .screen-grid {
+          display: grid;
+          grid-template-columns: repeat(5, 1fr);
+          gap: 6px;
+        }
+        .screen-btn {
+          padding: 8px 4px;
+          border: 1px solid rgba(255,255,255,0.1);
+          background: rgba(255,255,255,0.05);
+          color: var(--primary-text-color, #fff);
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 0.8em;
+          text-align: center;
+          transition: all 0.2s;
+        }
+        .screen-btn:hover {
+          background: rgba(255,255,255,0.1);
+        }
+        .screen-btn.active {
+          background: var(--primary-color, #03a9f4);
+          border-color: var(--primary-color, #03a9f4);
+        }
+        .screen-btn.delete {
+          background: rgba(244,67,54,0.2);
+          border-color: rgba(244,67,54,0.3);
+          color: #f44336;
+        }
+        .screen-btn.delete:hover {
+          background: rgba(244,67,54,0.4);
+        }
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .compact-row { display: flex; gap: 8px; align-items: center; }
+        .compact-row select { flex: 1; }
+      </style>
       <ha-card>
         <div class="card-content">
           <div class="section-title">Quick Actions</div>
           <div class="control-row">
             <div class="button-grid button-grid-4">
-              <button class="icon-btn ${e?"active":""}" data-action="power" title="Power">
+              <button class="icon-btn ${isOn ? "active" : ""}" data-action="power" title="Power">
                 <svg viewBox="0 0 24 24"><path d="M13,3H11V13H13V3M17.83,5.17L16.41,6.59C18.05,7.91 19,9.9 19,12A7,7 0 0,1 12,19A7,7 0 0,1 5,12C5,9.9 5.95,7.91 7.59,6.59L6.17,5.17C4.23,6.82 3,9.26 3,12A9,9 0 0,0 12,21A9,9 0 0,0 21,12C21,9.26 19.77,6.82 17.83,5.17Z"/></svg>
               </button>
               <button class="icon-btn" data-action="clear" title="Clear">
@@ -260,6 +3300,7 @@
               </button>
             </div>
           </div>
+
           <div class="section-title">Brightness</div>
           <div class="control-row">
             <div class="slider-row">
@@ -267,6 +3308,7 @@
               <span class="slider-value" id="brightness-val">50%</span>
             </div>
           </div>
+
           <div class="section-title">Display Mode</div>
           <div class="control-row">
             <div class="button-grid button-grid-3">
@@ -277,21 +3319,79 @@
               <button class="mode-btn" data-mode="rhythm">Rhythm</button>
             </div>
           </div>
-          <div class="section-title">Orientation</div>
-          <div class="control-row">
-            <select class="dropdown" id="orientation">
-              <option value="0">0\xB0 (Normal)</option>
-              <option value="90">90\xB0</option>
-              <option value="180">180\xB0</option>
-              <option value="270">270\xB0</option>
-            </select>
-          </div>
-          <div class="section-title">Screen Buffer</div>
-          <div class="control-row">
-            <div class="button-grid button-grid-3">
-              ${[1,2,3,4,5,6,7,8,9].map(t=>`<button class="mode-btn" data-screen="${t}">${t}</button>`).join("")}
+
+          <div class="section-title">Clock Settings</div>
+          <div class="subsection">
+            <div class="compact-row" style="margin-bottom: 12px;">
+              <select class="dropdown" id="clock-style">
+                ${CLOCK_STYLES.map((s2) => `<option value="${s2.value}"${s2.value === this._clockStyle ? " selected" : ""}>${s2.name}</option>`).join("")}
+              </select>
+              <button class="btn btn-primary" id="apply-clock-btn">Apply</button>
+            </div>
+            <div class="toggle-row">
+              <span class="toggle-label">24-Hour Format</span>
+              <div class="toggle-switch ${this._is24Hour ? "active" : ""}" id="toggle-24h"></div>
+            </div>
+            <div class="toggle-row">
+              <span class="toggle-label">Show Date</span>
+              <div class="toggle-switch ${this._showDate ? "active" : ""}" id="toggle-date"></div>
             </div>
           </div>
+
+          <div class="section-title">Text Animation</div>
+          <div class="control-row">
+            <select class="dropdown" id="animation-mode">
+              ${ANIMATION_MODES.map((m) => `<option value="${m.value}"${m.value === this._animationMode ? " selected" : ""}>${m.name}</option>`).join("")}
+            </select>
+          </div>
+
+          <div class="section-title">Orientation & Display</div>
+          <div class="two-col">
+            <div>
+              <div class="subsection-title">Rotation</div>
+              <select class="dropdown" id="orientation">
+                <option value="0">0\xB0 (Normal)</option>
+                <option value="1">180\xB0</option>
+              </select>
+            </div>
+            <div>
+              <div class="subsection-title">Flip</div>
+              <div class="toggle-row" style="padding: 4px 0;">
+                <span class="toggle-label">Upside Down</span>
+                <div class="toggle-switch ${this._upsideDown ? "active" : ""}" id="toggle-upside-down"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-title">Screen Slots</div>
+          <div class="subsection">
+            <div class="subsection-title">Select Screen (1-9)</div>
+            <div class="screen-grid" style="margin-bottom: 12px;">
+              ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n2) => `<button class="screen-btn" data-screen="${n2}">${n2}</button>`).join("")}
+            </div>
+            <div class="subsection-title">Delete Screen</div>
+            <div class="screen-grid">
+              ${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n2) => `<button class="screen-btn delete" data-delete="${n2}">\xD7${n2}</button>`).join("")}
+            </div>
+          </div>
+
+          <div class="section-title">Font Settings</div>
+          <div class="subsection">
+            <div class="two-col" style="margin-bottom: 12px;">
+              <div>
+                <div class="subsection-title">Size (1-128)</div>
+                <input type="number" class="text-input" id="font-size" value="16" min="1" max="128" style="width: 100%;">
+              </div>
+              <div>
+                <div class="subsection-title">Offset X, Y</div>
+                <div style="display: flex; gap: 4px;">
+                  <input type="number" class="text-input" id="font-offset-x" value="0" min="-64" max="64" style="width: 50%;">
+                  <input type="number" class="text-input" id="font-offset-y" value="0" min="-32" max="32" style="width: 50%;">
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="section-title">DIY Mode</div>
           <div class="control-row">
             <select class="dropdown" id="diy-mode">
@@ -302,6 +3402,7 @@
               <option value="2">Exit (Keep Current)</option>
             </select>
           </div>
+
           <div class="section-title">Raw Command</div>
           <div class="control-row" style="margin-top: 8px;">
             <div style="display: flex; gap: 8px;">
@@ -310,29 +3411,281 @@
             </div>
           </div>
         </div>
-      </ha-card>`,this._attachControlListeners()}_attachControlListeners(){this.shadowRoot.querySelectorAll("[data-action]").forEach(t=>{t.addEventListener("click",i=>{let s=i.currentTarget.dataset.action;if(s==="power"){let n=this.getRelatedEntity("switch");n&&this._hass.callService("switch","toggle",{entity_id:n.entity_id})}else s==="clear"?(P({text:"",mode:"text",effect:"fixed",speed:50,fgColor:"#ff6600",bgColor:"#000000"}),this.callService("ipixel_color","clear_pixels")):s==="clock"?(P({text:"",mode:"clock",effect:"fixed",speed:50,fgColor:"#00ff88",bgColor:"#000000"}),this.callService("ipixel_color","set_clock_mode",{style:1})):s==="sync"&&this.callService("ipixel_color","sync_time")})});let e=this.shadowRoot.getElementById("brightness");e&&(e.style.setProperty("--value",`${e.value}%`),e.addEventListener("input",t=>{t.target.style.setProperty("--value",`${t.target.value}%`),this.shadowRoot.getElementById("brightness-val").textContent=`${t.target.value}%`}),e.addEventListener("change",t=>{this.callService("ipixel_color","set_brightness",{level:parseInt(t.target.value)})})),this.shadowRoot.querySelectorAll("[data-mode]").forEach(t=>{t.addEventListener("click",i=>{let s=i.currentTarget.dataset.mode,n=this.getRelatedEntity("select","_mode");n&&this._hass.callService("select","select_option",{entity_id:n.entity_id,option:s}),P({mode:s,fgColor:{text:"#ff6600",textimage:"#ff6600",clock:"#00ff88",gif:"#ff44ff",rhythm:"#44aaff"}[s]||"#ff6600",text:s==="clock"?"":window.iPIXELDisplayState?.text||""}),this.shadowRoot.querySelectorAll("[data-mode]").forEach(a=>a.classList.remove("active")),i.currentTarget.classList.add("active")})}),this.shadowRoot.getElementById("orientation")?.addEventListener("change",t=>{let i=this.getRelatedEntity("select","_orientation");i&&this._hass.callService("select","select_option",{entity_id:i.entity_id,option:t.target.value})}),this.shadowRoot.querySelectorAll("[data-screen]").forEach(t=>{t.addEventListener("click",i=>{let s=parseInt(i.currentTarget.dataset.screen);this.callService("ipixel_color","set_screen",{screen:s}),this.shadowRoot.querySelectorAll("[data-screen]").forEach(n=>n.classList.remove("active")),i.currentTarget.classList.add("active")})}),this.shadowRoot.getElementById("diy-mode")?.addEventListener("change",t=>{let i=t.target.value;i!==""&&(this.callService("ipixel_color","set_diy_mode",{mode:i}),setTimeout(()=>{t.target.value=""},500))}),this.shadowRoot.getElementById("send-raw-btn")?.addEventListener("click",()=>{let t=this.shadowRoot.getElementById("raw-command")?.value;t&&t.trim()&&this.callService("ipixel_color","send_raw_command",{hex_data:t.trim()})}),this.shadowRoot.getElementById("raw-command")?.addEventListener("keypress",t=>{if(t.key==="Enter"){let i=t.target.value;i&&i.trim()&&this.callService("ipixel_color","send_raw_command",{hex_data:i.trim()})}})}static getConfigElement(){return document.createElement("ipixel-simple-editor")}static getStubConfig(){return{entity:""}}};var te=[{value:0,name:"None"},{value:1,name:"Rainbow Wave"},{value:2,name:"Rainbow Cycle"},{value:3,name:"Rainbow Pulse"},{value:4,name:"Rainbow Fade"},{value:5,name:"Rainbow Chase"},{value:6,name:"Rainbow Sparkle"},{value:7,name:"Rainbow Gradient"},{value:8,name:"Rainbow Theater"},{value:9,name:"Rainbow Fire"}],ee=[{value:0,name:"Classic Bars"},{value:1,name:"Mirrored Bars"},{value:2,name:"Center Out"},{value:3,name:"Wave Style"},{value:4,name:"Particle Style"}],lt=class extends L{constructor(){super(),this._activeTab="text",this._rhythmLevels=[0,0,0,0,0,0,0,0,0,0,0],this._selectedRhythmStyle=0,this._selectedAmbient="rainbow"}_buildTextEffectOptions(){let e=Object.entries(k).filter(([i,s])=>s.category===w.TEXT).map(([i,s])=>`<option value="${i}">${s.name}</option>`).join(""),t=Object.entries(k).filter(([i,s])=>s.category===w.COLOR).map(([i,s])=>`<option value="${i}">${s.name}</option>`).join("");return`
+      </ha-card>`;
+      this._attachControlListeners();
+    }
+    _attachControlListeners() {
+      this.shadowRoot.querySelectorAll("[data-action]").forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          const action = e2.currentTarget.dataset.action;
+          if (action === "power") {
+            const sw = this.getRelatedEntity("switch");
+            if (sw) {
+              this._hass.callService("switch", "toggle", { entity_id: sw.entity_id });
+            }
+          } else if (action === "clear") {
+            updateDisplayState({ text: "", mode: "text", effect: "fixed", speed: 50, fgColor: "#ff6600", bgColor: "#000000" });
+            this.callService("ipixel_color", "clear_pixels");
+          } else if (action === "clock") {
+            this._applyClockSettings();
+          } else if (action === "sync") {
+            this.callService("ipixel_color", "sync_time");
+          }
+        });
+      });
+      const slider = this.shadowRoot.getElementById("brightness");
+      if (slider) {
+        slider.style.setProperty("--value", `${slider.value}%`);
+        slider.addEventListener("input", (e2) => {
+          e2.target.style.setProperty("--value", `${e2.target.value}%`);
+          this.shadowRoot.getElementById("brightness-val").textContent = `${e2.target.value}%`;
+        });
+        slider.addEventListener("change", (e2) => {
+          this.callService("ipixel_color", "set_brightness", { level: parseInt(e2.target.value) });
+        });
+      }
+      this.shadowRoot.querySelectorAll("[data-mode]").forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          const mode = e2.currentTarget.dataset.mode;
+          const modeEntity = this.getRelatedEntity("select", "_mode");
+          if (modeEntity) {
+            this._hass.callService("select", "select_option", { entity_id: modeEntity.entity_id, option: mode });
+          }
+          const modeColors = {
+            "text": "#ff6600",
+            "textimage": "#ff6600",
+            "clock": "#00ff88",
+            "gif": "#ff44ff",
+            "rhythm": "#44aaff"
+          };
+          updateDisplayState({
+            mode,
+            fgColor: modeColors[mode] || "#ff6600",
+            text: mode === "clock" ? "" : window.iPIXELDisplayState?.text || ""
+          });
+          this.shadowRoot.querySelectorAll("[data-mode]").forEach((b) => b.classList.remove("active"));
+          e2.currentTarget.classList.add("active");
+        });
+      });
+      this.shadowRoot.getElementById("clock-style")?.addEventListener("change", (e2) => {
+        this._clockStyle = parseInt(e2.target.value);
+      });
+      this.shadowRoot.getElementById("apply-clock-btn")?.addEventListener("click", () => {
+        this._applyClockSettings();
+      });
+      this.shadowRoot.getElementById("toggle-24h")?.addEventListener("click", (e2) => {
+        this._is24Hour = !this._is24Hour;
+        e2.currentTarget.classList.toggle("active", this._is24Hour);
+      });
+      this.shadowRoot.getElementById("toggle-date")?.addEventListener("click", (e2) => {
+        this._showDate = !this._showDate;
+        e2.currentTarget.classList.toggle("active", this._showDate);
+      });
+      this.shadowRoot.getElementById("animation-mode")?.addEventListener("change", (e2) => {
+        this._animationMode = parseInt(e2.target.value);
+        updateDisplayState({ animationMode: this._animationMode });
+        this.callService("ipixel_color", "set_animation_mode", { mode: this._animationMode });
+      });
+      this.shadowRoot.getElementById("orientation")?.addEventListener("change", (e2) => {
+        const orientation = parseInt(e2.target.value);
+        this.callService("ipixel_color", "set_orientation", { orientation });
+      });
+      this.shadowRoot.getElementById("toggle-upside-down")?.addEventListener("click", (e2) => {
+        this._upsideDown = !this._upsideDown;
+        e2.currentTarget.classList.toggle("active", this._upsideDown);
+        const upsideDownEntity = this.getRelatedEntity("switch", "_upside_down");
+        if (upsideDownEntity) {
+          this._hass.callService("switch", this._upsideDown ? "turn_on" : "turn_off", {
+            entity_id: upsideDownEntity.entity_id
+          });
+        } else {
+          this.callService("ipixel_color", "set_upside_down", { enabled: this._upsideDown });
+        }
+      });
+      this.shadowRoot.querySelectorAll("[data-screen]").forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          const screen = parseInt(e2.currentTarget.dataset.screen);
+          this.callService("ipixel_color", "set_screen", { screen });
+          this.shadowRoot.querySelectorAll("[data-screen]").forEach((b) => b.classList.remove("active"));
+          e2.currentTarget.classList.add("active");
+        });
+      });
+      this.shadowRoot.querySelectorAll("[data-delete]").forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          const slot = parseInt(e2.currentTarget.dataset.delete);
+          if (confirm(`Delete screen slot ${slot}?`)) {
+            this.callService("ipixel_color", "delete_screen", { slot });
+          }
+        });
+      });
+      this.shadowRoot.getElementById("font-size")?.addEventListener("change", (e2) => {
+        const size = parseInt(e2.target.value);
+        updateDisplayState({ fontSize: size });
+        this.callService("ipixel_color", "set_font_size", { size });
+      });
+      this.shadowRoot.getElementById("font-offset-x")?.addEventListener("change", () => {
+        this._updateFontOffset();
+      });
+      this.shadowRoot.getElementById("font-offset-y")?.addEventListener("change", () => {
+        this._updateFontOffset();
+      });
+      this.shadowRoot.getElementById("diy-mode")?.addEventListener("change", (e2) => {
+        const mode = e2.target.value;
+        if (mode !== "") {
+          this.callService("ipixel_color", "set_diy_mode", { mode });
+          setTimeout(() => {
+            e2.target.value = "";
+          }, 500);
+        }
+      });
+      this.shadowRoot.getElementById("send-raw-btn")?.addEventListener("click", () => {
+        const hexData = this.shadowRoot.getElementById("raw-command")?.value;
+        if (hexData && hexData.trim()) {
+          this.callService("ipixel_color", "send_raw_command", { hex_data: hexData.trim() });
+        }
+      });
+      this.shadowRoot.getElementById("raw-command")?.addEventListener("keypress", (e2) => {
+        if (e2.key === "Enter") {
+          const hexData = e2.target.value;
+          if (hexData && hexData.trim()) {
+            this.callService("ipixel_color", "send_raw_command", { hex_data: hexData.trim() });
+          }
+        }
+      });
+    }
+    _applyClockSettings() {
+      updateDisplayState({
+        text: "",
+        mode: "clock",
+        effect: "fixed",
+        speed: 50,
+        fgColor: "#00ff88",
+        bgColor: "#000000",
+        clockStyle: this._clockStyle,
+        is24Hour: this._is24Hour,
+        showDate: this._showDate
+      });
+      this.callService("ipixel_color", "set_clock_mode", {
+        style: this._clockStyle,
+        format_24h: this._is24Hour,
+        show_date: this._showDate
+      });
+    }
+    _updateFontOffset() {
+      const x = parseInt(this.shadowRoot.getElementById("font-offset-x")?.value || "0");
+      const y = parseInt(this.shadowRoot.getElementById("font-offset-y")?.value || "0");
+      updateDisplayState({ fontOffsetX: x, fontOffsetY: y });
+      this.callService("ipixel_color", "set_font_offset", { x, y });
+    }
+    static getConfigElement() {
+      return document.createElement("ipixel-simple-editor");
+    }
+    static getStubConfig() {
+      return { entity: "" };
+    }
+  };
+
+  // src/cards/text-card.js
+  var RAINBOW_MODES = [
+    { value: 0, name: "None" },
+    { value: 1, name: "Rainbow Wave" },
+    { value: 2, name: "Rainbow Cycle" },
+    { value: 3, name: "Rainbow Pulse" },
+    { value: 4, name: "Rainbow Fade" },
+    { value: 5, name: "Rainbow Chase" },
+    { value: 6, name: "Rainbow Sparkle" },
+    { value: 7, name: "Rainbow Gradient" },
+    { value: 8, name: "Rainbow Theater" },
+    { value: 9, name: "Rainbow Fire" }
+  ];
+  var RHYTHM_STYLES = [
+    { value: 0, name: "Classic Bars" },
+    { value: 1, name: "Mirrored Bars" },
+    { value: 2, name: "Center Out" },
+    { value: 3, name: "Wave Style" },
+    { value: 4, name: "Particle Style" }
+  ];
+  var iPIXELTextCard = class extends iPIXELCardBase {
+    constructor() {
+      super();
+      this._activeTab = "text";
+      this._rhythmLevels = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+      this._selectedRhythmStyle = 0;
+      this._selectedAmbient = "rainbow";
+    }
+    /**
+     * Generate text effect options (text + color effects)
+     */
+    _buildTextEffectOptions() {
+      const textEffects = Object.entries(EFFECTS).filter(([_, info]) => info.category === EFFECT_CATEGORIES.TEXT).map(([name, info]) => `<option value="${name}">${info.name}</option>`).join("");
+      const colorEffects = Object.entries(EFFECTS).filter(([_, info]) => info.category === EFFECT_CATEGORIES.COLOR).map(([name, info]) => `<option value="${name}">${info.name}</option>`).join("");
+      return `
       <optgroup label="Text Effects">
-        ${e}
+        ${textEffects}
       </optgroup>
       <optgroup label="Color Effects">
-        ${t}
+        ${colorEffects}
       </optgroup>
-    `}_buildAmbientEffectOptions(){return Object.entries(k).filter(([e,t])=>t.category===w.AMBIENT).map(([e,t])=>`<option value="${e}">${t.name}</option>`).join("")}_buildAmbientGrid(){let e=this._selectedAmbient||"rainbow";return Object.entries(k).filter(([t,i])=>i.category===w.AMBIENT).map(([t,i])=>`
-        <button class="effect-btn ${t===e?"active":""}" data-effect="${t}">
-          ${i.name}
+    `;
+    }
+    /**
+     * Generate ambient effect options
+     */
+    _buildAmbientEffectOptions() {
+      return Object.entries(EFFECTS).filter(([_, info]) => info.category === EFFECT_CATEGORIES.AMBIENT).map(([name, info]) => `<option value="${name}">${info.name}</option>`).join("");
+    }
+    /**
+     * Build ambient effects as a button grid
+     */
+    _buildAmbientGrid() {
+      const selected = this._selectedAmbient || "rainbow";
+      return Object.entries(EFFECTS).filter(([_, info]) => info.category === EFFECT_CATEGORIES.AMBIENT).map(([name, info]) => `
+        <button class="effect-btn ${name === selected ? "active" : ""}" data-effect="${name}">
+          ${info.name}
         </button>
-      `).join("")}_buildRainbowOptions(){return te.map(e=>`<option value="${e.value}">${e.name}</option>`).join("")}_buildRhythmStyleGrid(){let e=this._selectedRhythmStyle||0;return ee.map(t=>`
-      <button class="style-btn ${t.value===e?"active":""}" data-style="${t.value}">
-        ${t.name}
+      `).join("");
+    }
+    /**
+     * Build rainbow mode options for dropdown
+     */
+    _buildRainbowOptions() {
+      return RAINBOW_MODES.map(
+        (mode) => `<option value="${mode.value}">${mode.name}</option>`
+      ).join("");
+    }
+    /**
+     * Build rhythm style grid
+     */
+    _buildRhythmStyleGrid() {
+      const selected = this._selectedRhythmStyle || 0;
+      return RHYTHM_STYLES.map((style) => `
+      <button class="style-btn ${style.value === selected ? "active" : ""}" data-style="${style.value}">
+        ${style.name}
       </button>
-    `).join("")}_buildRhythmLevelSliders(){let e=["32Hz","64Hz","125Hz","250Hz","500Hz","1kHz","2kHz","4kHz","8kHz","12kHz","16kHz"];return this._rhythmLevels.map((t,i)=>`
+    `).join("");
+    }
+    /**
+     * Build rhythm level sliders (11 frequency bands)
+     */
+    _buildRhythmLevelSliders() {
+      const labels = ["32Hz", "64Hz", "125Hz", "250Hz", "500Hz", "1kHz", "2kHz", "4kHz", "8kHz", "12kHz", "16kHz"];
+      return this._rhythmLevels.map((level, i2) => `
       <div class="rhythm-band">
-        <label>${e[i]}</label>
-        <input type="range" class="rhythm-slider" data-band="${i}" min="0" max="15" value="${t}">
-        <span class="rhythm-val">${t}</span>
+        <label>${labels[i2]}</label>
+        <input type="range" class="rhythm-slider" data-band="${i2}" min="0" max="15" value="${level}">
+        <span class="rhythm-val">${level}</span>
       </div>
-    `).join("")}render(){if(!this._hass)return;let e=this._activeTab==="text",t=this._activeTab==="ambient",i=this._activeTab==="rhythm",s=this._activeTab==="advanced";this.shadowRoot.innerHTML=`
-      <style>${$}
+    `).join("");
+    }
+    render() {
+      if (!this._hass)
+        return;
+      const isTextTab = this._activeTab === "text";
+      const isAmbientTab = this._activeTab === "ambient";
+      const isRhythmTab = this._activeTab === "rhythm";
+      const isAdvancedTab = this._activeTab === "advanced";
+      this.shadowRoot.innerHTML = `
+      <style>${iPIXELCardStyles}
         .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
         .tab {
           flex: 1;
@@ -431,14 +3784,14 @@
       <ha-card>
         <div class="card-content">
           <div class="tabs">
-            <button class="tab ${e?"active":""}" id="tab-text">Text</button>
-            <button class="tab ${t?"active":""}" id="tab-ambient">Ambient</button>
-            <button class="tab ${i?"active":""}" id="tab-rhythm">Rhythm</button>
-            <button class="tab ${s?"active":""}" id="tab-advanced">GFX</button>
+            <button class="tab ${isTextTab ? "active" : ""}" id="tab-text">Text</button>
+            <button class="tab ${isAmbientTab ? "active" : ""}" id="tab-ambient">Ambient</button>
+            <button class="tab ${isRhythmTab ? "active" : ""}" id="tab-rhythm">Rhythm</button>
+            <button class="tab ${isAdvancedTab ? "active" : ""}" id="tab-advanced">GFX</button>
           </div>
 
           <!-- Text Tab -->
-          <div class="tab-content ${e?"active":""}" id="content-text">
+          <div class="tab-content ${isTextTab ? "active" : ""}" id="content-text">
             <div class="section-title">Display Text</div>
             <div class="input-row">
               <input type="text" class="text-input" id="text-input" placeholder="Enter text to display...">
@@ -489,7 +3842,7 @@
           </div>
 
           <!-- Ambient Tab -->
-          <div class="tab-content ${t?"active":""}" id="content-ambient">
+          <div class="tab-content ${isAmbientTab ? "active" : ""}" id="content-ambient">
             <div class="section-title">Ambient Effect</div>
             <div class="effect-grid" id="ambient-grid">
               ${this._buildAmbientGrid()}
@@ -505,7 +3858,7 @@
           </div>
 
           <!-- Rhythm Tab -->
-          <div class="tab-content ${i?"active":""}" id="content-rhythm">
+          <div class="tab-content ${isRhythmTab ? "active" : ""}" id="content-rhythm">
             <div class="section-title">Visualization Style</div>
             <div class="style-grid" id="rhythm-style-grid">
               ${this._buildRhythmStyleGrid()}
@@ -518,7 +3871,7 @@
           </div>
 
           <!-- Advanced/GFX Tab -->
-          <div class="tab-content ${s?"active":""}" id="content-advanced">
+          <div class="tab-content ${isAdvancedTab ? "active" : ""}" id="content-advanced">
             <div class="section-title">GFX JSON Data</div>
             <textarea class="gfx-textarea" id="gfx-json" placeholder='Enter GFX JSON data...
 Example:
@@ -541,66 +3894,1140 @@ Example:
             <button class="btn btn-primary" id="apply-multicolor-btn" style="width: 100%; margin-top: 8px;">Send Multicolor Text</button>
           </div>
         </div>
-      </ha-card>`,this._attachListeners()}_getTextFormValues(){return{text:this.shadowRoot.getElementById("text-input")?.value||"",effect:this.shadowRoot.getElementById("text-effect")?.value||"fixed",rainbowMode:parseInt(this.shadowRoot.getElementById("rainbow-mode")?.value||"0"),speed:parseInt(this.shadowRoot.getElementById("text-speed")?.value||"50"),fgColor:this.shadowRoot.getElementById("text-color")?.value||"#ff6600",bgColor:this.shadowRoot.getElementById("bg-color")?.value||"#000000",font:this.shadowRoot.getElementById("font-select")?.value||"VCR_OSD_MONO"}}_getRhythmFormValues(){return{style:this._selectedRhythmStyle||0,levels:[...this._rhythmLevels]}}_getGfxFormValues(){let e=this.shadowRoot.getElementById("gfx-json")?.value||"";try{return JSON.parse(e)}catch{return null}}_getMulticolorFormValues(){let e=this.shadowRoot.getElementById("multicolor-text")?.value||"",i=(this.shadowRoot.getElementById("multicolor-colors")?.value||"").split(",").map(s=>s.trim()).filter(s=>s);return{text:e,colors:i}}_getAmbientFormValues(){return{effect:this._selectedAmbient||"rainbow",speed:parseInt(this.shadowRoot.getElementById("ambient-speed")?.value||"50")}}_updateTextPreview(){let{text:e,effect:t,speed:i,fgColor:s,bgColor:n,font:r}=this._getTextFormValues();P({text:e||"Preview",mode:"text",effect:t,speed:i,fgColor:s,bgColor:n,font:r})}_updateAmbientPreview(){let{effect:e,speed:t}=this._getAmbientFormValues();P({text:"",mode:"ambient",effect:e,speed:t,fgColor:"#ffffff",bgColor:"#000000"})}_attachListeners(){this.shadowRoot.getElementById("tab-text")?.addEventListener("click",()=>{this._activeTab="text",this.render()}),this.shadowRoot.getElementById("tab-ambient")?.addEventListener("click",()=>{this._activeTab="ambient",this.render()}),this.shadowRoot.getElementById("tab-rhythm")?.addEventListener("click",()=>{this._activeTab="rhythm",this.render()}),this.shadowRoot.getElementById("tab-advanced")?.addEventListener("click",()=>{this._activeTab="advanced",this.render()});let e=this.shadowRoot.getElementById("text-speed");e&&(e.style.setProperty("--value",`${e.value}%`),e.addEventListener("input",i=>{i.target.style.setProperty("--value",`${i.target.value}%`),this.shadowRoot.getElementById("text-speed-val").textContent=i.target.value,this._updateTextPreview()})),this.shadowRoot.getElementById("text-effect")?.addEventListener("change",()=>{this._updateTextPreview()}),this.shadowRoot.getElementById("rainbow-mode")?.addEventListener("change",()=>{this._updateTextPreview()}),this.shadowRoot.getElementById("font-select")?.addEventListener("change",()=>{this._updateTextPreview()}),this.shadowRoot.getElementById("text-color")?.addEventListener("input",()=>{this._updateTextPreview()}),this.shadowRoot.getElementById("bg-color")?.addEventListener("input",()=>{this._updateTextPreview()}),this.shadowRoot.getElementById("text-input")?.addEventListener("input",()=>{this._updateTextPreview()}),this.shadowRoot.getElementById("send-btn")?.addEventListener("click",()=>{let{text:i,effect:s,rainbowMode:n,speed:r,fgColor:a,bgColor:o,font:l}=this._getTextFormValues();if(i){P({text:i,mode:"text",effect:s,speed:r,fgColor:a,bgColor:o,font:l,rainbowMode:n}),this._config.entity&&this._hass.callService("text","set_value",{entity_id:this._config.entity,value:i});let c=l==="LEGACY"?"CUSONG":l;this.callService("ipixel_color","display_text",{text:i,effect:s,speed:r,color_fg:this.hexToRgb(a),color_bg:this.hexToRgb(o),font:c,rainbow_mode:n})}}),this.shadowRoot.querySelectorAll(".effect-btn").forEach(i=>{i.addEventListener("click",s=>{let n=s.target.dataset.effect;this._selectedAmbient=n,this.shadowRoot.querySelectorAll(".effect-btn").forEach(r=>r.classList.remove("active")),s.target.classList.add("active"),this._updateAmbientPreview()})});let t=this.shadowRoot.getElementById("ambient-speed");t&&(t.style.setProperty("--value",`${t.value}%`),t.addEventListener("input",i=>{i.target.style.setProperty("--value",`${i.target.value}%`),this.shadowRoot.getElementById("ambient-speed-val").textContent=i.target.value,this._updateAmbientPreview()})),this.shadowRoot.getElementById("apply-ambient-btn")?.addEventListener("click",()=>{let{effect:i,speed:s}=this._getAmbientFormValues();P({text:"",mode:"ambient",effect:i,speed:s,fgColor:"#ffffff",bgColor:"#000000"})}),this.shadowRoot.querySelectorAll(".style-btn").forEach(i=>{i.addEventListener("click",s=>{let n=parseInt(s.target.dataset.style);this._selectedRhythmStyle=n,this.shadowRoot.querySelectorAll(".style-btn").forEach(r=>r.classList.remove("active")),s.target.classList.add("active")})}),this.shadowRoot.querySelectorAll(".rhythm-slider").forEach(i=>{i.addEventListener("input",s=>{let n=parseInt(s.target.dataset.band),r=parseInt(s.target.value);this._rhythmLevels[n]=r,s.target.nextElementSibling.textContent=r})}),this.shadowRoot.getElementById("apply-rhythm-btn")?.addEventListener("click",()=>{let{style:i,levels:s}=this._getRhythmFormValues();P({text:"",mode:"rhythm",rhythmStyle:i,rhythmLevels:s}),this.callService("ipixel_color","set_rhythm_level",{style:i,levels:s})}),this.shadowRoot.getElementById("apply-gfx-btn")?.addEventListener("click",()=>{let i=this._getGfxFormValues();if(!i){console.warn("iPIXEL: Invalid GFX JSON");return}P({text:"",mode:"gfx",gfxData:i}),this.callService("ipixel_color","render_gfx",{data:i})}),this.shadowRoot.getElementById("apply-multicolor-btn")?.addEventListener("click",()=>{let{text:i,colors:s}=this._getMulticolorFormValues();i&&s.length>0&&(P({text:i,mode:"multicolor",colors:s}),this.callService("ipixel_color","display_multicolor_text",{text:i,colors:s.map(n=>this.hexToRgb(n))}))})}static getConfigElement(){return document.createElement("ipixel-simple-editor")}static getStubConfig(){return{entity:""}}};var ct=class extends L{render(){if(!this._hass)return;let e=this._config.items||[];this.shadowRoot.innerHTML=`
-      <style>${$}
-        .playlist-actions { display: flex; gap: 8px; margin-top: 12px; }
-        .playlist-actions .btn { flex: 1; }
+      </ha-card>`;
+      this._attachListeners();
+    }
+    /**
+     * Get text tab form values
+     */
+    _getTextFormValues() {
+      return {
+        text: this.shadowRoot.getElementById("text-input")?.value || "",
+        effect: this.shadowRoot.getElementById("text-effect")?.value || "fixed",
+        rainbowMode: parseInt(this.shadowRoot.getElementById("rainbow-mode")?.value || "0"),
+        speed: parseInt(this.shadowRoot.getElementById("text-speed")?.value || "50"),
+        fgColor: this.shadowRoot.getElementById("text-color")?.value || "#ff6600",
+        bgColor: this.shadowRoot.getElementById("bg-color")?.value || "#000000",
+        font: this.shadowRoot.getElementById("font-select")?.value || "VCR_OSD_MONO"
+      };
+    }
+    /**
+     * Get rhythm tab form values
+     */
+    _getRhythmFormValues() {
+      return {
+        style: this._selectedRhythmStyle || 0,
+        levels: [...this._rhythmLevels]
+      };
+    }
+    /**
+     * Get GFX/advanced tab form values
+     */
+    _getGfxFormValues() {
+      const jsonText = this.shadowRoot.getElementById("gfx-json")?.value || "";
+      try {
+        return JSON.parse(jsonText);
+      } catch (e2) {
+        return null;
+      }
+    }
+    /**
+     * Get multicolor text form values
+     */
+    _getMulticolorFormValues() {
+      const text = this.shadowRoot.getElementById("multicolor-text")?.value || "";
+      const colorsStr = this.shadowRoot.getElementById("multicolor-colors")?.value || "";
+      const colors = colorsStr.split(",").map((c) => c.trim()).filter((c) => c);
+      return { text, colors };
+    }
+    /**
+     * Get ambient tab form values
+     */
+    _getAmbientFormValues() {
+      return {
+        effect: this._selectedAmbient || "rainbow",
+        speed: parseInt(this.shadowRoot.getElementById("ambient-speed")?.value || "50")
+      };
+    }
+    /**
+     * Update text preview (without sending to device)
+     */
+    _updateTextPreview() {
+      const { text, effect, speed, fgColor, bgColor, font } = this._getTextFormValues();
+      updateDisplayState({
+        text: text || "Preview",
+        mode: "text",
+        effect,
+        speed,
+        fgColor,
+        bgColor,
+        font
+      });
+    }
+    /**
+     * Update ambient preview
+     */
+    _updateAmbientPreview() {
+      const { effect, speed } = this._getAmbientFormValues();
+      updateDisplayState({
+        text: "",
+        mode: "ambient",
+        effect,
+        speed,
+        fgColor: "#ffffff",
+        bgColor: "#000000"
+      });
+    }
+    _attachListeners() {
+      this.shadowRoot.getElementById("tab-text")?.addEventListener("click", () => {
+        this._activeTab = "text";
+        this.render();
+      });
+      this.shadowRoot.getElementById("tab-ambient")?.addEventListener("click", () => {
+        this._activeTab = "ambient";
+        this.render();
+      });
+      this.shadowRoot.getElementById("tab-rhythm")?.addEventListener("click", () => {
+        this._activeTab = "rhythm";
+        this.render();
+      });
+      this.shadowRoot.getElementById("tab-advanced")?.addEventListener("click", () => {
+        this._activeTab = "advanced";
+        this.render();
+      });
+      const textSpeed = this.shadowRoot.getElementById("text-speed");
+      if (textSpeed) {
+        textSpeed.style.setProperty("--value", `${textSpeed.value}%`);
+        textSpeed.addEventListener("input", (e2) => {
+          e2.target.style.setProperty("--value", `${e2.target.value}%`);
+          this.shadowRoot.getElementById("text-speed-val").textContent = e2.target.value;
+          this._updateTextPreview();
+        });
+      }
+      this.shadowRoot.getElementById("text-effect")?.addEventListener("change", () => {
+        this._updateTextPreview();
+      });
+      this.shadowRoot.getElementById("rainbow-mode")?.addEventListener("change", () => {
+        this._updateTextPreview();
+      });
+      this.shadowRoot.getElementById("font-select")?.addEventListener("change", () => {
+        this._updateTextPreview();
+      });
+      this.shadowRoot.getElementById("text-color")?.addEventListener("input", () => {
+        this._updateTextPreview();
+      });
+      this.shadowRoot.getElementById("bg-color")?.addEventListener("input", () => {
+        this._updateTextPreview();
+      });
+      this.shadowRoot.getElementById("text-input")?.addEventListener("input", () => {
+        this._updateTextPreview();
+      });
+      this.shadowRoot.getElementById("send-btn")?.addEventListener("click", () => {
+        const { text, effect, rainbowMode, speed, fgColor, bgColor, font } = this._getTextFormValues();
+        if (text) {
+          updateDisplayState({
+            text,
+            mode: "text",
+            effect,
+            speed,
+            fgColor,
+            bgColor,
+            font,
+            rainbowMode
+          });
+          if (this._config.entity) {
+            this._hass.callService("text", "set_value", {
+              entity_id: this._config.entity,
+              value: text
+            });
+          }
+          const backendFont = font === "LEGACY" ? "CUSONG" : font;
+          this.callService("ipixel_color", "display_text", {
+            text,
+            effect,
+            speed,
+            color_fg: this.hexToRgb(fgColor),
+            color_bg: this.hexToRgb(bgColor),
+            font: backendFont,
+            rainbow_mode: rainbowMode
+          });
+        }
+      });
+      this.shadowRoot.querySelectorAll(".effect-btn").forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          const effect = e2.target.dataset.effect;
+          this._selectedAmbient = effect;
+          this.shadowRoot.querySelectorAll(".effect-btn").forEach((b) => b.classList.remove("active"));
+          e2.target.classList.add("active");
+          this._updateAmbientPreview();
+        });
+      });
+      const ambientSpeed = this.shadowRoot.getElementById("ambient-speed");
+      if (ambientSpeed) {
+        ambientSpeed.style.setProperty("--value", `${ambientSpeed.value}%`);
+        ambientSpeed.addEventListener("input", (e2) => {
+          e2.target.style.setProperty("--value", `${e2.target.value}%`);
+          this.shadowRoot.getElementById("ambient-speed-val").textContent = e2.target.value;
+          this._updateAmbientPreview();
+        });
+      }
+      this.shadowRoot.getElementById("apply-ambient-btn")?.addEventListener("click", () => {
+        const { effect, speed } = this._getAmbientFormValues();
+        updateDisplayState({
+          text: "",
+          mode: "ambient",
+          effect,
+          speed,
+          fgColor: "#ffffff",
+          bgColor: "#000000"
+        });
+      });
+      this.shadowRoot.querySelectorAll(".style-btn").forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          const style = parseInt(e2.target.dataset.style);
+          this._selectedRhythmStyle = style;
+          this.shadowRoot.querySelectorAll(".style-btn").forEach((b) => b.classList.remove("active"));
+          e2.target.classList.add("active");
+        });
+      });
+      this.shadowRoot.querySelectorAll(".rhythm-slider").forEach((slider) => {
+        slider.addEventListener("input", (e2) => {
+          const band = parseInt(e2.target.dataset.band);
+          const value = parseInt(e2.target.value);
+          this._rhythmLevels[band] = value;
+          e2.target.nextElementSibling.textContent = value;
+        });
+      });
+      this.shadowRoot.getElementById("apply-rhythm-btn")?.addEventListener("click", () => {
+        const { style, levels } = this._getRhythmFormValues();
+        updateDisplayState({
+          text: "",
+          mode: "rhythm",
+          rhythmStyle: style,
+          rhythmLevels: levels
+        });
+        this.callService("ipixel_color", "set_rhythm_level", {
+          style,
+          levels
+        });
+      });
+      this.shadowRoot.getElementById("apply-gfx-btn")?.addEventListener("click", () => {
+        const gfxData = this._getGfxFormValues();
+        if (!gfxData) {
+          console.warn("iPIXEL: Invalid GFX JSON");
+          return;
+        }
+        updateDisplayState({
+          text: "",
+          mode: "gfx",
+          gfxData
+        });
+        this.callService("ipixel_color", "render_gfx", {
+          data: gfxData
+        });
+      });
+      this.shadowRoot.getElementById("apply-multicolor-btn")?.addEventListener("click", () => {
+        const { text, colors } = this._getMulticolorFormValues();
+        if (text && colors.length > 0) {
+          updateDisplayState({
+            text,
+            mode: "multicolor",
+            colors
+          });
+          this.callService("ipixel_color", "display_multicolor_text", {
+            text,
+            colors: colors.map((c) => this.hexToRgb(c))
+          });
+        }
+      });
+    }
+    static getConfigElement() {
+      return document.createElement("ipixel-simple-editor");
+    }
+    static getStubConfig() {
+      return { entity: "" };
+    }
+  };
+
+  // src/cards/playlist-card.js
+  var PRESETS_STORAGE_KEY = "iPIXEL_Presets";
+  var iPIXELPlaylistCard = class extends iPIXELCardBase {
+    constructor() {
+      super();
+      this._presets = this._loadPresets();
+      this._editingPreset = null;
+      this._selectedIcon = "\u{1F4FA}";
+    }
+    _loadPresets() {
+      try {
+        const saved = localStorage.getItem(PRESETS_STORAGE_KEY);
+        return saved ? JSON.parse(saved) : [];
+      } catch (e2) {
+        return [];
+      }
+    }
+    _savePresets() {
+      try {
+        localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(this._presets));
+      } catch (e2) {
+        console.warn("iPIXEL: Failed to save presets", e2);
+      }
+    }
+    render() {
+      if (!this._hass)
+        return;
+      this.shadowRoot.innerHTML = `
+      <style>${iPIXELCardStyles}
+        .preset-list {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin-bottom: 16px;
+          max-height: 300px;
+          overflow-y: auto;
+        }
+        .preset-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 12px;
+          background: rgba(255,255,255,0.05);
+          border-radius: 8px;
+          border: 1px solid rgba(255,255,255,0.1);
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .preset-item:hover {
+          background: rgba(255,255,255,0.1);
+          border-color: rgba(255,255,255,0.2);
+        }
+        .preset-item.active {
+          border-color: var(--primary-color, #03a9f4);
+          background: rgba(3, 169, 244, 0.1);
+        }
+        .preset-icon {
+          width: 32px;
+          height: 32px;
+          border-radius: 6px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1.2em;
+        }
+        .preset-info {
+          flex: 1;
+          min-width: 0;
+        }
+        .preset-name {
+          font-weight: 500;
+          font-size: 0.9em;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .preset-desc {
+          font-size: 0.75em;
+          opacity: 0.6;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .preset-actions {
+          display: flex;
+          gap: 4px;
+        }
+        .preset-actions button {
+          padding: 6px;
+          background: transparent;
+          border: none;
+          color: rgba(255,255,255,0.5);
+          cursor: pointer;
+          border-radius: 4px;
+          transition: all 0.2s;
+        }
+        .preset-actions button:hover {
+          background: rgba(255,255,255,0.1);
+          color: #fff;
+        }
+        .preset-actions button.delete:hover {
+          background: rgba(244,67,54,0.2);
+          color: #f44;
+        }
+        .empty-state {
+          text-align: center;
+          padding: 40px 20px;
+          opacity: 0.5;
+        }
+        .empty-state svg {
+          width: 48px;
+          height: 48px;
+          margin-bottom: 12px;
+          opacity: 0.5;
+        }
+        .add-preset-form {
+          background: rgba(255,255,255,0.03);
+          border-radius: 8px;
+          padding: 16px;
+        }
+        .form-row {
+          margin-bottom: 12px;
+        }
+        .form-row label {
+          display: block;
+          font-size: 0.8em;
+          opacity: 0.7;
+          margin-bottom: 4px;
+        }
+        .form-actions {
+          display: flex;
+          gap: 8px;
+          justify-content: flex-end;
+        }
+        .icon-grid {
+          display: grid;
+          grid-template-columns: repeat(8, 1fr);
+          gap: 4px;
+          margin-top: 8px;
+        }
+        .icon-option {
+          width: 32px;
+          height: 32px;
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 4px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          font-size: 1.1em;
+          transition: all 0.2s;
+          background: transparent;
+        }
+        .icon-option:hover {
+          background: rgba(255,255,255,0.1);
+        }
+        .icon-option.selected {
+          border-color: var(--primary-color, #03a9f4);
+          background: rgba(3, 169, 244, 0.2);
+        }
       </style>
       <ha-card>
         <div class="card-content">
-          <div class="card-header"><div class="card-title">Playlist</div></div>
-          <div id="playlist-items">
-            ${e.length===0?'<div class="empty-state">No playlist items yet</div>':e.map((t,i)=>`
-                <div class="list-item">
-                  <div class="list-item-info">
-                    <div class="list-item-name">${t.name||`Item ${i+1}`}</div>
-                    <div class="list-item-meta">${t.mode||"text"} - ${(t.duration_ms||5e3)/1e3}s</div>
-                  </div>
-                  <div class="list-item-actions">
-                    <button class="icon-btn" style="width:28px;height:28px;">
-                      <svg viewBox="0 0 24 24" style="width:16px;height:16px;"><path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/></svg>
-                    </button>
-                  </div>
-                </div>`).join("")}
+          <div class="card-header">
+            <div class="card-title">Presets</div>
+            <button class="icon-btn" id="add-preset-btn" title="Save Current as Preset">
+              <svg viewBox="0 0 24 24"><path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"/></svg>
+            </button>
           </div>
-          <div class="playlist-actions">
-            <button class="btn btn-success" id="start-btn">\u25B6 Start</button>
-            <button class="btn btn-danger" id="stop-btn">\u25A0 Stop</button>
-            <button class="btn btn-secondary" id="add-btn">+ Add</button>
+
+          <div class="preset-list" id="preset-list">
+            ${this._presets.length === 0 ? `
+              <div class="empty-state">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M19,20H5V4H7V7H17V4H19M12,2A1,1 0 0,1 13,3A1,1 0 0,1 12,4A1,1 0 0,1 11,3A1,1 0 0,1 12,2M19,2H14.82C14.4,0.84 13.3,0 12,0C10.7,0 9.6,0.84 9.18,2H5A2,2 0 0,0 3,4V20A2,2 0 0,0 5,22H19A2,2 0 0,0 21,20V4A2,2 0 0,0 19,2Z"/></svg>
+                <div>No presets saved</div>
+                <div style="font-size: 0.85em; margin-top: 4px;">Click + to save current display</div>
+              </div>
+            ` : this._presets.map((preset, i2) => `
+              <div class="preset-item" data-index="${i2}">
+                <div class="preset-icon" style="background: ${preset.fgColor || "#ff6600"}20; color: ${preset.fgColor || "#ff6600"}">
+                  ${preset.icon || "\u{1F4FA}"}
+                </div>
+                <div class="preset-info">
+                  <div class="preset-name">${this._escapeHtml(preset.name)}</div>
+                  <div class="preset-desc">${preset.mode} \xB7 ${preset.effect || "fixed"}${preset.text ? ' \xB7 "' + preset.text.substring(0, 15) + (preset.text.length > 15 ? "..." : "") + '"' : ""}</div>
+                </div>
+                <div class="preset-actions">
+                  <button class="edit" data-action="edit" data-index="${i2}" title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z"/></svg>
+                  </button>
+                  <button class="delete" data-action="delete" data-index="${i2}" title="Delete">
+                    <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/></svg>
+                  </button>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+
+          <div class="add-preset-form" id="preset-form" style="display: none;">
+            <div class="form-row">
+              <label>Preset Name</label>
+              <input type="text" class="text-input" id="preset-name" placeholder="My Preset">
+            </div>
+            <div class="form-row">
+              <label>Icon</label>
+              <div class="icon-grid" id="icon-grid">
+                ${["\u{1F4FA}", "\u{1F4AC}", "\u23F0", "\u{1F3B5}", "\u{1F3A8}", "\u2B50", "\u2764\uFE0F", "\u{1F525}", "\u{1F4A1}", "\u{1F308}", "\u{1F3AE}", "\u{1F4E2}", "\u{1F3E0}", "\u{1F514}", "\u2728", "\u{1F389}"].map((icon) => `
+                  <button type="button" class="icon-option${icon === this._selectedIcon ? " selected" : ""}" data-icon="${icon}">${icon}</button>
+                `).join("")}
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-secondary" id="cancel-preset-btn">Cancel</button>
+              <button class="btn btn-primary" id="save-preset-btn">Save Preset</button>
+            </div>
           </div>
         </div>
-      </ha-card>`,this.shadowRoot.getElementById("start-btn")?.addEventListener("click",()=>{this.callService("ipixel_color","start_playlist")}),this.shadowRoot.getElementById("stop-btn")?.addEventListener("click",()=>{this.callService("ipixel_color","stop_playlist")})}static getConfigElement(){return document.createElement("ipixel-simple-editor")}static getStubConfig(){return{entity:""}}};var dt=class extends L{render(){if(!this._hass)return;let e=new Date,t=(e.getHours()*60+e.getMinutes())/1440*100;this.shadowRoot.innerHTML=`
-      <style>${$}
+      </ha-card>`;
+      this._attachListeners();
+    }
+    _escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    _attachListeners() {
+      this.shadowRoot.getElementById("add-preset-btn")?.addEventListener("click", () => {
+        this._editingPreset = null;
+        this._selectedIcon = "\u{1F4FA}";
+        this.shadowRoot.getElementById("preset-form").style.display = "block";
+        this.shadowRoot.getElementById("preset-name").value = "";
+        this.shadowRoot.querySelectorAll(".icon-option").forEach((o2) => o2.classList.remove("selected"));
+        this.shadowRoot.querySelector(".icon-option")?.classList.add("selected");
+      });
+      this.shadowRoot.getElementById("cancel-preset-btn")?.addEventListener("click", () => {
+        this.shadowRoot.getElementById("preset-form").style.display = "none";
+        this._editingPreset = null;
+      });
+      this.shadowRoot.getElementById("save-preset-btn")?.addEventListener("click", () => {
+        const name = this.shadowRoot.getElementById("preset-name").value.trim() || "Preset";
+        const selectedIcon = this.shadowRoot.querySelector(".icon-option.selected");
+        const icon = selectedIcon?.dataset.icon || "\u{1F4FA}";
+        const currentState = getDisplayState();
+        const preset = {
+          name,
+          icon,
+          text: currentState.text || "",
+          mode: currentState.mode || "text",
+          effect: currentState.effect || "fixed",
+          speed: currentState.speed || 50,
+          fgColor: currentState.fgColor || "#ff6600",
+          bgColor: currentState.bgColor || "#000000",
+          font: currentState.font || "VCR_OSD_MONO",
+          rainbowMode: currentState.rainbowMode || 0,
+          createdAt: Date.now()
+        };
+        if (this._editingPreset !== null) {
+          this._presets[this._editingPreset] = preset;
+        } else {
+          this._presets.push(preset);
+        }
+        this._savePresets();
+        this.shadowRoot.getElementById("preset-form").style.display = "none";
+        this._editingPreset = null;
+        this.render();
+      });
+      this.shadowRoot.querySelectorAll(".icon-option").forEach((opt) => {
+        opt.addEventListener("click", (e2) => {
+          this.shadowRoot.querySelectorAll(".icon-option").forEach((o2) => o2.classList.remove("selected"));
+          e2.currentTarget.classList.add("selected");
+          this._selectedIcon = e2.currentTarget.dataset.icon;
+        });
+      });
+      this.shadowRoot.querySelectorAll(".preset-item").forEach((item) => {
+        item.addEventListener("click", (e2) => {
+          if (e2.target.closest(".preset-actions"))
+            return;
+          const index = parseInt(item.dataset.index);
+          const preset = this._presets[index];
+          if (preset) {
+            updateDisplayState({
+              text: preset.text,
+              mode: preset.mode,
+              effect: preset.effect,
+              speed: preset.speed,
+              fgColor: preset.fgColor,
+              bgColor: preset.bgColor,
+              font: preset.font,
+              rainbowMode: preset.rainbowMode
+            });
+            if (preset.mode === "text" && preset.text) {
+              this.callService("ipixel_color", "display_text", {
+                text: preset.text,
+                effect: preset.effect,
+                speed: preset.speed,
+                color_fg: this.hexToRgb(preset.fgColor),
+                color_bg: this.hexToRgb(preset.bgColor),
+                font: preset.font,
+                rainbow_mode: preset.rainbowMode
+              });
+            }
+            this.shadowRoot.querySelectorAll(".preset-item").forEach((p) => p.classList.remove("active"));
+            item.classList.add("active");
+          }
+        });
+      });
+      this.shadowRoot.querySelectorAll('[data-action="edit"]').forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          e2.stopPropagation();
+          const index = parseInt(e2.currentTarget.dataset.index);
+          const preset = this._presets[index];
+          if (preset) {
+            this._editingPreset = index;
+            this._selectedIcon = preset.icon || "\u{1F4FA}";
+            this.shadowRoot.getElementById("preset-form").style.display = "block";
+            this.shadowRoot.getElementById("preset-name").value = preset.name;
+            this.shadowRoot.querySelectorAll(".icon-option").forEach((o2) => {
+              o2.classList.toggle("selected", o2.dataset.icon === preset.icon);
+            });
+          }
+        });
+      });
+      this.shadowRoot.querySelectorAll('[data-action="delete"]').forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          e2.stopPropagation();
+          const index = parseInt(e2.currentTarget.dataset.index);
+          if (confirm("Delete this preset?")) {
+            this._presets.splice(index, 1);
+            this._savePresets();
+            this.render();
+          }
+        });
+      });
+    }
+    static getConfigElement() {
+      return document.createElement("ipixel-simple-editor");
+    }
+    static getStubConfig() {
+      return { entity: "" };
+    }
+  };
+
+  // src/cards/schedule-card.js
+  var SCHEDULES_STORAGE_KEY = "iPIXEL_Schedules";
+  var iPIXELScheduleCard = class extends iPIXELCardBase {
+    constructor() {
+      super();
+      this._schedules = this._loadSchedules();
+      this._powerSchedule = this._loadPowerSchedule();
+      this._editingSlot = null;
+      this._checkInterval = null;
+    }
+    connectedCallback() {
+      this._checkInterval = setInterval(() => this._checkSchedules(), 6e4);
+      this._checkSchedules();
+    }
+    disconnectedCallback() {
+      if (this._checkInterval) {
+        clearInterval(this._checkInterval);
+      }
+    }
+    _loadSchedules() {
+      try {
+        const saved = localStorage.getItem(SCHEDULES_STORAGE_KEY);
+        return saved ? JSON.parse(saved) : [];
+      } catch (e2) {
+        return [];
+      }
+    }
+    _saveSchedules() {
+      try {
+        localStorage.setItem(SCHEDULES_STORAGE_KEY, JSON.stringify(this._schedules));
+      } catch (e2) {
+        console.warn("iPIXEL: Failed to save schedules", e2);
+      }
+    }
+    _loadPowerSchedule() {
+      try {
+        const saved = localStorage.getItem("iPIXEL_PowerSchedule");
+        return saved ? JSON.parse(saved) : { enabled: false, onTime: "07:00", offTime: "22:00" };
+      } catch (e2) {
+        return { enabled: false, onTime: "07:00", offTime: "22:00" };
+      }
+    }
+    _savePowerSchedule() {
+      try {
+        localStorage.setItem("iPIXEL_PowerSchedule", JSON.stringify(this._powerSchedule));
+      } catch (e2) {
+        console.warn("iPIXEL: Failed to save power schedule", e2);
+      }
+    }
+    _checkSchedules() {
+      const now = /* @__PURE__ */ new Date();
+      const currentTime = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+      const currentDay = now.getDay();
+      for (const schedule of this._schedules) {
+        if (!schedule.enabled)
+          continue;
+        if (schedule.days && !schedule.days.includes(currentDay))
+          continue;
+        if (schedule.startTime === currentTime) {
+          updateDisplayState({
+            text: schedule.text || "",
+            mode: schedule.mode || "text",
+            effect: schedule.effect || "fixed",
+            fgColor: schedule.fgColor || "#ff6600",
+            bgColor: schedule.bgColor || "#000000"
+          });
+          if (schedule.mode === "text" && schedule.text) {
+            this.callService("ipixel_color", "display_text", {
+              text: schedule.text,
+              effect: schedule.effect,
+              color_fg: this.hexToRgb(schedule.fgColor),
+              color_bg: this.hexToRgb(schedule.bgColor)
+            });
+          } else if (schedule.mode === "clock") {
+            this.callService("ipixel_color", "set_clock_mode", { style: 1 });
+          }
+        }
+      }
+    }
+    render() {
+      if (!this._hass)
+        return;
+      const now = /* @__PURE__ */ new Date();
+      const nowPos = (now.getHours() * 60 + now.getMinutes()) / 1440 * 100;
+      const currentTime = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+      const scheduleBlocks = this._schedules.filter((s2) => s2.enabled).map((s2) => {
+        const startMins = this._timeToMinutes(s2.startTime);
+        const endMins = s2.endTime ? this._timeToMinutes(s2.endTime) : startMins + 60;
+        const startPos = startMins / 1440 * 100;
+        const width = (endMins - startMins) / 1440 * 100;
+        return `<div class="timeline-block" style="left: ${startPos}%; width: ${width}%; background: ${s2.fgColor || "#03a9f4"}40;" title="${s2.name || "Schedule"}"></div>`;
+      }).join("");
+      const dayNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+      this.shadowRoot.innerHTML = `
+      <style>${iPIXELCardStyles}
         .timeline { background: rgba(255,255,255,0.05); border-radius: 6px; padding: 12px; margin-bottom: 12px; }
         .timeline-header { display: flex; justify-content: space-between; font-size: 0.7em; opacity: 0.5; margin-bottom: 6px; }
-        .timeline-bar { height: 24px; background: rgba(255,255,255,0.1); border-radius: 4px; position: relative; overflow: hidden; }
-        .timeline-now { position: absolute; width: 2px; height: 100%; background: #f44336; left: ${t}%; }
+        .timeline-bar { height: 32px; background: rgba(255,255,255,0.1); border-radius: 4px; position: relative; overflow: hidden; }
+        .timeline-now { position: absolute; width: 2px; height: 100%; background: #f44336; left: ${nowPos}%; z-index: 2; }
+        .timeline-block { position: absolute; height: 100%; border-radius: 2px; z-index: 1; }
+        .power-section { background: rgba(255,255,255,0.03); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
         .power-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
         .power-row label { font-size: 0.85em; }
-        .power-row input[type="time"] { padding: 6px 10px; background: rgba(255,255,255,0.08); border: 1px solid var(--ipixel-border); border-radius: 4px; color: inherit; }
+        .power-row input[type="time"] {
+          padding: 6px 10px;
+          background: rgba(255,255,255,0.08);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 4px;
+          color: inherit;
+        }
+        .schedule-list {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin-bottom: 12px;
+          max-height: 250px;
+          overflow-y: auto;
+        }
+        .schedule-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 12px;
+          background: rgba(255,255,255,0.05);
+          border-radius: 8px;
+          border: 1px solid rgba(255,255,255,0.1);
+        }
+        .schedule-toggle {
+          width: 36px;
+          height: 20px;
+          background: rgba(255,255,255,0.1);
+          border-radius: 10px;
+          position: relative;
+          cursor: pointer;
+          transition: background 0.2s;
+        }
+        .schedule-toggle.active {
+          background: var(--primary-color, #03a9f4);
+        }
+        .schedule-toggle::after {
+          content: '';
+          position: absolute;
+          top: 2px;
+          left: 2px;
+          width: 16px;
+          height: 16px;
+          background: #fff;
+          border-radius: 50%;
+          transition: transform 0.2s;
+        }
+        .schedule-toggle.active::after {
+          transform: translateX(16px);
+        }
+        .schedule-info { flex: 1; min-width: 0; }
+        .schedule-name { font-weight: 500; font-size: 0.9em; }
+        .schedule-time { font-size: 0.75em; opacity: 0.6; }
+        .schedule-actions button {
+          padding: 4px;
+          background: transparent;
+          border: none;
+          color: rgba(255,255,255,0.5);
+          cursor: pointer;
+          border-radius: 4px;
+        }
+        .schedule-actions button:hover {
+          background: rgba(255,255,255,0.1);
+          color: #fff;
+        }
+        .add-slot-form {
+          background: rgba(255,255,255,0.03);
+          border-radius: 8px;
+          padding: 16px;
+          margin-top: 12px;
+        }
+        .form-row { margin-bottom: 12px; }
+        .form-row label { display: block; font-size: 0.8em; opacity: 0.7; margin-bottom: 4px; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .day-selector {
+          display: flex;
+          gap: 4px;
+          flex-wrap: wrap;
+        }
+        .day-btn {
+          width: 32px;
+          height: 32px;
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 4px;
+          background: transparent;
+          color: rgba(255,255,255,0.6);
+          cursor: pointer;
+          font-size: 0.75em;
+          transition: all 0.2s;
+        }
+        .day-btn.selected {
+          background: var(--primary-color, #03a9f4);
+          border-color: var(--primary-color, #03a9f4);
+          color: #fff;
+        }
+        .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+        .current-time { font-size: 0.85em; opacity: 0.7; text-align: right; margin-bottom: 4px; }
       </style>
       <ha-card>
         <div class="card-content">
-          <div class="section-title">Today's Timeline</div>
+          <div class="current-time">Current: ${currentTime}</div>
+
+          <div class="section-title">Timeline</div>
           <div class="timeline">
-            <div class="timeline-header"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
-            <div class="timeline-bar"><div class="timeline-now"></div></div>
+            <div class="timeline-header">
+              <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
+            </div>
+            <div class="timeline-bar">
+              ${scheduleBlocks}
+              <div class="timeline-now"></div>
+            </div>
           </div>
+
           <div class="section-title">Power Schedule</div>
-          <div class="control-row">
+          <div class="power-section">
             <div class="power-row">
-              <label>On:</label><input type="time" id="power-on" value="07:00">
-              <label>Off:</label><input type="time" id="power-off" value="22:00">
+              <div class="schedule-toggle ${this._powerSchedule.enabled ? "active" : ""}" id="power-toggle"></div>
+              <label>On:</label>
+              <input type="time" id="power-on" value="${this._powerSchedule.onTime}">
+              <label>Off:</label>
+              <input type="time" id="power-off" value="${this._powerSchedule.offTime}">
               <button class="btn btn-primary" id="save-power">Save</button>
             </div>
           </div>
-          <div class="section-title">Time Slots</div>
-          <div id="time-slots"><div class="empty-state">No time slots configured</div></div>
-          <button class="btn btn-secondary" id="add-slot" style="width: 100%; margin-top: 8px;">+ Add Time Slot</button>
+
+          <div class="section-title">Content Schedules</div>
+          <div class="schedule-list" id="schedule-list">
+            ${this._schedules.length === 0 ? `
+              <div class="empty-state" style="padding: 20px; text-align: center; opacity: 0.5;">
+                No schedules configured
+              </div>
+            ` : this._schedules.map((slot, i2) => `
+              <div class="schedule-item" data-index="${i2}">
+                <div class="schedule-toggle ${slot.enabled ? "active" : ""}" data-action="toggle" data-index="${i2}"></div>
+                <div class="schedule-info">
+                  <div class="schedule-name">${this._escapeHtml(slot.name || "Schedule " + (i2 + 1))}</div>
+                  <div class="schedule-time">
+                    ${slot.startTime}${slot.endTime ? " - " + slot.endTime : ""} \xB7
+                    ${slot.days ? slot.days.map((d) => dayNames[d]).join(", ") : "Daily"} \xB7
+                    ${slot.mode || "text"}
+                  </div>
+                </div>
+                <div class="schedule-actions">
+                  <button data-action="edit" data-index="${i2}" title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z"/></svg>
+                  </button>
+                  <button data-action="delete" data-index="${i2}" title="Delete">
+                    <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/></svg>
+                  </button>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+
+          <button class="btn btn-secondary" id="add-slot" style="width: 100%;">+ Add Schedule</button>
+
+          <div class="add-slot-form" id="slot-form" style="display: none;">
+            <div class="form-row">
+              <label>Name</label>
+              <input type="text" class="text-input" id="slot-name" placeholder="Morning Message">
+            </div>
+            <div class="form-grid">
+              <div class="form-row">
+                <label>Start Time</label>
+                <input type="time" class="text-input" id="slot-start" value="08:00" style="width: 100%;">
+              </div>
+              <div class="form-row">
+                <label>End Time (optional)</label>
+                <input type="time" class="text-input" id="slot-end" style="width: 100%;">
+              </div>
+            </div>
+            <div class="form-row">
+              <label>Days</label>
+              <div class="day-selector" id="day-selector">
+                ${dayNames.map((name, i2) => `
+                  <button type="button" class="day-btn selected" data-day="${i2}">${name}</button>
+                `).join("")}
+              </div>
+            </div>
+            <div class="form-grid">
+              <div class="form-row">
+                <label>Mode</label>
+                <select class="dropdown" id="slot-mode">
+                  <option value="text">Text</option>
+                  <option value="clock">Clock</option>
+                  <option value="off">Power Off</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label>Effect</label>
+                <select class="dropdown" id="slot-effect">
+                  <option value="fixed">Fixed</option>
+                  <option value="scroll_ltr">Scroll Left</option>
+                  <option value="scroll_rtl">Scroll Right</option>
+                  <option value="blink">Blink</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row" id="text-row">
+              <label>Text</label>
+              <input type="text" class="text-input" id="slot-text" placeholder="Good Morning!">
+            </div>
+            <div class="form-grid">
+              <div class="form-row">
+                <label>Text Color</label>
+                <input type="color" id="slot-fg-color" value="#ff6600" style="width: 100%; height: 32px;">
+              </div>
+              <div class="form-row">
+                <label>Background</label>
+                <input type="color" id="slot-bg-color" value="#000000" style="width: 100%; height: 32px;">
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-secondary" id="cancel-slot">Cancel</button>
+              <button class="btn btn-primary" id="save-slot">Save Schedule</button>
+            </div>
+          </div>
         </div>
-      </ha-card>`,this.shadowRoot.getElementById("save-power")?.addEventListener("click",()=>{this.callService("ipixel_color","set_power_schedule",{enabled:!0,on_time:this.shadowRoot.getElementById("power-on")?.value,off_time:this.shadowRoot.getElementById("power-off")?.value})})}static getConfigElement(){return document.createElement("ipixel-simple-editor")}static getStubConfig(){return{entity:""}}};var ie=["#FFFFFF","#000000","#FF0000","#00FF00","#0080FF","#FFFF00","#FF00FF","#00FFFF","#FF8000","#8000FF","#2EC4FF","#0010A0","#A0FF00","#FF80C0","#808080","#C0C0C0"],se=[{value:"16x16",label:"16\xD716"},{value:"32x8",label:"32\xD78"},{value:"32x16",label:"32\xD716"},{value:"32x32",label:"32\xD732"},{value:"64x16",label:"64\xD716"},{value:"96x16",label:"96\xD716"},{value:"128x16",label:"128\xD716"}],H={r:25,g:25,b:25},ht=class extends L{constructor(){super(),this._width=64,this._height=16,this._tool="pen",this._drawing=!1,this._gridOn=!0,this._currentColor="#ff6600",this._scale=8,this._sending=!1,this._logicalCanvas=document.createElement("canvas"),this._ctx=this._logicalCanvas.getContext("2d"),this._displayCanvas=null,this._dctx=null,this._initialized=!1}setConfig(e){if(!e.entity)throw new Error("Please define an entity");this._config=e}set hass(e){let t=!!this._hass;if(this._hass=e,!t){let[i,s]=this.getResolution();this._width=i,this._height=s,this._logicalCanvas.width=i,this._logicalCanvas.height=s,this.render()}}render(){if(!this._hass)return;let e=this.getEntity(),t=this.isOn(),[i,s]=this.getResolution(),n=se.map(a=>{let o=a.value===`${this._width}x${this._height}`?"selected":"";return`<option value="${a.value}" ${o}>${a.label}</option>`}).join(""),r=ie.map(a=>`<div class="color-swatch ${a.toLowerCase()===this._currentColor.toLowerCase()?"active":""}" data-color="${a}" style="background:${a}"></div>`).join("");this.shadowRoot.innerHTML=`
+      </ha-card>`;
+      this._attachListeners();
+    }
+    _timeToMinutes(time) {
+      const [h2, m] = time.split(":").map(Number);
+      return h2 * 60 + m;
+    }
+    _escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    _attachListeners() {
+      this.shadowRoot.getElementById("power-toggle")?.addEventListener("click", (e2) => {
+        this._powerSchedule.enabled = !this._powerSchedule.enabled;
+        e2.currentTarget.classList.toggle("active", this._powerSchedule.enabled);
+      });
+      this.shadowRoot.getElementById("save-power")?.addEventListener("click", () => {
+        this._powerSchedule.onTime = this.shadowRoot.getElementById("power-on")?.value || "07:00";
+        this._powerSchedule.offTime = this.shadowRoot.getElementById("power-off")?.value || "22:00";
+        this._savePowerSchedule();
+        this.callService("ipixel_color", "set_power_schedule", {
+          enabled: this._powerSchedule.enabled,
+          on_time: this._powerSchedule.onTime,
+          off_time: this._powerSchedule.offTime
+        });
+      });
+      this.shadowRoot.getElementById("add-slot")?.addEventListener("click", () => {
+        this._editingSlot = null;
+        this._resetSlotForm();
+        this.shadowRoot.getElementById("slot-form").style.display = "block";
+      });
+      this.shadowRoot.getElementById("cancel-slot")?.addEventListener("click", () => {
+        this.shadowRoot.getElementById("slot-form").style.display = "none";
+        this._editingSlot = null;
+      });
+      this.shadowRoot.querySelectorAll(".day-btn").forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          e2.currentTarget.classList.toggle("selected");
+        });
+      });
+      this.shadowRoot.getElementById("slot-mode")?.addEventListener("change", (e2) => {
+        const textRow = this.shadowRoot.getElementById("text-row");
+        if (textRow) {
+          textRow.style.display = e2.target.value === "text" ? "block" : "none";
+        }
+      });
+      this.shadowRoot.getElementById("save-slot")?.addEventListener("click", () => {
+        const selectedDays = Array.from(this.shadowRoot.querySelectorAll(".day-btn.selected")).map((btn) => parseInt(btn.dataset.day));
+        const slot = {
+          name: this.shadowRoot.getElementById("slot-name")?.value || "Schedule",
+          startTime: this.shadowRoot.getElementById("slot-start")?.value || "08:00",
+          endTime: this.shadowRoot.getElementById("slot-end")?.value || "",
+          days: selectedDays.length === 7 ? null : selectedDays,
+          mode: this.shadowRoot.getElementById("slot-mode")?.value || "text",
+          effect: this.shadowRoot.getElementById("slot-effect")?.value || "fixed",
+          text: this.shadowRoot.getElementById("slot-text")?.value || "",
+          fgColor: this.shadowRoot.getElementById("slot-fg-color")?.value || "#ff6600",
+          bgColor: this.shadowRoot.getElementById("slot-bg-color")?.value || "#000000",
+          enabled: true
+        };
+        if (this._editingSlot !== null) {
+          this._schedules[this._editingSlot] = slot;
+        } else {
+          this._schedules.push(slot);
+        }
+        this._saveSchedules();
+        this.shadowRoot.getElementById("slot-form").style.display = "none";
+        this._editingSlot = null;
+        this.render();
+      });
+      this.shadowRoot.querySelectorAll('[data-action="toggle"]').forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          const index = parseInt(e2.currentTarget.dataset.index);
+          this._schedules[index].enabled = !this._schedules[index].enabled;
+          this._saveSchedules();
+          e2.currentTarget.classList.toggle("active", this._schedules[index].enabled);
+        });
+      });
+      this.shadowRoot.querySelectorAll('[data-action="edit"]').forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          const index = parseInt(e2.currentTarget.dataset.index);
+          const slot = this._schedules[index];
+          if (slot) {
+            this._editingSlot = index;
+            this._fillSlotForm(slot);
+            this.shadowRoot.getElementById("slot-form").style.display = "block";
+          }
+        });
+      });
+      this.shadowRoot.querySelectorAll('[data-action="delete"]').forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          const index = parseInt(e2.currentTarget.dataset.index);
+          if (confirm("Delete this schedule?")) {
+            this._schedules.splice(index, 1);
+            this._saveSchedules();
+            this.render();
+          }
+        });
+      });
+    }
+    _resetSlotForm() {
+      this.shadowRoot.getElementById("slot-name").value = "";
+      this.shadowRoot.getElementById("slot-start").value = "08:00";
+      this.shadowRoot.getElementById("slot-end").value = "";
+      this.shadowRoot.getElementById("slot-mode").value = "text";
+      this.shadowRoot.getElementById("slot-effect").value = "fixed";
+      this.shadowRoot.getElementById("slot-text").value = "";
+      this.shadowRoot.getElementById("slot-fg-color").value = "#ff6600";
+      this.shadowRoot.getElementById("slot-bg-color").value = "#000000";
+      this.shadowRoot.querySelectorAll(".day-btn").forEach((btn) => btn.classList.add("selected"));
+      this.shadowRoot.getElementById("text-row").style.display = "block";
+    }
+    _fillSlotForm(slot) {
+      this.shadowRoot.getElementById("slot-name").value = slot.name || "";
+      this.shadowRoot.getElementById("slot-start").value = slot.startTime || "08:00";
+      this.shadowRoot.getElementById("slot-end").value = slot.endTime || "";
+      this.shadowRoot.getElementById("slot-mode").value = slot.mode || "text";
+      this.shadowRoot.getElementById("slot-effect").value = slot.effect || "fixed";
+      this.shadowRoot.getElementById("slot-text").value = slot.text || "";
+      this.shadowRoot.getElementById("slot-fg-color").value = slot.fgColor || "#ff6600";
+      this.shadowRoot.getElementById("slot-bg-color").value = slot.bgColor || "#000000";
+      const selectedDays = slot.days || [0, 1, 2, 3, 4, 5, 6];
+      this.shadowRoot.querySelectorAll(".day-btn").forEach((btn) => {
+        btn.classList.toggle("selected", selectedDays.includes(parseInt(btn.dataset.day)));
+      });
+      this.shadowRoot.getElementById("text-row").style.display = slot.mode === "text" ? "block" : "none";
+    }
+    static getConfigElement() {
+      return document.createElement("ipixel-simple-editor");
+    }
+    static getStubConfig() {
+      return { entity: "" };
+    }
+  };
+
+  // src/cards/editor-card.js
+  var PALETTE_COLORS = [
+    "#FFFFFF",
+    "#000000",
+    "#FF0000",
+    "#00FF00",
+    "#0080FF",
+    "#FFFF00",
+    "#FF00FF",
+    "#00FFFF",
+    "#FF8000",
+    "#8000FF",
+    "#2EC4FF",
+    "#0010A0",
+    "#A0FF00",
+    "#FF80C0",
+    "#808080",
+    "#C0C0C0"
+  ];
+  var RESOLUTION_OPTIONS = [
+    { value: "16x16", label: "16\xD716" },
+    { value: "32x8", label: "32\xD78" },
+    { value: "32x16", label: "32\xD716" },
+    { value: "32x32", label: "32\xD732" },
+    { value: "64x16", label: "64\xD716" },
+    { value: "96x16", label: "96\xD716" },
+    { value: "128x16", label: "128\xD716" }
+  ];
+  var BG_COLOR = { r: 25, g: 25, b: 25 };
+  var iPIXELEditorCard = class extends iPIXELCardBase {
+    constructor() {
+      super();
+      this._width = 64;
+      this._height = 16;
+      this._tool = "pen";
+      this._drawing = false;
+      this._gridOn = true;
+      this._currentColor = "#ff6600";
+      this._scale = 8;
+      this._sending = false;
+      this._logicalCanvas = document.createElement("canvas");
+      this._ctx = this._logicalCanvas.getContext("2d");
+      this._displayCanvas = null;
+      this._dctx = null;
+      this._initialized = false;
+    }
+    setConfig(config) {
+      if (!config.entity)
+        throw new Error("Please define an entity");
+      this._config = config;
+    }
+    set hass(hass) {
+      const hadHass = !!this._hass;
+      this._hass = hass;
+      if (!hadHass) {
+        const [w, h2] = this.getResolution();
+        this._width = w;
+        this._height = h2;
+        this._logicalCanvas.width = w;
+        this._logicalCanvas.height = h2;
+        this.render();
+      }
+    }
+    render() {
+      if (!this._hass)
+        return;
+      const entity = this.getEntity();
+      const isOn = this.isOn();
+      const [deviceWidth, deviceHeight] = this.getResolution();
+      const resolutionOptions = RESOLUTION_OPTIONS.map((opt) => {
+        const selected = opt.value === `${this._width}x${this._height}` ? "selected" : "";
+        return `<option value="${opt.value}" ${selected}>${opt.label}</option>`;
+      }).join("");
+      const paletteSwatches = PALETTE_COLORS.map((color) => {
+        const active = color.toLowerCase() === this._currentColor.toLowerCase() ? "active" : "";
+        return `<div class="color-swatch ${active}" data-color="${color}" style="background:${color}"></div>`;
+      }).join("");
+      this.shadowRoot.innerHTML = `
       <style>
-        ${$}
+        ${iPIXELCardStyles}
 
         .editor-toolbar {
           display: flex;
@@ -688,33 +5115,33 @@ Example:
         <div class="card-content">
           <div class="card-header">
             <div class="card-title">
-              <span class="status-dot ${t?"":"off"}"></span>
-              ${this._config.name||"Pixel Editor"}
+              <span class="status-dot ${isOn ? "" : "off"}"></span>
+              ${this._config.name || "Pixel Editor"}
             </div>
           </div>
 
           <!-- Toolbar -->
           <div class="editor-toolbar">
             <div class="tool-group">
-              <button class="icon-btn ${this._tool==="pen"?"active":""}" id="pen-tool" title="Pen Tool">
+              <button class="icon-btn ${this._tool === "pen" ? "active" : ""}" id="pen-tool" title="Pen Tool">
                 <span class="tool-icon">&#9998;</span>
               </button>
-              <button class="icon-btn ${this._tool==="eraser"?"active":""}" id="eraser-tool" title="Eraser Tool">
+              <button class="icon-btn ${this._tool === "eraser" ? "active" : ""}" id="eraser-tool" title="Eraser Tool">
                 <span class="tool-icon">&#9746;</span>
               </button>
             </div>
             <input type="color" class="color-picker" id="color-picker" value="${this._currentColor}" title="Pick Color">
-            <button class="icon-btn ${this._gridOn?"active":""}" id="grid-toggle" title="Toggle LED Grid">
+            <button class="icon-btn ${this._gridOn ? "active" : ""}" id="grid-toggle" title="Toggle LED Grid">
               <span class="tool-icon">&#9638;</span>
             </button>
             <select class="resolution-select" id="resolution-select" title="Canvas Size">
-              ${n}
+              ${resolutionOptions}
             </select>
           </div>
 
           <!-- Color Palette -->
           <div class="color-palette" id="palette">
-            ${r}
+            ${paletteSwatches}
           </div>
 
           <!-- Canvas -->
@@ -724,16 +5151,16 @@ Example:
 
           <!-- Info -->
           <div class="info-row">
-            <span>Tool: ${this._tool} | Grid: ${this._gridOn?"LED":"Flat"}</span>
-            <span>Device: ${i}\xD7${s}</span>
+            <span>Tool: ${this._tool} | Grid: ${this._gridOn ? "LED" : "Flat"}</span>
+            <span>Device: ${deviceWidth}\xD7${deviceHeight}</span>
           </div>
 
           <!-- Actions -->
           <div class="button-grid button-grid-3">
             <button class="btn btn-secondary" id="clear-btn">Clear</button>
             <button class="btn btn-secondary" id="import-btn">Import</button>
-            <button class="btn btn-primary send-btn" id="send-btn" ${this._sending?"disabled":""}>
-              ${this._sending?"Sending...":"Send to Device"}
+            <button class="btn btn-primary send-btn" id="send-btn" ${this._sending ? "disabled" : ""}>
+              ${this._sending ? "Sending..." : "Send to Device"}
             </button>
           </div>
 
@@ -741,7 +5168,296 @@ Example:
           <input type="file" id="file-input" accept="image/png,image/gif,image/jpeg" style="display:none">
         </div>
       </ha-card>
-    `,this._initCanvas(),this._attachListeners()}_initCanvas(){this._displayCanvas=this.shadowRoot.getElementById("editor-canvas"),this._displayCanvas&&(this._dctx=this._displayCanvas.getContext("2d"),(this._logicalCanvas.width!==this._width||this._logicalCanvas.height!==this._height)&&(this._logicalCanvas.width=this._width,this._logicalCanvas.height=this._height),this._updateDisplaySize(),this._renderDisplay(),this._initialized=!0)}_updateDisplaySize(){this._displayCanvas&&(this._displayCanvas.width=this._width*this._scale,this._displayCanvas.height=this._height*this._scale)}_renderDisplay(){if(!this._dctx||!this._ctx)return;this._updateDisplaySize(),this._dctx.fillStyle="#050608",this._dctx.fillRect(0,0,this._displayCanvas.width,this._displayCanvas.height);let e=this._ctx.getImageData(0,0,this._width,this._height).data,t=this._scale,i=t*.38;for(let s=0;s<this._height;s++)for(let n=0;n<this._width;n++){let r=(s*this._width+n)*4,a=e[r],o=e[r+1],l=e[r+2],d=e[r+3]===0,h=n*t,f=s*t,x=h+t/2,u=f+t/2;if(this._dctx.fillStyle=`rgb(${H.r},${H.g},${H.b})`,this._dctx.fillRect(h,f,t,t),this._gridOn)if(d)this._dctx.fillStyle="rgb(5,5,5)",this._dctx.beginPath(),this._dctx.arc(x,u,i,0,Math.PI*2),this._dctx.fill();else{let b=this._dctx.createRadialGradient(x,u,i*.3,x,u,i*1.8);b.addColorStop(0,`rgba(${a},${o},${l},0.4)`),b.addColorStop(1,`rgba(${a},${o},${l},0)`),this._dctx.fillStyle=b,this._dctx.beginPath(),this._dctx.arc(x,u,i*1.8,0,Math.PI*2),this._dctx.fill(),this._dctx.fillStyle=`rgb(${a},${o},${l})`,this._dctx.beginPath(),this._dctx.arc(x,u,i,0,Math.PI*2),this._dctx.fill()}else d?this._dctx.fillStyle=`rgb(${H.r},${H.g},${H.b})`:this._dctx.fillStyle=`rgb(${a},${o},${l})`,this._dctx.fillRect(h,f,t,t)}}_getPixelPos(e){if(!this._displayCanvas)return null;let t=this._displayCanvas.getBoundingClientRect(),i=t.width/this._width,s=t.height/this._height,n=e.touches?e.touches[0].clientX:e.clientX,r=e.touches?e.touches[0].clientY:e.clientY,a=Math.floor((n-t.left)/i),o=Math.floor((r-t.top)/s);return a<0||o<0||a>=this._width||o>=this._height?null:{x:a,y:o}}_drawAt(e){let t=this._getPixelPos(e);t&&(this._tool==="pen"?(this._ctx.fillStyle=this._currentColor,this._ctx.fillRect(t.x,t.y,1,1)):this._ctx.clearRect(t.x,t.y,1,1),this._renderDisplay())}_attachListeners(){let e=this.shadowRoot.getElementById("editor-canvas");e&&(e.addEventListener("mousedown",t=>{t.preventDefault(),this._drawing=!0,this._drawAt(t)}),e.addEventListener("mousemove",t=>{this._drawing&&this._drawAt(t)}),window.addEventListener("mouseup",()=>{this._drawing=!1}),e.addEventListener("touchstart",t=>{t.preventDefault(),this._drawing=!0,this._drawAt(t)},{passive:!1}),e.addEventListener("touchmove",t=>{t.preventDefault(),this._drawing&&this._drawAt(t)},{passive:!1}),e.addEventListener("touchend",()=>{this._drawing=!1}),this.shadowRoot.getElementById("pen-tool")?.addEventListener("click",()=>{this._tool="pen",this.render()}),this.shadowRoot.getElementById("eraser-tool")?.addEventListener("click",()=>{this._tool="eraser",this.render()}),this.shadowRoot.getElementById("color-picker")?.addEventListener("input",t=>{this._currentColor=t.target.value,this._updatePaletteSelection()}),this.shadowRoot.querySelectorAll(".color-swatch").forEach(t=>{t.addEventListener("click",()=>{this._currentColor=t.dataset.color,this.shadowRoot.getElementById("color-picker").value=this._currentColor,this._updatePaletteSelection()})}),this.shadowRoot.getElementById("grid-toggle")?.addEventListener("click",()=>{this._gridOn=!this._gridOn,this.render()}),this.shadowRoot.getElementById("resolution-select")?.addEventListener("change",t=>{let[i,s]=t.target.value.split("x").map(n=>parseInt(n,10));this._resizeCanvas(i,s)}),this.shadowRoot.getElementById("clear-btn")?.addEventListener("click",()=>{this._clearCanvas()}),this.shadowRoot.getElementById("import-btn")?.addEventListener("click",()=>{this.shadowRoot.getElementById("file-input")?.click()}),this.shadowRoot.getElementById("file-input")?.addEventListener("change",t=>{let i=t.target.files?.[0];i&&this._handleImport(i)}),this.shadowRoot.getElementById("send-btn")?.addEventListener("click",()=>{this._sendToDevice()}))}_updatePaletteSelection(){this.shadowRoot.querySelectorAll(".color-swatch").forEach(e=>{e.dataset.color.toLowerCase()===this._currentColor.toLowerCase()?e.classList.add("active"):e.classList.remove("active")})}_resizeCanvas(e,t){let i=this._ctx.getImageData(0,0,this._width,this._height);this._width=e,this._height=t,this._logicalCanvas.width=e,this._logicalCanvas.height=t,this._ctx.putImageData(i,0,0),this._updateDisplaySize(),this._renderDisplay();let s=this.shadowRoot.querySelector(".info-row span:first-child");s&&(s.textContent=`Tool: ${this._tool} | Grid: ${this._gridOn?"LED":"Flat"}`)}_clearCanvas(){this._ctx.clearRect(0,0,this._width,this._height),this._renderDisplay()}_handleImport(e){let t=new FileReader;t.onload=i=>{let s=new Image;s.onload=()=>{this._ctx.clearRect(0,0,this._width,this._height),this._ctx.imageSmoothingEnabled=!1,this._ctx.drawImage(s,0,0,this._width,this._height),this._renderDisplay()},s.src=i.target.result},t.readAsDataURL(e)}async _sendToDevice(){if(!this._sending){this._sending=!0,this.render();try{let e=this._ctx.getImageData(0,0,this._width,this._height).data,t=[];for(let i=0;i<this._height;i++)for(let s=0;s<this._width;s++){let n=(i*this._width+s)*4,r=e[n],a=e[n+1],o=e[n+2];e[n+3]>0&&t.push({x:s,y:i,color:this._rgbToHex(r,a,o)})}t.length>0&&await this.callService("ipixel_color","set_pixels",{pixels:t})}catch(e){console.error("Failed to send pixels to device:",e)}finally{this._sending=!1,this.render()}}}_rgbToHex(e,t,i){return(e<<16|t<<8|i).toString(16).padStart(6,"0")}static getConfigElement(){return document.createElement("ipixel-simple-editor")}static getStubConfig(){return{entity:""}}getCardSize(){return 4}};var pt=class extends HTMLElement{constructor(){super(),this.attachShadow({mode:"open"})}setConfig(e){this._config=e,this.render()}set hass(e){this._hass=e,this.render()}render(){if(!this._hass)return;let e=Object.keys(this._hass.states).filter(t=>t.startsWith("text.")||t.startsWith("switch.")).sort();this.shadowRoot.innerHTML=`
+    `;
+      this._initCanvas();
+      this._attachListeners();
+    }
+    _initCanvas() {
+      this._displayCanvas = this.shadowRoot.getElementById("editor-canvas");
+      if (!this._displayCanvas)
+        return;
+      this._dctx = this._displayCanvas.getContext("2d");
+      if (this._logicalCanvas.width !== this._width || this._logicalCanvas.height !== this._height) {
+        this._logicalCanvas.width = this._width;
+        this._logicalCanvas.height = this._height;
+      }
+      this._updateDisplaySize();
+      this._renderDisplay();
+      this._initialized = true;
+    }
+    _updateDisplaySize() {
+      if (!this._displayCanvas)
+        return;
+      this._displayCanvas.width = this._width * this._scale;
+      this._displayCanvas.height = this._height * this._scale;
+    }
+    _renderDisplay() {
+      if (!this._dctx || !this._ctx)
+        return;
+      this._updateDisplaySize();
+      this._dctx.fillStyle = "#050608";
+      this._dctx.fillRect(0, 0, this._displayCanvas.width, this._displayCanvas.height);
+      const imgData = this._ctx.getImageData(0, 0, this._width, this._height).data;
+      const cellSize = this._scale;
+      const ledRadius = cellSize * 0.38;
+      for (let y = 0; y < this._height; y++) {
+        for (let x = 0; x < this._width; x++) {
+          const idx = (y * this._width + x) * 4;
+          const r2 = imgData[idx];
+          const g = imgData[idx + 1];
+          const b = imgData[idx + 2];
+          const a2 = imgData[idx + 3];
+          const isOffPixel = a2 === 0;
+          const sx = x * cellSize;
+          const sy = y * cellSize;
+          const cx = sx + cellSize / 2;
+          const cy = sy + cellSize / 2;
+          this._dctx.fillStyle = `rgb(${BG_COLOR.r},${BG_COLOR.g},${BG_COLOR.b})`;
+          this._dctx.fillRect(sx, sy, cellSize, cellSize);
+          if (this._gridOn) {
+            if (!isOffPixel) {
+              const grad = this._dctx.createRadialGradient(
+                cx,
+                cy,
+                ledRadius * 0.3,
+                cx,
+                cy,
+                ledRadius * 1.8
+              );
+              grad.addColorStop(0, `rgba(${r2},${g},${b},0.4)`);
+              grad.addColorStop(1, `rgba(${r2},${g},${b},0)`);
+              this._dctx.fillStyle = grad;
+              this._dctx.beginPath();
+              this._dctx.arc(cx, cy, ledRadius * 1.8, 0, Math.PI * 2);
+              this._dctx.fill();
+              this._dctx.fillStyle = `rgb(${r2},${g},${b})`;
+              this._dctx.beginPath();
+              this._dctx.arc(cx, cy, ledRadius, 0, Math.PI * 2);
+              this._dctx.fill();
+            } else {
+              this._dctx.fillStyle = "rgb(5,5,5)";
+              this._dctx.beginPath();
+              this._dctx.arc(cx, cy, ledRadius, 0, Math.PI * 2);
+              this._dctx.fill();
+            }
+          } else {
+            if (!isOffPixel) {
+              this._dctx.fillStyle = `rgb(${r2},${g},${b})`;
+            } else {
+              this._dctx.fillStyle = `rgb(${BG_COLOR.r},${BG_COLOR.g},${BG_COLOR.b})`;
+            }
+            this._dctx.fillRect(sx, sy, cellSize, cellSize);
+          }
+        }
+      }
+    }
+    _getPixelPos(evt) {
+      if (!this._displayCanvas)
+        return null;
+      const rect = this._displayCanvas.getBoundingClientRect();
+      const cellW = rect.width / this._width;
+      const cellH = rect.height / this._height;
+      const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+      const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+      const x = Math.floor((clientX - rect.left) / cellW);
+      const y = Math.floor((clientY - rect.top) / cellH);
+      if (x < 0 || y < 0 || x >= this._width || y >= this._height)
+        return null;
+      return { x, y };
+    }
+    _drawAt(evt) {
+      const p = this._getPixelPos(evt);
+      if (!p)
+        return;
+      if (this._tool === "pen") {
+        this._ctx.fillStyle = this._currentColor;
+        this._ctx.fillRect(p.x, p.y, 1, 1);
+      } else {
+        this._ctx.clearRect(p.x, p.y, 1, 1);
+      }
+      this._renderDisplay();
+    }
+    _attachListeners() {
+      const canvas = this.shadowRoot.getElementById("editor-canvas");
+      if (!canvas)
+        return;
+      canvas.addEventListener("mousedown", (e2) => {
+        e2.preventDefault();
+        this._drawing = true;
+        this._drawAt(e2);
+      });
+      canvas.addEventListener("mousemove", (e2) => {
+        if (this._drawing)
+          this._drawAt(e2);
+      });
+      window.addEventListener("mouseup", () => {
+        this._drawing = false;
+      });
+      canvas.addEventListener("touchstart", (e2) => {
+        e2.preventDefault();
+        this._drawing = true;
+        this._drawAt(e2);
+      }, { passive: false });
+      canvas.addEventListener("touchmove", (e2) => {
+        e2.preventDefault();
+        if (this._drawing)
+          this._drawAt(e2);
+      }, { passive: false });
+      canvas.addEventListener("touchend", () => {
+        this._drawing = false;
+      });
+      this.shadowRoot.getElementById("pen-tool")?.addEventListener("click", () => {
+        this._tool = "pen";
+        this.render();
+      });
+      this.shadowRoot.getElementById("eraser-tool")?.addEventListener("click", () => {
+        this._tool = "eraser";
+        this.render();
+      });
+      this.shadowRoot.getElementById("color-picker")?.addEventListener("input", (e2) => {
+        this._currentColor = e2.target.value;
+        this._updatePaletteSelection();
+      });
+      this.shadowRoot.querySelectorAll(".color-swatch").forEach((swatch) => {
+        swatch.addEventListener("click", () => {
+          this._currentColor = swatch.dataset.color;
+          this.shadowRoot.getElementById("color-picker").value = this._currentColor;
+          this._updatePaletteSelection();
+        });
+      });
+      this.shadowRoot.getElementById("grid-toggle")?.addEventListener("click", () => {
+        this._gridOn = !this._gridOn;
+        this.render();
+      });
+      this.shadowRoot.getElementById("resolution-select")?.addEventListener("change", (e2) => {
+        const [w, h2] = e2.target.value.split("x").map((v) => parseInt(v, 10));
+        this._resizeCanvas(w, h2);
+      });
+      this.shadowRoot.getElementById("clear-btn")?.addEventListener("click", () => {
+        this._clearCanvas();
+      });
+      this.shadowRoot.getElementById("import-btn")?.addEventListener("click", () => {
+        this.shadowRoot.getElementById("file-input")?.click();
+      });
+      this.shadowRoot.getElementById("file-input")?.addEventListener("change", (e2) => {
+        const file = e2.target.files?.[0];
+        if (file)
+          this._handleImport(file);
+      });
+      this.shadowRoot.getElementById("send-btn")?.addEventListener("click", () => {
+        this._sendToDevice();
+      });
+    }
+    _updatePaletteSelection() {
+      this.shadowRoot.querySelectorAll(".color-swatch").forEach((swatch) => {
+        if (swatch.dataset.color.toLowerCase() === this._currentColor.toLowerCase()) {
+          swatch.classList.add("active");
+        } else {
+          swatch.classList.remove("active");
+        }
+      });
+    }
+    _resizeCanvas(w, h2) {
+      const oldData = this._ctx.getImageData(0, 0, this._width, this._height);
+      this._width = w;
+      this._height = h2;
+      this._logicalCanvas.width = w;
+      this._logicalCanvas.height = h2;
+      this._ctx.putImageData(oldData, 0, 0);
+      this._updateDisplaySize();
+      this._renderDisplay();
+      const infoRow = this.shadowRoot.querySelector(".info-row span:first-child");
+      if (infoRow) {
+        infoRow.textContent = `Tool: ${this._tool} | Grid: ${this._gridOn ? "LED" : "Flat"}`;
+      }
+    }
+    _clearCanvas() {
+      this._ctx.clearRect(0, 0, this._width, this._height);
+      this._renderDisplay();
+    }
+    _handleImport(file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const img = new Image();
+        img.onload = () => {
+          this._ctx.clearRect(0, 0, this._width, this._height);
+          this._ctx.imageSmoothingEnabled = false;
+          this._ctx.drawImage(img, 0, 0, this._width, this._height);
+          this._renderDisplay();
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+    async _sendToDevice() {
+      if (this._sending)
+        return;
+      this._sending = true;
+      this.render();
+      try {
+        const imgData = this._ctx.getImageData(0, 0, this._width, this._height).data;
+        const pixels = [];
+        for (let y = 0; y < this._height; y++) {
+          for (let x = 0; x < this._width; x++) {
+            const idx = (y * this._width + x) * 4;
+            const r2 = imgData[idx];
+            const g = imgData[idx + 1];
+            const b = imgData[idx + 2];
+            const a2 = imgData[idx + 3];
+            if (a2 > 0) {
+              pixels.push({
+                x,
+                y,
+                color: this._rgbToHex(r2, g, b)
+              });
+            }
+          }
+        }
+        if (pixels.length > 0) {
+          await this.callService("ipixel_color", "set_pixels", {
+            pixels
+          });
+        }
+      } catch (err) {
+        console.error("Failed to send pixels to device:", err);
+      } finally {
+        this._sending = false;
+        this.render();
+      }
+    }
+    _rgbToHex(r2, g, b) {
+      return (r2 << 16 | g << 8 | b).toString(16).padStart(6, "0");
+    }
+    static getConfigElement() {
+      return document.createElement("ipixel-simple-editor");
+    }
+    static getStubConfig() {
+      return { entity: "" };
+    }
+    getCardSize() {
+      return 4;
+    }
+  };
+
+  // src/editor.js
+  var iPIXELSimpleEditor = class extends HTMLElement {
+    constructor() {
+      super();
+      this.attachShadow({ mode: "open" });
+    }
+    setConfig(config) {
+      this._config = config;
+      this.render();
+    }
+    set hass(hass) {
+      this._hass = hass;
+      this.render();
+    }
+    render() {
+      if (!this._hass)
+        return;
+      const entities = Object.keys(this._hass.states).filter((e2) => e2.startsWith("text.") || e2.startsWith("switch.")).sort();
+      this.shadowRoot.innerHTML = `
       <style>
         .row { margin-bottom: 12px; }
         label { display: block; margin-bottom: 4px; font-weight: 500; font-size: 0.9em; }
@@ -759,14 +5475,61 @@ Example:
         <label>Entity</label>
         <select id="entity">
           <option value="">Select entity</option>
-          ${e.map(t=>`
-            <option value="${t}" ${this._config?.entity===t?"selected":""}>
-              ${this._hass.states[t]?.attributes?.friendly_name||t}
+          ${entities.map((e2) => `
+            <option value="${e2}" ${this._config?.entity === e2 ? "selected" : ""}>
+              ${this._hass.states[e2]?.attributes?.friendly_name || e2}
             </option>
           `).join("")}
         </select>
       </div>
       <div class="row">
         <label>Name (optional)</label>
-        <input type="text" id="name" value="${this._config?.name||""}" placeholder="Display name">
-      </div>`,this.shadowRoot.querySelectorAll("select, input").forEach(t=>{t.addEventListener("change",()=>this.fireConfig())})}fireConfig(){this.dispatchEvent(new CustomEvent("config-changed",{detail:{config:{type:this._config?.type||"custom:ipixel-display-card",entity:this.shadowRoot.getElementById("entity")?.value,name:this.shadowRoot.getElementById("name")?.value||void 0}},bubbles:!0,composed:!0}))}};customElements.define("ipixel-display-card",ot);customElements.define("ipixel-controls-card",at);customElements.define("ipixel-text-card",lt);customElements.define("ipixel-playlist-card",ct);customElements.define("ipixel-schedule-card",dt);customElements.define("ipixel-editor-card",ht);customElements.define("ipixel-simple-editor",pt);window.customCards=window.customCards||[];[{type:"ipixel-display-card",name:"iPIXEL Display",description:"LED matrix preview with power control"},{type:"ipixel-controls-card",name:"iPIXEL Controls",description:"Brightness, mode, and orientation controls"},{type:"ipixel-text-card",name:"iPIXEL Text",description:"Text input with effects and colors"},{type:"ipixel-playlist-card",name:"iPIXEL Playlist",description:"Playlist management"},{type:"ipixel-schedule-card",name:"iPIXEL Schedule",description:"Power schedule and time slots"},{type:"ipixel-editor-card",name:"iPIXEL Pixel Editor",description:"Draw custom pixel art and send to your LED matrix"}].forEach(p=>window.customCards.push({...p,preview:!0,documentationURL:"https://github.com/cagcoach/ha-ipixel-color"}));console.info(`%c iPIXEL Cards %c ${vt} `,"background:#03a9f4;color:#fff;padding:2px 6px;border-radius:4px 0 0 4px;","background:#333;color:#fff;padding:2px 6px;border-radius:0 4px 4px 0;");})();
+        <input type="text" id="name" value="${this._config?.name || ""}" placeholder="Display name">
+      </div>`;
+      this.shadowRoot.querySelectorAll("select, input").forEach((el) => {
+        el.addEventListener("change", () => this.fireConfig());
+      });
+    }
+    fireConfig() {
+      this.dispatchEvent(new CustomEvent("config-changed", {
+        detail: {
+          config: {
+            type: this._config?.type || "custom:ipixel-display-card",
+            entity: this.shadowRoot.getElementById("entity")?.value,
+            name: this.shadowRoot.getElementById("name")?.value || void 0
+          }
+        },
+        bubbles: true,
+        composed: true
+      }));
+    }
+  };
+
+  // src/index.js
+  customElements.define("ipixel-display-card", iPIXELDisplayCard);
+  customElements.define("ipixel-controls-card", iPIXELControlsCard);
+  customElements.define("ipixel-text-card", iPIXELTextCard);
+  customElements.define("ipixel-playlist-card", iPIXELPlaylistCard);
+  customElements.define("ipixel-schedule-card", iPIXELScheduleCard);
+  customElements.define("ipixel-editor-card", iPIXELEditorCard);
+  customElements.define("ipixel-simple-editor", iPIXELSimpleEditor);
+  window.customCards = window.customCards || [];
+  [
+    { type: "ipixel-display-card", name: "iPIXEL Display", description: "LED matrix preview with power control" },
+    { type: "ipixel-controls-card", name: "iPIXEL Controls", description: "Brightness, mode, and orientation controls" },
+    { type: "ipixel-text-card", name: "iPIXEL Text", description: "Text input with effects and colors" },
+    { type: "ipixel-playlist-card", name: "iPIXEL Playlist", description: "Playlist management" },
+    { type: "ipixel-schedule-card", name: "iPIXEL Schedule", description: "Power schedule and time slots" },
+    { type: "ipixel-editor-card", name: "iPIXEL Pixel Editor", description: "Draw custom pixel art and send to your LED matrix" }
+  ].forEach((card) => window.customCards.push({
+    ...card,
+    preview: true,
+    documentationURL: "https://github.com/cagcoach/ha-ipixel-color"
+  }));
+  console.info(
+    `%c iPIXEL Cards %c ${CARD_VERSION} `,
+    "background:#03a9f4;color:#fff;padding:2px 6px;border-radius:4px 0 0 4px;",
+    "background:#333;color:#fff;padding:2px 6px;border-radius:0 4px 4px 0;"
+  );
+})();
+//# sourceMappingURL=ipixel-display-card.js.map
