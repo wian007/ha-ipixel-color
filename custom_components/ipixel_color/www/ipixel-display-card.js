@@ -2968,20 +2968,21 @@
           localStorage.setItem("iPIXEL_Resolution", JSON.stringify([sensorWidth, sensorHeight]));
         } catch (e2) {
         }
-      }
-      if (this._cachedResolution) {
         return this._cachedResolution;
       }
       try {
         const saved = localStorage.getItem("iPIXEL_Resolution");
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length === 2) {
+          if (Array.isArray(parsed) && parsed.length === 2 && parsed[0] > 0 && parsed[1] > 0) {
             this._cachedResolution = parsed;
             return parsed;
           }
         }
       } catch (e2) {
+      }
+      if (this._cachedResolution) {
+        return this._cachedResolution;
       }
       if (this._config?.width && this._config?.height) {
         return [this._config.width, this._config.height];

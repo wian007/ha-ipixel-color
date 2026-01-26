@@ -72,31 +72,32 @@ export class iPIXELDisplayCard extends iPIXELCardBase {
   _getResolutionCached() {
     const [sensorWidth, sensorHeight] = this.getResolution();
 
-    // If sensors return valid values, cache them
+    // If sensors return valid non-default values, use them and cache
     if (sensorWidth > 0 && sensorHeight > 0 && sensorWidth !== 64) {
       this._cachedResolution = [sensorWidth, sensorHeight];
       // Also save to localStorage for persistence
       try {
         localStorage.setItem('iPIXEL_Resolution', JSON.stringify([sensorWidth, sensorHeight]));
       } catch (e) { }
-    }
-
-    // If we have cached resolution, use it
-    if (this._cachedResolution) {
       return this._cachedResolution;
     }
 
-    // Try to load from localStorage
+    // Check localStorage first (source of truth for preview mode / BLE auto-detect)
     try {
       const saved = localStorage.getItem('iPIXEL_Resolution');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length === 2) {
+        if (Array.isArray(parsed) && parsed.length === 2 && parsed[0] > 0 && parsed[1] > 0) {
           this._cachedResolution = parsed;
           return parsed;
         }
       }
     } catch (e) { }
+
+    // If we have cached resolution (from previous sensor read), use it
+    if (this._cachedResolution) {
+      return this._cachedResolution;
+    }
 
     // Fall back to config or default
     if (this._config?.width && this._config?.height) {
