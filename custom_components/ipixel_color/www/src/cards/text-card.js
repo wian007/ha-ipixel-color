@@ -6,7 +6,7 @@
 import { iPIXELCardBase } from '../base.js';
 import { iPIXELCardStyles } from '../styles.js';
 import { updateDisplayState } from '../state.js';
-import { EFFECTS, EFFECT_CATEGORIES } from '../effects/index.js';
+import { EFFECTS, EFFECT_CATEGORIES } from 'react-pixel-display/core';
 
 // Rainbow mode names (0-9)
 const RAINBOW_MODES = [

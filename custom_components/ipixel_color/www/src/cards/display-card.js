@@ -6,11 +6,29 @@
 
 import { iPIXELCardBase } from '../base.js';
 import { iPIXELCardStyles } from '../styles.js';
-import { textToPixels, textToScrollPixels } from '../font.js';
-import { textToPixelsCanvas, textToScrollPixelsCanvas, loadFont, isFontLoaded } from '../canvas-font.js';
-import { textToPixelsBdf, textToScrollPixelsBdf, loadBdfFont, isBdfFontLoaded, getHeightKey } from '../bdf-font.js';
-import { LEDMatrixRenderer, createPixelSvg, EFFECTS } from '../renderer.js';
+import {
+  textToPixels, textToScrollPixels,
+  textToPixelsCanvas, textToScrollPixelsCanvas, loadFont, isFontLoaded,
+  textToPixelsBdf, textToScrollPixelsBdf, loadBdfFont, isBdfFontLoaded, getHeightKey,
+  LEDMatrixRenderer, EFFECTS, configureFonts,
+} from 'react-pixel-display/core';
 import { getDisplayState, updateDisplayState } from '../state.js';
+
+// Configure font resolution for HA environment
+const isHA = typeof window !== 'undefined' && (
+  typeof window.hassConnection !== 'undefined' ||
+  document.querySelector('home-assistant') !== null
+);
+
+if (isHA) {
+  configureFonts({
+    ttfResolver: (name) => `/hacsfiles/ipixel_color/fonts/${name}.ttf`,
+    bdfResolver: (_name, file) => `/hacsfiles/ipixel_color/fonts/${file || _name}`,
+  });
+} else if (typeof window !== 'undefined') {
+  const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+  configureFonts({ baseUrl: `${basePath}fonts` });
+}
 
 // Global renderer cache - preserves renderer across card re-renders
 const rendererCache = new Map();
