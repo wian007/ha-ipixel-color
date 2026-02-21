@@ -123,9 +123,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         async_track_time_interval(hass, _sync_time, timedelta(hours=1))
     )
 
-    # Register services
-    await _async_register_services(hass, entry, api, schedule_manager)
-
     # Set up platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
