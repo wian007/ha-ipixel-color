@@ -94,15 +94,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Get device info for sensors
         await api.get_device_info()
 
-        # Turn on the device if it's off (some models may be off by default)
-        await api.set_power(True)
-
-        # Sync time immediately on setup
-        await api.sync_time()
-
-        # Update settings to apply any defaults
-        await update_ipixel_display(hass, name, api)
-
     except iPIXELTimeoutError as err:
         _LOGGER.error("Connection timeout to iPIXEL device %s: %s", address, err)
         raise ConfigEntryNotReady(f"Connection timeout: {err}") from err
