@@ -80,7 +80,7 @@ def async_get_entry_for_service_call(
 ) -> tuple[dr.DeviceEntry, ConfigEntry]:
     """Get the entry ID related to a service call (by device ID)."""
     device_registry = dr.async_get(call.hass)
-    device_id = call.data[ATTR_DEVICE_ID]
+    device_id = call.data[ATTR_DEVICE_ID][0] if isinstance(call.data[ATTR_DEVICE_ID], list) else call.data[ATTR_DEVICE_ID]
 
     _LOGGER.debug("Looking up device_id %r for service call %s", device_id, call.service)
 
