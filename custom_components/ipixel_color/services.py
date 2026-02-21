@@ -82,7 +82,7 @@ def async_get_entry_for_service_call(
     device_registry = dr.async_get(call.hass)
     device_id = call.data[ATTR_DEVICE_ID]
 
-    _LOGGER.debug("Looking up device_id %o for service call %s", device_id, call.service)
+    _LOGGER.debug("Looking up device_id %r for service call %s", device_id, call.service)
 
     if (device_entry := device_registry.async_get(device_id)) is None:
         raise ServiceValidationError(
