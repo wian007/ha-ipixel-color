@@ -59,7 +59,7 @@ class iPIXELSwitch(SwitchEntity):
         self._name = name
         self._attr_name = name
         self._attr_unique_id = f"{address}_power"
-        self._is_on = True  # Assume on until we check
+        self._is_on = False
         self._available = True
 
         # Device info for grouping in device registry

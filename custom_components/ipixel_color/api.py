@@ -70,7 +70,7 @@ class iPIXELAPI:
         """
         self._address = address
         self._bluetooth = BluetoothClient(hass, address)
-        self._power_state = False
+        self._power_state = True  # Assume on until we check
         self._device_info: dict[str, Any] | None = None
         self._device_response: bytes | None = None
         # Frame diffing support for draw_visuals
