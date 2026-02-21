@@ -884,9 +884,7 @@ class iPIXELAPI:
             True if text was sent successfully
         """
         try:
-            # Get device info for height
-            device_info = await self.get_device_info()
-            device_height = matrix_height if matrix_height else device_info["height"]
+            device_height = matrix_height if matrix_height else None
 
             # Generate text commands using pypixelcolor
             commands = make_text_command(
