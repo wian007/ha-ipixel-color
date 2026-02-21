@@ -752,9 +752,11 @@ class iPIXELAPI:
                 await self._bluetooth._client.write_gatt_char(
                     "0000fa02-0000-1000-8000-00805f9b34fb", command
                 )
+                _LOGGER.debug("Device info command sent, waiting for response...")
                 
                 # Wait for response (5 second timeout)
                 await asyncio.wait_for(response_received.wait(), timeout=5.0)
+                _LOGGER.debug("Device info response received: %s", self._device_response)
                 
                 if self._device_response:
                     self._device_info = parse_device_response(self._device_response)
