@@ -4,6 +4,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from pypixelcolor.lib.device_info import DeviceInfo
+
 try:
     from pypixelcolor.lib.internal_commands import build_get_device_info_command
     from pypixelcolor.lib.device_info import parse_device_info as pypixelcolor_parse_device_info
@@ -29,7 +31,7 @@ def build_device_info_command() -> bytes:
     return build_get_device_info_command()
 
 
-def parse_device_response(response: bytes) -> dict[str, Any]:
+def parse_device_response(response: bytes) -> tuple[dict[str, Any], DeviceInfo]:
     """Parse device info response using pypixelcolor.
 
     Args:
@@ -68,4 +70,4 @@ def parse_device_response(response: bytes) -> dict[str, Any]:
                  device_info["width"], device_info["height"],
                  device_info["device_type"], device_info["led_type"])
 
-    return device_info
+    return (device_info, device_info_obj)

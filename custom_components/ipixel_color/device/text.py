@@ -6,6 +6,7 @@ from typing import Optional
 try:
     from pypixelcolor.commands.send_text import send_text
     from pypixelcolor.lib.transport.send_plan import SendPlan
+    from pypixelcolor.lib.device_info import DeviceInfo
 except ImportError:
     send_text = None
     SendPlan = None
@@ -20,7 +21,8 @@ def make_text_command(
     speed: int = 80,
     rainbow_mode: int = 0,
     save_slot: int = 0,
-    device_height: Optional[int] = None
+    device_height: Optional[int] = None,
+    device_info_obj: Optional[DeviceInfo] = None
 ) -> list[bytes]:
     """Build text display command using pypixelcolor.
 
@@ -55,7 +57,8 @@ def make_text_command(
         speed=speed,
         rainbow_mode=rainbow_mode,
         save_slot=save_slot,
-        char_height=device_height
+        char_height=device_height,
+        device_info=device_info_obj
     )
 
     # Extract command bytes from all windows

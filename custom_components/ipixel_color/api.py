@@ -5,6 +5,7 @@ import asyncio
 import logging
 from typing import Any, TYPE_CHECKING
 from bleak.exc import BleakError
+from pypixelcolor.lib.device_info import DeviceInfo
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -73,6 +74,7 @@ class iPIXELAPI:
         self._bluetooth = BluetoothClient(hass, address)
         self._power_state = True  # Assume on until we check
         self._device_info: dict[str, Any] | None = None
+        self._device_info_obj: DeviceInfo | None = None  # Store the original DeviceInfo object
         self._device_response: bytes | None = None
         # Frame diffing support for draw_visuals
         self._last_frame_bytes: bytes | None = None
@@ -769,7 +771,7 @@ class iPIXELAPI:
                 _LOGGER.debug("Device info response received: %s", self._device_response)
                 
                 if self._device_response:
-                    self._device_info = parse_device_response(self._device_response)
+                    (self._device_info, self._device_info_obj) = parse_device_response(self._device_response)
                 else:
                     raise Exception("No response received")
                     
@@ -884,6 +886,8 @@ class iPIXELAPI:
             True if text was sent successfully
         """
         try:
+            await self.get_device_info()  # Ensure device info is loaded
+            device_info_obj = self._device_info_obj
             device_height = matrix_height if matrix_height else None
 
             # Generate text commands using pypixelcolor
@@ -896,7 +900,8 @@ class iPIXELAPI:
                 speed=speed,
                 rainbow_mode=rainbow_mode,
                 save_slot=0,
-                device_height=device_height
+                device_height=device_height,
+                device_info_obj=device_info_obj
             )
 
             # Send all command frames
