@@ -340,6 +340,11 @@ class iPIXELClock24HSwitch(SwitchEntity, RestoreEntity):
         _LOGGER.debug("Clock 12h format enabled")
         await self._trigger_auto_update()
 
+    async def async_added_to_hass(self) -> None:
+        """Run when entity about to be added to hass."""
+        await super().async_added_to_hass()
+        await update_ipixel_display(self.hass, self._name, self._api)
+
     async def _trigger_auto_update(self) -> None:
         """Trigger display update if auto-update is enabled and in clock mode."""
         try:
@@ -401,6 +406,9 @@ class iPIXELClockShowDateSwitch(SwitchEntity, RestoreEntity):
         if last_state is not None:
             self._is_on = last_state.state == "on"
             _LOGGER.debug("Restored clock show date state: %s", self._is_on)
+            
+        await update_ipixel_display(self.hass, self._name, self._api)
+        
 
     @property
     def is_on(self) -> bool:
@@ -572,6 +580,8 @@ class iPIXELFunModeSwitch(SwitchEntity, RestoreEntity):
         if last_state is not None:
             self._is_on = last_state.state == "on"
             _LOGGER.debug("Restored fun mode state: %s", self._is_on)
+        
+        self._api.set_fun_mode(self._is_on)  # Ensure device state matches restored state
 
     @property
     def is_on(self) -> bool:
