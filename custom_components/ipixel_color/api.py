@@ -739,10 +739,13 @@ class iPIXELAPI:
                 self._device_response = bytes(data)
                 response_received.set()
             
-            # Enable notifications temporarily
-            await self._bluetooth._client.start_notify(
-                "0000fa03-0000-1000-8000-00805f9b34fb", response_handler
-            )
+            try:
+                # Enable notifications temporarily
+                await self._bluetooth._client.start_notify(
+                    "0000fa03-0000-1000-8000-00805f9b34fb", response_handler
+                )
+            except Exception as err:
+                _LOGGER.error("Failed to start notifications for device info: %s", err)
             
             try:
                 # Send command
