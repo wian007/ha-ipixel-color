@@ -1,6 +1,9 @@
 display_text:
   name: Display Text
   description: Display text on the iPIXEL device with custom effects and colors
+  target:
+    entity:
+      domain: ipixel_color
   fields:
     text:
       name: Text
@@ -68,6 +71,8 @@ display_text:
           options:
             - label: "Auto (use device height)"
               value: ""
+            - label: "8 pixels"
+              value: "8"
             - label: "16 pixels"
               value: "16"
             - label: "20 pixels"
