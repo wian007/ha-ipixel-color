@@ -4,10 +4,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import Any, TYPE_CHECKING
+from bleak.exc import BleakError
+from pypixelcolor.lib.device_info import DeviceInfo
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
+from .const import NOTIFY_UUID, WRITE_UUID
 from .bluetooth.client import BluetoothClient
 from .device.commands import (
     make_power_command,
@@ -69,8 +72,9 @@ class iPIXELAPI:
         """
         self._address = address
         self._bluetooth = BluetoothClient(hass, address)
-        self._power_state = False
+        self._power_state = True  # Assume on until we check
         self._device_info: dict[str, Any] | None = None
+        self._device_info_obj: DeviceInfo | None = None  # Store the original DeviceInfo object
         self._device_response: bytes | None = None
         # Frame diffing support for draw_visuals
         self._last_frame_bytes: bytes | None = None
@@ -739,28 +743,45 @@ class iPIXELAPI:
                 self._device_response = bytes(data)
                 response_received.set()
             
-            # Enable notifications temporarily
-            await self._bluetooth._client.start_notify(
-                "0000fa03-0000-1000-8000-00805f9b34fb", response_handler
-            )
+            try:
+                # Ensure notifications are stopped before starting new ones
+                await self._bluetooth._client.stop_notify(
+                    NOTIFY_UUID
+                )
+            except (KeyError, BleakError):
+                pass
+
+            try:
+                # Enable notifications temporarily
+                await self._bluetooth._client.start_notify(
+                    NOTIFY_UUID, response_handler
+                )
+            except Exception as err:
+                _LOGGER.error("Failed to start notifications for device info: %s", err)
             
             try:
                 # Send command
                 await self._bluetooth._client.write_gatt_char(
-                    "0000fa02-0000-1000-8000-00805f9b34fb", command
+                    WRITE_UUID, command
                 )
+                _LOGGER.debug("Device info command sent, waiting for response...")
                 
                 # Wait for response (5 second timeout)
                 await asyncio.wait_for(response_received.wait(), timeout=5.0)
+                _LOGGER.debug("Device info response received: %s", self._device_response)
                 
                 if self._device_response:
-                    self._device_info = parse_device_response(self._device_response)
+                    (self._device_info, self._device_info_obj) = parse_device_response(self._device_response)
                 else:
                     raise Exception("No response received")
                     
             finally:
                 await self._bluetooth._client.stop_notify(
-                    "0000fa03-0000-1000-8000-00805f9b34fb"
+                    NOTIFY_UUID
+                )
+                # Reset response handler to default for future notifications
+                await self._bluetooth._client.start_notify(
+                    NOTIFY_UUID, self._notification_handler
                 )
             
             _LOGGER.info("Device info retrieved: %s", self._device_info)
@@ -770,8 +791,8 @@ class iPIXELAPI:
             _LOGGER.error("Failed to get device info: %s", err)
             # Return default values
             self._device_info = {
-                "width": 64,
-                "height": 16,
+                "width": 32,
+                "height": 32,
                 "device_type": 0,
                 "device_type_str": "Unknown",
                 "led_type": 0,
@@ -865,9 +886,9 @@ class iPIXELAPI:
             True if text was sent successfully
         """
         try:
-            # Get device info for height
-            device_info = await self.get_device_info()
-            device_height = matrix_height if matrix_height else device_info["height"]
+            await self.get_device_info()  # Ensure device info is loaded
+            device_info_obj = self._device_info_obj
+            device_height = matrix_height if matrix_height else None
 
             # Generate text commands using pypixelcolor
             commands = make_text_command(
@@ -879,7 +900,8 @@ class iPIXELAPI:
                 speed=speed,
                 rainbow_mode=rainbow_mode,
                 save_slot=0,
-                device_height=device_height
+                device_height=device_height,
+                device_info_obj=device_info_obj
             )
 
             # Send all command frames
