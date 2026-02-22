@@ -46,7 +46,7 @@ jobs:
           cp custom_components/ipixel_color/www/preview.html _site/index.html
           cp custom_components/ipixel_color/www/ipixel-display-card.js _site/
           cp -r custom_components/ipixel_color/www/src _site/
-          cp -r custom_components/ipixel_color/www/lib _site/
+          cp -r custom_components/ipixel_color/www/lib _site/ 2>/dev/null || true
           cp -r custom_components/ipixel_color/www/fonts _site/ 2>/dev/null || true
 
       - name: Setup Pages
