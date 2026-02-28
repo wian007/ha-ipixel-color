@@ -5,7 +5,6 @@ import asyncio
 import logging
 from typing import Any, TYPE_CHECKING
 from bleak.exc import BleakError
-from pypixelcolor.lib.device_info import DeviceInfo, DEVICE_TYPE_MAP, LED_SIZE_MAP
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -33,8 +32,8 @@ from .device.commands import (
     make_raw_command,
     make_set_password_command,
     make_verify_password_command,
-    make_mix_data_command,
-    make_mix_data_raw_command,
+    make_mix_data_plan,
+    make_mix_data_raw_plan,
     make_mix_block_header,
     MIX_BLOCK_TYPE_TEXT,
     MIX_BLOCK_TYPE_GIF,
@@ -52,7 +51,7 @@ from .device.clock import make_clock_mode_command, make_time_command
 from .device.text import make_text_plan
 from .device.image import make_image_plan
 from .device.gif import make_gif_windows, extract_and_process_gif, get_gif_frame_count
-from .device.info import build_device_info_command, parse_device_response
+from .device.info import device_info_to_dict
 from .display.text_renderer import render_text_to_png
 from .display.effects import apply_effect
 from .exceptions import iPIXELConnectionError
@@ -87,13 +86,19 @@ class iPIXELAPI:
     
     async def set_power(self, on: bool) -> bool:
         """Set device power state."""
-        command = make_power_command(on)
-        success = await self._bluetooth.send_command(command)
-        
-        if success:
-            self._power_state = on
-            _LOGGER.debug("Power set to %s", "ON" if on else "OFF")
-        return success
+        try:
+            payload = make_power_command(on)
+            result = await self._bluetooth.send_command(payload)
+
+            if result.success:
+                _LOGGER.debug("Power set to %s", "ON" if on else "OFF")
+            else:
+                _LOGGER.error("Failed to set power state")
+            return result.success
+
+        except Exception as err:
+            _LOGGER.error("Error setting power: %s", err)
+            return False
     
     async def set_brightness(self, brightness: int) -> bool:
         """Set device brightness level.
@@ -105,15 +110,15 @@ class iPIXELAPI:
             True if command was sent successfully
         """
         try:
-            command = make_brightness_command(brightness)
-            success = await self._bluetooth.send_command(command)
-            
-            if success:
+            payload = make_brightness_command(brightness)
+            result = await self._bluetooth.send_command("set_brightness", payload)
+
+            if result.success:
                 _LOGGER.debug("Brightness set to %d", brightness)
             else:
-                _LOGGER.error("Failed to set brightness to %d", brightness)
-            return success
-            
+                _LOGGER.error("Failed to set brightness")
+            return result.success
+
         except ValueError as err:
             _LOGGER.error("Invalid brightness value: %s", err)
             return False
@@ -131,14 +136,14 @@ class iPIXELAPI:
             True if time was synced successfully
         """
         try:
-            time_command = make_time_command()
-            success = await self._bluetooth.send_command(time_command)
+            payload = make_time_command()
+            result = await self._bluetooth.send_command("set_time", payload)
 
-            if success:
-                _LOGGER.debug("Time synchronized to device")
+            if result.success:
+                _LOGGER.debug("Time synced to device")
             else:
                 _LOGGER.error("Failed to sync time")
-            return success
+            return result.success
 
         except Exception as err:
             _LOGGER.error("Error syncing time: %s", err)
@@ -154,14 +159,14 @@ class iPIXELAPI:
             True if command was sent successfully
         """
         try:
-            command = make_orientation_command(orientation)
-            success = await self._bluetooth.send_command(command)
+            payload = make_orientation_command(orientation)
+            result = await self._bluetooth.send_command("set_orientation", payload)
 
-            if success:
+            if result.success:
                 _LOGGER.debug("Orientation set to %d", orientation)
             else:
-                _LOGGER.error("Failed to set orientation to %d", orientation)
-            return success
+                _LOGGER.error("Failed to set orientation")
+            return result.success
 
         except ValueError as err:
             _LOGGER.error("Invalid orientation value: %s", err)
@@ -181,14 +186,14 @@ class iPIXELAPI:
             True if command was sent successfully
         """
         try:
-            command = make_rhythm_mode_command(style, speed)
-            success = await self._bluetooth.send_command(command)
+            payload = make_rhythm_mode_command(style, speed)
+            result = await self._bluetooth.send_command("set_rhythm_mode", payload, requires_ack=True)
 
-            if success:
+            if result.success:
                 _LOGGER.info("Rhythm mode set: style=%d, speed=%d", style, speed)
             else:
                 _LOGGER.error("Failed to set rhythm mode")
-            return success
+            return result.success
 
         except ValueError as err:
             _LOGGER.error("Invalid rhythm mode parameters: %s", err)
@@ -207,14 +212,14 @@ class iPIXELAPI:
             True if command was sent successfully
         """
         try:
-            command = make_fun_mode_command(enable)
-            success = await self._bluetooth.send_command(command)
+            payload = make_fun_mode_command(enable)
+            result = await self._bluetooth.send_command("set_fun_mode", payload)
 
-            if success:
+            if result.success:
                 _LOGGER.debug("Fun mode %s", "enabled" if enable else "disabled")
             else:
                 _LOGGER.error("Failed to set fun mode")
-            return success
+            return result.success
 
         except Exception as err:
             _LOGGER.error("Error setting fun mode: %s", err)
@@ -234,14 +239,14 @@ class iPIXELAPI:
             True if command was sent successfully
         """
         try:
-            command = make_pixel_command(x, y, color)
-            success = await self._bluetooth.send_command(command)
+            payload = make_pixel_command(x, y, color)
+            result = await self._bluetooth.send_command("set_pixel", payload)
 
-            if success:
+            if result.success:
                 _LOGGER.debug("Pixel set at (%d, %d) to #%s", x, y, color)
             else:
                 _LOGGER.error("Failed to set pixel at (%d, %d)", x, y)
-            return success
+            return result.success
 
         except ValueError as err:
             _LOGGER.error("Invalid pixel parameters: %s", err)
@@ -321,10 +326,10 @@ class iPIXELAPI:
                 for i in range(0, len(positions), MAX_POSITIONS):
                     chunk_positions = positions[i:i + MAX_POSITIONS]
 
-                    command = make_batch_pixel_command(r, g, b, chunk_positions)
-                    success = await self._bluetooth.send_command(command)
+                    payload = make_batch_pixel_command(r, g, b, chunk_positions)
+                    result = await self._bluetooth.send_command("set_pixels_batch", payload)
 
-                    if not success:
+                    if not result.success:
                         _LOGGER.error(
                             "Failed to send batch pixel command for color #%02x%02x%02x",
                             r, g, b
@@ -396,15 +401,15 @@ class iPIXELAPI:
 
             # Send each chunk
             for i, chunk in enumerate(chunks):
-                command = make_raw_rgb_chunk_command(
+                payload = make_raw_rgb_chunk_command(
                     chunk_data=chunk,
                     total_rgb_data=rgb_data,
                     chunk_index=i,
                     brightness=brightness
                 )
 
-                success = await self._bluetooth.send_command(command)
-                if not success:
+                result = await self._bluetooth.send_command("send_raw_rgb", payload)
+                if not result.success:
                     _LOGGER.error("Failed to send RGB chunk %d/%d", i + 1, len(chunks))
                     return False
 
@@ -557,14 +562,14 @@ class iPIXELAPI:
             chunks = split_rgb_into_chunks(rgb_data, RAW_RGB_CHUNK_SIZE)
 
             for i, chunk in enumerate(chunks):
-                command = make_raw_rgb_chunk_command(
+                payload = make_raw_rgb_chunk_command(
                     chunk_data=chunk,
                     total_rgb_data=rgb_data,
                     chunk_index=i,
                     brightness=100
                 )
-                success = await self._bluetooth.send_command(command)
-                if not success:
+                result = await self._bluetooth.send_command(payload)
+                if not result.success:
                     _LOGGER.error("Failed to send solid color chunk %d/%d", i + 1, len(chunks))
                     return False
 
@@ -587,14 +592,14 @@ class iPIXELAPI:
             True if command was sent successfully
         """
         try:
-            command = make_clear_command()
-            success = await self._bluetooth.send_command(command)
+            payload = make_clear_command()
+            result = await self._bluetooth.send_command(payload)
 
-            if success:
+            if result.success:
                 _LOGGER.debug("Display cleared")
             else:
                 _LOGGER.error("Failed to clear display")
-            return success
+            return result.success
 
         except Exception as err:
             _LOGGER.error("Error clearing display: %s", err)
@@ -610,14 +615,14 @@ class iPIXELAPI:
             True if command was sent successfully
         """
         try:
-            command = make_show_slot_command(slot)
-            success = await self._bluetooth.send_command(command)
+            payload = make_show_slot_command(slot)
+            result = await self._bluetooth.send_command(payload)
 
-            if success:
+            if result.success:
                 _LOGGER.info("Showing slot %d", slot)
             else:
                 _LOGGER.error("Failed to show slot %d", slot)
-            return success
+            return result.success
 
         except ValueError as err:
             _LOGGER.error("Invalid slot number: %s", err)
@@ -636,14 +641,14 @@ class iPIXELAPI:
             True if command was sent successfully
         """
         try:
-            command = make_delete_slot_command(slot)
-            success = await self._bluetooth.send_command(command)
+            payload = make_delete_slot_command(slot)
+            result = await self._bluetooth.send_command(payload)
 
-            if success:
+            if result.success:
                 _LOGGER.info("Deleted slot %d", slot)
             else:
                 _LOGGER.error("Failed to delete slot %d", slot)
-            return success
+            return result.success
 
         except ValueError as err:
             _LOGGER.error("Invalid slot number: %s", err)
@@ -664,14 +669,14 @@ class iPIXELAPI:
             True if command was sent successfully
         """
         try:
-            command = make_set_time_command(hour, minute, second)
-            success = await self._bluetooth.send_command(command)
+            payload = make_set_time_command(hour, minute, second)
+            result = await self._bluetooth.send_command(payload)
 
-            if success:
+            if result.success:
                 _LOGGER.info("Time set to %02d:%02d:%02d", hour, minute, second)
             else:
                 _LOGGER.error("Failed to set time")
-            return success
+            return result.success
 
         except ValueError as err:
             _LOGGER.error("Invalid time value: %s", err)
@@ -700,10 +705,10 @@ class iPIXELAPI:
         """
         try:
             # Set clock mode
-            command = make_clock_mode_command(style, date, show_date, format_24)
-            success = await self._bluetooth.send_command(command)
+            payload = make_clock_mode_command(style, date, show_date, format_24)
+            result = await self._bluetooth.send_command(payload)
 
-            if not success:
+            if not result.success:
                 _LOGGER.error("Failed to set clock mode")
                 return False
 
@@ -715,7 +720,7 @@ class iPIXELAPI:
             if not time_success:
                 _LOGGER.warning("Clock mode set but time sync failed")
 
-            return success
+            return result.success
 
         except ValueError as err:
             _LOGGER.error("Invalid clock mode parameters: %s", err)
@@ -740,19 +745,8 @@ class iPIXELAPI:
             if self._device_info is None:
                 raise RuntimeError("Device info not loaded yet")
             
-            device_type_id = DEVICE_TYPE_MAP.get(self._device_info.device_type, -1)
-
-            led_type = LED_SIZE_MAP.get(device_type_id, ("...", "..."))
-
-            device_type_str = str(device_type_id) + " " + str(led_type[0]) + "x" + str(led_type[1])
+            return device_info_to_dict(self._device_info)
             
-            return {
-                "width": self._device_info.width,
-                "height": self._device_info.height,
-                "device_type_str": device_type_str,
-                "mcu_version": self._device_info.mcu_version,
-                "wifi_version": self._device_info.wifi_version,
-            }
 
         except Exception as err:
             _LOGGER.error("Error getting device info: %s", err)
@@ -872,87 +866,6 @@ class iPIXELAPI:
             _LOGGER.error("Error displaying pypixelcolor text: %s", err)
             return False
 
-    async def display_gif(
-        self,
-        gif_bytes: bytes,
-        buffer_slot: int = 1
-    ) -> bool:
-        """Display GIF animation on the device.
-
-        Uses windowed protocol for reliable transfer of large GIFs.
-
-        Args:
-            gif_bytes: Raw GIF file bytes
-            buffer_slot: Storage slot on device (1-255)
-
-        Returns:
-            True if GIF was sent successfully
-        """
-        try:
-            # Get device info for dimensions
-            device_info = await self._get_device_info()
-
-            # Process GIF for device dimensions
-            processed_gif = extract_and_process_gif(
-                gif_bytes,
-                device_info.width,
-                device_info.height
-            )
-
-            # Build windowed command
-            windows = make_gif_windows(
-                processed_gif,
-                buffer_slot=buffer_slot
-            )
-
-            # Send using windowed protocol
-            success = await self._bluetooth.send_windowed_command(windows)
-
-            if success:
-                frame_count = get_gif_frame_count(gif_bytes)
-                _LOGGER.info(
-                    "GIF sent: %d frames, %d bytes, %d windows",
-                    frame_count, len(processed_gif), len(windows)
-                )
-
-            return success
-
-        except Exception as err:
-            _LOGGER.error("Error displaying GIF: %s", err)
-            return False
-
-    async def display_gif_url(
-        self,
-        url: str,
-        buffer_slot: int = 1
-    ) -> bool:
-        """Download and display GIF from URL.
-
-        Args:
-            url: URL to GIF file
-            buffer_slot: Storage slot on device (1-255)
-
-        Returns:
-            True if GIF was sent successfully
-        """
-        try:
-            import aiohttp
-
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
-                    if response.status != 200:
-                        _LOGGER.error("Failed to download GIF: HTTP %d", response.status)
-                        return False
-
-                    gif_bytes = await response.read()
-
-            _LOGGER.debug("Downloaded GIF from %s (%d bytes)", url, len(gif_bytes))
-            return await self.display_gif(gif_bytes, buffer_slot)
-
-        except Exception as err:
-            _LOGGER.error("Error downloading GIF from %s: %s", url, err)
-            return False
-
     async def display_image_with_effect(
         self,
         image_bytes: bytes,
@@ -1014,14 +927,14 @@ class iPIXELAPI:
             True if command was sent successfully
         """
         try:
-            command = make_upside_down_command(upside_down)
-            success = await self._bluetooth.send_command(command)
+            payload = make_upside_down_command(upside_down)
+            result = await self._bluetooth.send_command(payload)
 
-            if success:
+            if result.success:
                 _LOGGER.info("Upside down mode %s", "enabled" if upside_down else "disabled")
             else:
                 _LOGGER.error("Failed to set upside down mode")
-            return success
+            return result.success
 
         except Exception as err:
             _LOGGER.error("Error setting upside down mode: %s", err)
@@ -1034,14 +947,14 @@ class iPIXELAPI:
             True if command was sent successfully
         """
         try:
-            command = make_default_mode_command()
-            success = await self._bluetooth.send_command(command)
+            payload = make_default_mode_command()
+            result = await self._bluetooth.send_command(payload)
 
-            if success:
+            if result.success:
                 _LOGGER.info("Device reset to default mode")
             else:
                 _LOGGER.error("Failed to reset to default mode")
-            return success
+            return result.success
 
         except Exception as err:
             _LOGGER.error("Error resetting to default mode: %s", err)
@@ -1062,17 +975,17 @@ class iPIXELAPI:
             True if command was sent successfully
         """
         try:
-            command = make_erase_data_command(buffers, erase_all)
-            success = await self._bluetooth.send_command(command)
+            payload = make_erase_data_command(buffers, erase_all)
+            result = await self._bluetooth.send_command(payload)
 
-            if success:
+            if result.success:
                 if erase_all:
                     _LOGGER.info("Erased all stored data from device")
                 else:
                     _LOGGER.info("Erased buffers %s from device", buffers)
             else:
                 _LOGGER.error("Failed to erase data")
-            return success
+            return result.success
 
         except ValueError as err:
             _LOGGER.error("Invalid erase parameters: %s", err)
@@ -1091,14 +1004,14 @@ class iPIXELAPI:
             True if command was sent successfully
         """
         try:
-            command = make_program_mode_command(buffers)
-            success = await self._bluetooth.send_command(command)
+            payload = make_program_mode_command(buffers)
+            result = await self._bluetooth.send_command(payload)
 
-            if success:
+            if result.success:
                 _LOGGER.info("Program mode set with buffers: %s", buffers)
             else:
                 _LOGGER.error("Failed to set program mode")
-            return success
+            return result.success
 
         except ValueError as err:
             _LOGGER.error("Invalid program mode parameters: %s", err)
@@ -1122,14 +1035,14 @@ class iPIXELAPI:
             True if command was sent successfully
         """
         try:
-            command = make_rhythm_mode_advanced_command(style, levels)
-            success = await self._bluetooth.send_command(command)
+            payload = make_rhythm_mode_advanced_command(style, levels)
+            result = await self._bluetooth.send_command(payload)
 
-            if success:
+            if result.success:
                 _LOGGER.info("Advanced rhythm mode set: style=%d, levels=%s", style, levels)
             else:
                 _LOGGER.error("Failed to set advanced rhythm mode")
-            return success
+            return result.success
 
         except ValueError as err:
             _LOGGER.error("Invalid rhythm mode parameters: %s", err)
@@ -1148,14 +1061,14 @@ class iPIXELAPI:
             True if command was sent successfully
         """
         try:
-            command = make_screen_command(screen)
-            success = await self._bluetooth.send_command(command)
+            payload = make_screen_command(screen)
+            result = await self._bluetooth.send_command(payload)
 
-            if success:
+            if result.success:
                 _LOGGER.info("Screen set to %d", screen)
             else:
                 _LOGGER.error("Failed to set screen to %d", screen)
-            return success
+            return result.success
 
         except ValueError as err:
             _LOGGER.error("Invalid screen value: %s", err)
@@ -1183,8 +1096,8 @@ class iPIXELAPI:
             True if command was sent successfully
         """
         try:
-            command = make_diy_mode_command(mode)
-            success = await self._bluetooth.send_command(command)
+            payload = make_diy_mode_command(mode)
+            result = await self._bluetooth.send_command(payload)
 
             mode_names = {
                 0: "exit (keep previous)",
@@ -1196,11 +1109,11 @@ class iPIXELAPI:
             if isinstance(mode, bool):
                 mode = 1 if mode else 0
 
-            if success:
+            if result.success:
                 _LOGGER.info("DIY mode set to: %s", mode_names.get(mode, str(mode)))
             else:
                 _LOGGER.error("Failed to set DIY mode")
-            return success
+            return result.success
 
         except ValueError as err:
             _LOGGER.error("Invalid DIY mode: %s", err)
@@ -1222,14 +1135,14 @@ class iPIXELAPI:
             True if command was sent successfully
         """
         try:
-            command = make_raw_command(hex_data)
-            success = await self._bluetooth.send_command(command)
+            payload = make_raw_command(hex_data)
+            result = await self._bluetooth.send_command(payload)
 
-            if success:
-                _LOGGER.info("Raw command sent: %s (%d bytes)", hex_data, len(command))
+            if result.success:
+                _LOGGER.info("Raw command sent: %s (%d bytes)", hex_data, len(payload))
             else:
                 _LOGGER.error("Failed to send raw command: %s", hex_data)
-            return success
+            return result.success
 
         except ValueError as err:
             _LOGGER.error("Invalid raw command: %s", err)
@@ -1310,14 +1223,14 @@ class iPIXELAPI:
             True if command was sent successfully
         """
         try:
-            command = make_set_password_command(enabled, password)
-            success = await self._bluetooth.send_command(command)
+            payload = make_set_password_command(enabled, password)
+            result = await self._bluetooth.send_command(payload)
 
-            if success:
+            if result.success:
                 _LOGGER.info("Password protection %s", "enabled" if enabled else "disabled")
             else:
                 _LOGGER.error("Failed to set password")
-            return success
+            return result.success
 
         except ValueError as err:
             _LOGGER.error("Invalid password: %s", err)
@@ -1339,14 +1252,14 @@ class iPIXELAPI:
             True if password was verified successfully
         """
         try:
-            command = make_verify_password_command(password)
-            success = await self._bluetooth.send_command(command)
+            payload = make_verify_password_command(password)
+            result = await self._bluetooth.send_command(payload)
 
-            if success:
+            if result.success:
                 _LOGGER.info("Password verified successfully")
             else:
                 _LOGGER.error("Password verification failed")
-            return success
+            return result.success
 
         except ValueError as err:
             _LOGGER.error("Invalid password format: %s", err)
@@ -1375,21 +1288,14 @@ class iPIXELAPI:
             True if command was sent successfully
         """
         try:
-            command = make_mix_data_command(blocks, screen_slot)
+            plan = make_mix_data_plan(blocks, screen_slot)
+            result = await self._bluetooth.send_plan(plan)
 
-            # Use windowed transfer for large payloads
-            if len(command) > 244:
-                # Split into windows for large data
-                windows = self._split_into_windows(command)
-                success = await self._bluetooth.send_windowed_command(windows)
-            else:
-                success = await self._bluetooth.send_command(command)
-
-            if success:
+            if result.success:
                 _LOGGER.info("Mixed data sent: %d blocks to slot %d", len(blocks), screen_slot)
             else:
                 _LOGGER.error("Failed to send mixed data")
-            return success
+            return result.success
 
         except ValueError as err:
             _LOGGER.error("Invalid mixed data parameters: %s", err)
@@ -1420,20 +1326,14 @@ class iPIXELAPI:
             hex_clean = raw_hex_data.replace(" ", "")
             raw_data = bytes.fromhex(hex_clean)
 
-            command = make_mix_data_raw_command(raw_data, screen_slot)
+            plan = make_mix_data_raw_plan(raw_data, screen_slot)
+            result = await self._bluetooth.send_plan(plan)
 
-            # Use windowed transfer for large payloads
-            if len(command) > 244:
-                windows = self._split_into_windows(command)
-                success = await self._bluetooth.send_windowed_command(windows)
-            else:
-                success = await self._bluetooth.send_command(command)
-
-            if success:
+            if result.success:
                 _LOGGER.info("Raw mixed data sent: %d bytes to slot %d", len(raw_data), screen_slot)
             else:
                 _LOGGER.error("Failed to send raw mixed data")
-            return success
+            return result.success
 
         except ValueError as err:
             _LOGGER.error("Invalid hex data: %s", err)
@@ -1441,18 +1341,6 @@ class iPIXELAPI:
         except Exception as err:
             _LOGGER.error("Error sending raw mixed data: %s", err)
             return False
-
-    def _split_into_windows(self, data: bytes, chunk_size: int = 244) -> list[bytes]:
-        """Split data into chunks for windowed transfer.
-
-        Args:
-            data: Data to split
-            chunk_size: Maximum size of each chunk
-
-        Returns:
-            List of data chunks
-        """
-        return [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
     
     @property
     def is_connected(self) -> bool:
