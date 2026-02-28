@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 from homeassistant.components import bluetooth
+from pypixelcolor.lib.transport.send_plan import SendPlan, send_plan as send_plan_pypixelcolor
 
 from ..const import WRITE_UUID, NOTIFY_UUID
 from ..exceptions import iPIXELConnectionError
@@ -231,8 +232,12 @@ class BluetoothClient:
             True if plan sent successfully, False otherwise
         """
         try:
-            return await self.send_windowed_command(plan.windows, plan.chunk_size)
-        except iPIXELConnectionError as err:
+            return await send_plan_pypixelcolor(
+                client=self._client,
+                plan=plan,
+                ack_mgr=BleAckManager(),
+            )
+        except Exception as err:
             _LOGGER.error("Failed to send SendPlan: %s", err)
             return False
         
