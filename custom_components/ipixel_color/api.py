@@ -88,7 +88,7 @@ class iPIXELAPI:
         """Set device power state."""
         try:
             payload = make_power_command(on)
-            result = await self._bluetooth.send_command(payload)
+            result = await self._bluetooth.send_command("set_power", payload)
 
             if result.success:
                 _LOGGER.debug("Power set to %s", "ON" if on else "OFF")
@@ -568,7 +568,7 @@ class iPIXELAPI:
                     chunk_index=i,
                     brightness=100
                 )
-                result = await self._bluetooth.send_command(payload)
+                result = await self._bluetooth.send_command("set_solid_color", payload)
                 if not result.success:
                     _LOGGER.error("Failed to send solid color chunk %d/%d", i + 1, len(chunks))
                     return False
@@ -593,7 +593,7 @@ class iPIXELAPI:
         """
         try:
             payload = make_clear_command()
-            result = await self._bluetooth.send_command(payload)
+            result = await self._bluetooth.send_command("clear_display",payload)
 
             if result.success:
                 _LOGGER.debug("Display cleared")
@@ -616,7 +616,7 @@ class iPIXELAPI:
         """
         try:
             payload = make_show_slot_command(slot)
-            result = await self._bluetooth.send_command(payload)
+            result = await self._bluetooth.send_command("show_slot", payload)
 
             if result.success:
                 _LOGGER.info("Showing slot %d", slot)
@@ -642,7 +642,7 @@ class iPIXELAPI:
         """
         try:
             payload = make_delete_slot_command(slot)
-            result = await self._bluetooth.send_command(payload)
+            result = await self._bluetooth.send_command("delete_slot", payload)
 
             if result.success:
                 _LOGGER.info("Deleted slot %d", slot)
@@ -670,7 +670,7 @@ class iPIXELAPI:
         """
         try:
             payload = make_set_time_command(hour, minute, second)
-            result = await self._bluetooth.send_command(payload)
+            result = await self._bluetooth.send_command("set_time", payload)
 
             if result.success:
                 _LOGGER.info("Time set to %02d:%02d:%02d", hour, minute, second)
@@ -706,7 +706,7 @@ class iPIXELAPI:
         try:
             # Set clock mode
             payload = make_clock_mode_command(style, date, show_date, format_24)
-            result = await self._bluetooth.send_command(payload)
+            result = await self._bluetooth.send_command("set_clock_mode", payload)
 
             if not result.success:
                 _LOGGER.error("Failed to set clock mode")
@@ -928,7 +928,7 @@ class iPIXELAPI:
         """
         try:
             payload = make_upside_down_command(upside_down)
-            result = await self._bluetooth.send_command(payload)
+            result = await self._bluetooth.send_command("set_upside_down", payload)
 
             if result.success:
                 _LOGGER.info("Upside down mode %s", "enabled" if upside_down else "disabled")
@@ -948,7 +948,7 @@ class iPIXELAPI:
         """
         try:
             payload = make_default_mode_command()
-            result = await self._bluetooth.send_command(payload)
+            result = await self._bluetooth.send_command("set_default_mode", payload)
 
             if result.success:
                 _LOGGER.info("Device reset to default mode")
@@ -976,7 +976,7 @@ class iPIXELAPI:
         """
         try:
             payload = make_erase_data_command(buffers, erase_all)
-            result = await self._bluetooth.send_command(payload)
+            result = await self._bluetooth.send_command("erase_data", payload)
 
             if result.success:
                 if erase_all:
@@ -1005,7 +1005,7 @@ class iPIXELAPI:
         """
         try:
             payload = make_program_mode_command(buffers)
-            result = await self._bluetooth.send_command(payload)
+            result = await self._bluetooth.send_command("set_program_mode", payload)
 
             if result.success:
                 _LOGGER.info("Program mode set with buffers: %s", buffers)
@@ -1036,7 +1036,7 @@ class iPIXELAPI:
         """
         try:
             payload = make_rhythm_mode_advanced_command(style, levels)
-            result = await self._bluetooth.send_command(payload)
+            result = await self._bluetooth.send_command("set_rhythm_mode", payload)
 
             if result.success:
                 _LOGGER.info("Advanced rhythm mode set: style=%d, levels=%s", style, levels)
@@ -1062,7 +1062,7 @@ class iPIXELAPI:
         """
         try:
             payload = make_screen_command(screen)
-            result = await self._bluetooth.send_command(payload)
+            result = await self._bluetooth.send_command("set_screen", payload)
 
             if result.success:
                 _LOGGER.info("Screen set to %d", screen)
@@ -1097,7 +1097,7 @@ class iPIXELAPI:
         """
         try:
             payload = make_diy_mode_command(mode)
-            result = await self._bluetooth.send_command(payload)
+            result = await self._bluetooth.send_command("set_diy_mode", payload)
 
             mode_names = {
                 0: "exit (keep previous)",
@@ -1136,7 +1136,7 @@ class iPIXELAPI:
         """
         try:
             payload = make_raw_command(hex_data)
-            result = await self._bluetooth.send_command(payload)
+            result = await self._bluetooth.send_command("send_raw_command", payload)
 
             if result.success:
                 _LOGGER.info("Raw command sent: %s (%d bytes)", hex_data, len(payload))
@@ -1224,7 +1224,7 @@ class iPIXELAPI:
         """
         try:
             payload = make_set_password_command(enabled, password)
-            result = await self._bluetooth.send_command(payload)
+            result = await self._bluetooth.send_command("set_password", payload)
 
             if result.success:
                 _LOGGER.info("Password protection %s", "enabled" if enabled else "disabled")
@@ -1253,7 +1253,7 @@ class iPIXELAPI:
         """
         try:
             payload = make_verify_password_command(password)
-            result = await self._bluetooth.send_command(payload)
+            result = await self._bluetooth.send_command("verify_password", payload)
 
             if result.success:
                 _LOGGER.info("Password verified successfully")
