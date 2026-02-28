@@ -27,6 +27,8 @@ display_text:
             - "fixed"
             - "scroll_rtl"
             - "scroll_ltr"
+            - "scroll_up"
+            - "scroll_down"
             - "blink"
             - "breeze"
             - "snow"
