@@ -73,17 +73,15 @@ class iPIXELAPI:
         self._address = address
         self._bluetooth = BluetoothClient(hass, address)
         self._power_state = True  # Assume on until we check
-        self._device_info: dict[str, Any] | None = None
-        self._device_info_obj: DeviceInfo | None = None  # Store the original DeviceInfo object
-        self._device_response: bytes | None = None
+        self._device_info: DeviceInfo | None = None
         # Frame diffing support for draw_visuals
         self._last_frame_bytes: bytes | None = None
         self._last_frame_png: bytes | None = None
         
-    async def connect(self) -> bool:
+    async def connect(self) -> None:
         """Connect to the iPIXEL device."""
-        return await self._bluetooth.connect(self._notification_handler)
-    
+        self._device_info = await self._bluetooth.connect()
+
     async def disconnect(self) -> None:
         """Disconnect from the device."""
         await self._bluetooth.disconnect()
@@ -375,8 +373,8 @@ class iPIXELAPI:
         try:
             # Get device dimensions
             device_info = await self.get_device_info()
-            width = device_info["width"]
-            height = device_info["height"]
+            width = device_info.width
+            height = device_info.height
 
             # Convert image to raw RGB bytes
             rgb_data = image_to_rgb_bytes(image_bytes, width, height, file_extension)
@@ -549,8 +547,8 @@ class iPIXELAPI:
 
             # Get device dimensions
             device_info = await self.get_device_info()
-            width = device_info["width"]
-            height = device_info["height"]
+            width = device_info.width
+            height = device_info.height
 
             # Create solid color RGB data
             total_pixels = width * height
@@ -727,81 +725,11 @@ class iPIXELAPI:
             _LOGGER.error("Error setting clock mode: %s", err)
             return False
     
-    async def get_device_info(self) -> dict[str, Any] | None:
+    async def get_device_info(self) -> DeviceInfo | None:
         """Query device information and store it."""
-        if self._device_info is not None:
-            return self._device_info
-            
-        try:
-            command = build_device_info_command()
-            
-            # Set up notification response
-            self._device_response = None
-            response_received = asyncio.Event()
-            
-            def response_handler(sender: Any, data: bytearray) -> None:
-                self._device_response = bytes(data)
-                response_received.set()
-            
-            try:
-                # Ensure notifications are stopped before starting new ones
-                await self._bluetooth._client.stop_notify(
-                    NOTIFY_UUID
-                )
-            except (KeyError, BleakError):
-                pass
-
-            try:
-                # Enable notifications temporarily
-                await self._bluetooth._client.start_notify(
-                    NOTIFY_UUID, response_handler
-                )
-            except Exception as err:
-                _LOGGER.error("Failed to start notifications for device info: %s", err)
-            
-            try:
-                # Send command
-                await self._bluetooth._client.write_gatt_char(
-                    WRITE_UUID, command
-                )
-                _LOGGER.debug("Device info command sent, waiting for response...")
-                
-                # Wait for response (5 second timeout)
-                await asyncio.wait_for(response_received.wait(), timeout=5.0)
-                _LOGGER.debug("Device info response received: %s", self._device_response)
-                
-                if self._device_response:
-                    (self._device_info, self._device_info_obj) = parse_device_response(self._device_response)
-                else:
-                    raise Exception("No response received")
-                    
-            finally:
-                await self._bluetooth._client.stop_notify(
-                    NOTIFY_UUID
-                )
-                # Reset response handler to default for future notifications
-                await self._bluetooth._client.start_notify(
-                    NOTIFY_UUID, self._notification_handler
-                )
-            
-            _LOGGER.info("Device info retrieved: %s", self._device_info)
-            return self._device_info
-            
-        except Exception as err:
-            _LOGGER.error("Failed to get device info: %s", err)
-            # Return default values
-            self._device_info = {
-                "width": 32,
-                "height": 32,
-                "device_type": 0,
-                "device_type_str": "Unknown",
-                "led_type": 0,
-                "mcu_version": "Unknown",
-                "wifi_version": "Unknown",
-                "has_wifi": False,
-                "password_flag": 255
-            }
-            return self._device_info
+        if self._device_info is None:
+            raise RuntimeError("Device info not loaded yet")
+        return self._device_info
     
     async def display_text(self, text: str, antialias: bool = True, font_size: float | None = None, font: str | None = None, line_spacing: int = 0, text_color: str = "ffffff", bg_color: str = "000000") -> bool:
         """Display text as image using PIL and pypixelcolor with color gradient mapping.
@@ -818,8 +746,8 @@ class iPIXELAPI:
         try:
             # Get device dimensions
             device_info = await self.get_device_info()
-            width = device_info["width"]
-            height = device_info["height"]
+            width = device_info.width
+            height = device_info.height
 
             # Render text to PNG with color gradient
             png_data = render_text_to_png(text, width, height, antialias, font_size, font, line_spacing, text_color, bg_color)
@@ -887,7 +815,7 @@ class iPIXELAPI:
         """
         try:
             await self.get_device_info()  # Ensure device info is loaded
-            device_info_obj = self._device_info_obj
+            device_info = self._device_info
             device_height = matrix_height if matrix_height else None
 
             # Generate text commands using pypixelcolor
@@ -901,7 +829,7 @@ class iPIXELAPI:
                 rainbow_mode=rainbow_mode,
                 save_slot=0,
                 device_height=device_height,
-                device_info_obj=device_info_obj
+                device_info=device_info
             )
 
             # Send all command frames
@@ -950,8 +878,8 @@ class iPIXELAPI:
             # Process GIF for device dimensions
             processed_gif = extract_and_process_gif(
                 gif_bytes,
-                device_info["width"],
-                device_info["height"]
+                device_info.width,
+                device_info.height
             )
 
             # Build windowed command
@@ -1519,10 +1447,6 @@ class iPIXELAPI:
             List of data chunks
         """
         return [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
-
-    def _notification_handler(self, sender: Any, data: bytearray) -> None:
-        """Handle notifications from the device."""
-        _LOGGER.debug("Notification from %s: %s", sender, data.hex())
     
     @property
     def is_connected(self) -> bool:

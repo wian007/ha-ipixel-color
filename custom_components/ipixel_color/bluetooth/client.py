@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Callable, TYPE_CHECKING
+from typing import Any, Awaitable, Callable, Optional, TYPE_CHECKING
 
 from bleak.exc import BleakError
 from bleak_retry_connector import (
@@ -15,7 +15,11 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 from homeassistant.components import bluetooth
-from pypixelcolor.lib.transport.send_plan import SendPlan, send_plan as send_plan_pypixelcolor
+from pypixelcolor.lib.transport.send_plan import SendPlan, send_plan as send_plan_pypixelcolor, single_window_plan
+from pypixelcolor.lib.transport.ack_manager import AckManager
+from pypixelcolor.lib.command_result import CommandResult
+from pypixelcolor.lib.device_info import DeviceInfo
+from pypixelcolor.lib.internal_commands import build_get_device_info_command, _handle_device_info_response
 
 from ..const import WRITE_UUID, NOTIFY_UUID
 from ..exceptions import iPIXELConnectionError
@@ -81,20 +85,18 @@ class BluetoothClient:
         """
         self._hass = hass
         self._address = address
-        self._client: BleakClientWithServiceCache | None = None
+        self._client: BleakClientWithServiceCache | None = None  
         self._connected = False
-        self._notification_handler: Callable | None = None
+        self._ack_mgr = Optional[AckManager] = None
+        self._device_info: Optional[DeviceInfo] = None
 
     def _disconnected_callback(self, client: BleakClientWithServiceCache) -> None:
         """Called when device disconnects."""
         _LOGGER.warning("iPIXEL device %s disconnected", self._address)
         self._connected = False
 
-    async def connect(self, notification_handler: Callable[[Any, bytearray], None]) -> bool:
+    async def connect(self) -> DeviceInfo:
         """Connect to the iPIXEL device.
-
-        Args:
-            notification_handler: Callback for device notifications
 
         Returns:
             True if connected successfully
@@ -127,20 +129,33 @@ class BluetoothClient:
                 max_attempts=3,
             )
 
-            self._connected = True
-
-            # Store and enable notifications
-            self._notification_handler = notification_handler
-            await self._client.start_notify(NOTIFY_UUID, notification_handler)
-            _LOGGER.info("Successfully connected to iPIXEL device")
-            return True
-
         except BleakError as err:
             _LOGGER.error("Failed to connect to %s: %s", self._address, err)
             raise iPIXELConnectionError(f"Connection failed: {err}") from err
         except Exception as err:
             _LOGGER.error("Unexpected error connecting to %s: %s", self._address, err)
             raise iPIXELConnectionError(f"Connection failed: {err}") from err
+
+        self._connected = True
+        _LOGGER.debug("Connected to %s, fetching device info", self._address)
+
+        self._ack_mgr = AckManager()
+
+        try:
+            await self._client.start_notify(NOTIFY_UUID, self._ack_mgr.make_notify_handler())
+        except Exception as e:
+            _LOGGER.warning(f"Failed to enable notifications on {NOTIFY_UUID}: {e}")
+
+        # Fetch device info immediately after connecting
+        await self._fetch_device_info()
+
+        if self._device_info:
+            _LOGGER.info(f"Device info cached: {self._device_info.width}x{self._device_info.height} "
+                        f"(Type {self._device_info.led_type})")
+            return self._device_info
+        else:
+            raise RuntimeError("Failed to retrieve device info")
+
 
     async def disconnect(self) -> None:
         """Disconnect from the device."""
@@ -154,6 +169,40 @@ class BluetoothClient:
             finally:
                 self._connected = False
                 self._client = None  # Don't reuse client - create fresh for next connection
+                self._ack_mgr = None
+                self._device_info = None
+
+    async def _fetch_device_info(self) -> None:
+        """
+        Internal method to fetch device info from the device.
+        
+        This is called automatically during connect().
+        """
+        
+        if not self._client or not self._ack_mgr:
+            raise RuntimeError("Client or AckManager not initialized")
+        
+        # Build and send the device info request
+        payload = build_get_device_info_command()
+        result = await self.send_single_command(
+            "get_device_info_internal",
+            payload,
+            response_handler=_handle_device_info_response
+        )
+        
+        if result.data is None:
+            raise RuntimeError("Failed to retrieve device info")
+        
+        self._device_info = result.data
+
+    async def send_single_command(self, plan_id: str, data: bytes, response_handler: Optional[Callable[[Any, bytes], Awaitable[Any]]] = None) -> CommandResult:
+        plan = single_window_plan(
+            plan_id=plan_id,
+            payload=data,
+            requires_ack=False,
+            response_handler=response_handler
+        )
+        return await self.send_plan(plan)
 
     async def send_command(self, command: bytes) -> bool:
         """Send command to the device and log any response.
@@ -211,18 +260,18 @@ class BluetoothClient:
                 except (KeyError, BleakError) as e:
                     _LOGGER.debug("Could not stop notifications in cleanup: %s", e)
 
-                if self._notification_handler:
-                    try:
-                        await self._client.start_notify(NOTIFY_UUID, self._notification_handler)
-                    except BleakError as e:
-                        _LOGGER.warning("Could not restart original notification handler: %s", e)
+                try:
+                    await self._client.start_notify(NOTIFY_UUID, self._ack_mgr.make_notify_handler())
+                except BleakError as e:
+                    _LOGGER.warning("Could not restart original notification handler: %s", e)
 
             return True
         except BleakError as err:
             _LOGGER.error("Failed to send command: %s", err)
             return False
 
-    async def send_plan(self, plan: SendPlan) -> bool:
+
+    async def send_plan(self, plan: SendPlan) -> CommandResult:
         """Send a SendPlan to the device.
 
         Args:
@@ -231,15 +280,12 @@ class BluetoothClient:
         Returns:
             True if plan sent successfully, False otherwise
         """
-        try:
-            return await send_plan_pypixelcolor(
-                client=self._client,
-                plan=plan,
-                ack_mgr=BleAckManager(),
-            )
-        except Exception as err:
-            _LOGGER.error("Failed to send SendPlan: %s", err)
-            return False
+        return await send_plan_pypixelcolor(
+            client=self._client,
+            plan=plan,
+            ack_mgr=self._ack_mgr,
+        )
+    
         
 
     async def send_windowed_command(

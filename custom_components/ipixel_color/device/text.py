@@ -22,7 +22,7 @@ def make_text_plan(
     rainbow_mode: int = 0,
     save_slot: int = 0,
     device_height: Optional[int] = None,
-    device_info_obj: Optional[DeviceInfo] = None
+    device_info: Optional[DeviceInfo] = None
 ) -> SendPlan:
     """Build text display command using pypixelcolor.
 
@@ -58,7 +58,7 @@ def make_text_plan(
         rainbow_mode=rainbow_mode,
         save_slot=save_slot,
         char_height=device_height,
-        device_info=device_info_obj
+        device_info=device_info
     )
 
     return send_plan
