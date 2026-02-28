@@ -129,7 +129,7 @@ async def handle_display_text(call: ServiceCall) -> None:
     color_fg = call.data.get("color_fg", [255, 255, 255])
     color_bg = call.data.get("color_bg", [0, 0, 0])
     font = call.data.get("font", "CUSONG")
-    matrix_height_str = call.data.get("matrix_height", "")
+    matrix_height_str = call.data.get("matrix_height", None)
 
     _LOGGER.debug("Received display_text service call: text=%r, effect=%r, speed=%d, color_fg=%r, color_bg=%r, font=%r, matrix_height=%r",
                   text, effect, speed, color_fg, color_bg, font, matrix_height_str)
