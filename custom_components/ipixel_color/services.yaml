@@ -21,11 +21,11 @@ display_text:
       description: Display effect for the text
       required: false
       default: 0
-      number:
+      selector:
+        number:
           min: 0
           max: 7
           mode: box
-
     speed:
       name: Speed
       description: Animation speed (1-100)
