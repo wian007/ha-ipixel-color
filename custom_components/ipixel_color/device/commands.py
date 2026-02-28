@@ -1,6 +1,6 @@
 """Command building for iPIXEL Color devices."""
-import logging
 from __future__ import annotations
+import logging
 
 from pypixelcolor.lib.transport.send_plan import SendPlan, Window
 
