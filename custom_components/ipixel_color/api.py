@@ -740,7 +740,9 @@ class iPIXELAPI:
             if self._device_info is None:
                 raise RuntimeError("Device info not loaded yet")
             
-            device_type_str = str(self._device_info.device_type) + " " + LED_SIZE_MAP.get(self._device_info.device_type, "...x...")
+            device_type_id = DEVICE_TYPE_MAP.get(self._device_info.device_type, -1)
+
+            device_type_str = str(device_type_id) + " " + LED_SIZE_MAP.get(device_type_id, "...x...")
             
             return {
                 "width": self._device_info.width,
