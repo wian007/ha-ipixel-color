@@ -742,7 +742,7 @@ class iPIXELAPI:
             
             device_type_id = DEVICE_TYPE_MAP.get(self._device_info.device_type, -1)
 
-            device_type_str = str(device_type_id) + " " + LED_SIZE_MAP.get(device_type_id, "...x...")
+            device_type_str = str(device_type_id) + " " + LED_SIZE_MAP.get(device_type_id, "...")[0] + "x" + LED_SIZE_MAP.get(device_type_id, "...")[1]
             
             return {
                 "width": self._device_info.width,
