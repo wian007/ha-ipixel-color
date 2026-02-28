@@ -198,7 +198,7 @@ class BluetoothClient:
     async def send_single_command(self, plan_id: str, data: bytes, response_handler: Optional[Callable[[Any, bytes], Awaitable[Any]]] = None) -> CommandResult:
         plan = single_window_plan(
             plan_id=plan_id,
-            payload=data,
+            data=data,
             requires_ack=False,
             response_handler=response_handler
         )
