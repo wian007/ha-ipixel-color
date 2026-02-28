@@ -12,13 +12,13 @@ except ImportError:
     SendPlan = None
 
 
-def make_image_command(
+def make_image_plan(
     image_bytes: bytes,
     file_extension: str = ".png",
     resize_method: str = "crop",
     device_info: Optional[DeviceInfo] = None
-) -> list[bytes]:
-    """Build image display command using pypixelcolor.
+) -> SendPlan:
+    """Build image display plan using pypixelcolor.
 
     Args:
         image_bytes: Raw image data bytes (PNG, GIF, JPEG, etc.)
@@ -48,9 +48,4 @@ def make_image_command(
         device_info=device_info
     )
 
-    # Extract command bytes from all windows
-    commands = []
-    for window in send_plan.windows:
-        commands.append(window.data)
-
-    return commands
+    return send_plan

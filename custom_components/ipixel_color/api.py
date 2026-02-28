@@ -50,7 +50,7 @@ from .device.commands import (
 )
 from .device.clock import make_clock_mode_command, make_time_command
 from .device.text import make_text_plan
-from .device.image import make_image_command
+from .device.image import make_image_plan
 from .device.gif import make_gif_windows, extract_and_process_gif, get_gif_frame_count
 from .device.info import build_device_info_command, parse_device_response
 from .display.text_renderer import render_text_to_png
@@ -781,25 +781,15 @@ class iPIXELAPI:
             png_data = render_text_to_png(text, width, height, antialias, font_size, font, line_spacing, text_color, bg_color)
 
             # Generate image commands using pypixelcolor
-            commands = make_image_command(
+            plan = make_image_plan(
                 image_bytes=png_data,
                 file_extension=".png",
                 resize_method="crop",
-                device_info_dict=device_info
+                device_info=device_info
             )
 
-            # Send all command frames
-            for i, command in enumerate(commands):
-                _LOGGER.debug(
-                    "Sending pypixelcolor image frame %d/%d: %d bytes",
-                    i + 1,
-                    len(commands),
-                    len(command)
-                )
-                success = await self._bluetooth.send_command(command)
-                if not success:
-                    _LOGGER.error("Failed to send image frame %d/%d", i + 1, len(commands))
-                    return False
+            # Send plan
+            await self._bluetooth.send_plan(plan)
 
             _LOGGER.info(
                 "Text rendered as image: '%s' (%dx%d, %d bytes PNG, %d frames)",
@@ -807,7 +797,7 @@ class iPIXELAPI:
                 width,
                 height,
                 len(png_data),
-                len(commands)
+                len(plan)
             )
             return True
 
@@ -999,20 +989,15 @@ class iPIXELAPI:
             processed_bytes = output.getvalue()
 
             # Generate image commands
-            commands = make_image_command(
+            plan = make_image_plan(
                 image_bytes=processed_bytes,
                 file_extension=file_extension,
                 resize_method="crop",
-                device_info_dict=device_info
+                device_info=device_info
             )
 
-            # Send all command frames
-            for i, command in enumerate(commands):
-                success = await self._bluetooth.send_command(command)
-                if not success:
-                    _LOGGER.error("Failed to send image frame %d/%d", i + 1, len(commands))
-                    return False
-
+            # Send plan
+            await self._bluetooth.send_plan(plan)
             return True
 
         except Exception as err:
@@ -1297,19 +1282,15 @@ class iPIXELAPI:
             device_info = await self._get_device_info()
 
             # Generate image commands
-            commands = make_image_command(
+            plan = make_image_plan(
                 image_bytes=image_bytes,
                 file_extension=file_ext,
                 resize_method="crop",
                 device_info=device_info
             )
 
-            # Send all command frames
-            for i, command in enumerate(commands):
-                success = await self._bluetooth.send_command(command)
-                if not success:
-                    _LOGGER.error("Failed to send image frame %d/%d", i + 1, len(commands))
-                    return False
+            # Send plan
+            await self._bluetooth.send_plan(plan)
 
             _LOGGER.info("Image from URL displayed successfully: %s", url)
             return True
