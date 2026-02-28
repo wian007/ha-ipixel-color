@@ -343,7 +343,7 @@ async def _update_text_mode(hass: HomeAssistant, device_name: str, api, text: st
             animation=animation,
             speed=speed,
             rainbow_mode=rainbow_mode,
-            matrix_height=int(font_size)
+            matrix_height=int(font_size) if font_size else None
         )
 
         if success:
