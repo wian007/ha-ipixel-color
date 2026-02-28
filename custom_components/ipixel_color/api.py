@@ -50,7 +50,6 @@ from .device.commands import (
 from .device.clock import make_clock_mode_command, make_time_command
 from .device.text import make_text_plan
 from .device.image import make_image_plan
-from .device.gif import make_gif_windows, extract_and_process_gif, get_gif_frame_count
 from .device.info import device_info_to_dict
 from .display.text_renderer import render_text_to_png
 from .display.effects import apply_effect

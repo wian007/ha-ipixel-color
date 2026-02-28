@@ -166,7 +166,7 @@ async def handle_upload_gif(call: ServiceCall) -> None:
         return
 
     try:
-        success = await api.display_gif_url(gif_url, buffer_slot)
+        success = await api.display_image_url(gif_url, buffer_slot)
         if success:
             _LOGGER.info("GIF uploaded successfully from %s", gif_url)
         else:

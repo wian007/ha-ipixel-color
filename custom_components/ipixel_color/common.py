@@ -390,7 +390,7 @@ async def _update_gif_mode(hass: HomeAssistant, device_name: str, api) -> bool:
             await api.connect()
 
         # Send GIF to display
-        success = await api.display_gif_url(gif_url)
+        success = await api.display_image_url(gif_url)
 
         if success:
             _LOGGER.info("GIF mode update successful: %s", gif_url)
