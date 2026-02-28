@@ -1153,7 +1153,7 @@ class iPIXELAPI:
     async def display_image_url(
         self,
         url: str,
-        buffer_slot: int = 1
+        buffer_slot: int = 0
     ) -> bool:
         """Download and display image from URL (PNG, JPG, BMP).
 
@@ -1198,7 +1198,8 @@ class iPIXELAPI:
                 image_bytes=image_bytes,
                 file_extension=file_ext,
                 resize_method="crop",
-                device_info=device_info
+                device_info=device_info,
+                save_slot=buffer_slot
             )
 
             # Send plan

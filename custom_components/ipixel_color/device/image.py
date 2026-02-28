@@ -16,7 +16,8 @@ def make_image_plan(
     image_bytes: bytes,
     file_extension: str = ".png",
     resize_method: str = "crop",
-    device_info: Optional[DeviceInfo] = None
+    device_info: Optional[DeviceInfo] = None,
+    save_slot: int = 0
 ) -> SendPlan:
     """Build image display plan using pypixelcolor.
 
@@ -45,7 +46,8 @@ def make_image_plan(
         hex_string=hex_string,
         file_extension=file_extension,
         resize_method=resize_method,
-        device_info=device_info
+        device_info=device_info,
+        save_slot=save_slot
     )
 
     return send_plan
