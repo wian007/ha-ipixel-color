@@ -5,7 +5,7 @@ import asyncio
 import logging
 from typing import Any, TYPE_CHECKING
 from bleak.exc import BleakError
-from pypixelcolor.lib.device_info import DeviceInfo
+from pypixelcolor.lib.device_info import DeviceInfo, DEVICE_TYPE_MAP, LED_SIZE_MAP
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -58,7 +58,6 @@ from .display.effects import apply_effect
 from .exceptions import iPIXELConnectionError
 
 _LOGGER = logging.getLogger(__name__)
-
 
 class iPIXELAPI:
     """iPIXEL Color device API client - simplified facade."""
@@ -372,7 +371,7 @@ class iPIXELAPI:
         """
         try:
             # Get device dimensions
-            device_info = await self.get_device_info()
+            device_info = await self._get_device_info()
             width = device_info.width
             height = device_info.height
 
@@ -546,7 +545,7 @@ class iPIXELAPI:
             b = int(color[4:6], 16)
 
             # Get device dimensions
-            device_info = await self.get_device_info()
+            device_info = await self._get_device_info()
             width = device_info.width
             height = device_info.height
 
@@ -725,11 +724,36 @@ class iPIXELAPI:
             _LOGGER.error("Error setting clock mode: %s", err)
             return False
     
-    async def get_device_info(self) -> DeviceInfo | None:
+    async def _get_device_info(self) -> DeviceInfo | None:
         """Query device information and store it."""
         if self._device_info is None:
             raise RuntimeError("Device info not loaded yet")
         return self._device_info
+    
+    async def get_device_info(self) -> dict[str, Any] | None:
+        """Get device information as a dictionary.
+
+        Returns:
+            Device information dict or None on error
+        """
+        try:
+            if self._device_info is None:
+                raise RuntimeError("Device info not loaded yet")
+            
+            device_type_str = self._device_info.device_type + " " + LED_SIZE_MAP.get(self._device_info.device_type, "...x...")
+            
+            return {
+                "width": self._device_info.width,
+                "height": self._device_info.height,
+                "device_type_str": device_type_str,
+                "mcu_version": self._device_info.mcu_version,
+                "wifi_version": self._device_info.wifi_version,
+            }
+
+        except Exception as err:
+            _LOGGER.error("Error getting device info: %s", err)
+            return None
+    
     
     async def display_text(self, text: str, antialias: bool = True, font_size: float | None = None, font: str | None = None, line_spacing: int = 0, text_color: str = "ffffff", bg_color: str = "000000") -> bool:
         """Display text as image using PIL and pypixelcolor with color gradient mapping.
@@ -745,7 +769,7 @@ class iPIXELAPI:
         """
         try:
             # Get device dimensions
-            device_info = await self.get_device_info()
+            device_info = await self._get_device_info()
             width = device_info.width
             height = device_info.height
 
@@ -813,9 +837,8 @@ class iPIXELAPI:
         Returns:
             True if text was sent successfully
         """
-        try:
-            await self.get_device_info()  # Ensure device info is loaded
-            device_info = self._device_info
+        try:            
+            device_info = self._get_device_info()
             device_height = matrix_height if matrix_height else None
 
             # Generate text commands using pypixelcolor
@@ -873,7 +896,7 @@ class iPIXELAPI:
         """
         try:
             # Get device info for dimensions
-            device_info = await self.get_device_info()
+            device_info = await self._get_device_info()
 
             # Process GIF for device dimensions
             processed_gif = extract_and_process_gif(
@@ -957,7 +980,7 @@ class iPIXELAPI:
             import io
 
             # Get device dimensions
-            device_info = await self.get_device_info()
+            device_info = await self._get_device_info()
 
             # Load and apply effect
             img = Image.open(io.BytesIO(image_bytes))
@@ -1269,14 +1292,14 @@ class iPIXELAPI:
             _LOGGER.debug("Downloaded image from %s (%d bytes, type=%s)", url, len(image_bytes), file_ext)
 
             # Get device info for dimensions
-            device_info = await self.get_device_info()
+            device_info = await self._get_device_info()
 
             # Generate image commands
             commands = make_image_command(
                 image_bytes=image_bytes,
                 file_extension=file_ext,
                 resize_method="crop",
-                device_info_dict=device_info
+                device_info=device_info
             )
 
             # Send all command frames

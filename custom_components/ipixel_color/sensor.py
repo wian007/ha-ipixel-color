@@ -121,7 +121,7 @@ class iPIXELSensor(SensorEntity):
             device_info = await self._api.get_device_info()
 
             if device_info:
-                self._attr_native_value = getattr(device_info, self.entity_description.key)
+                self._attr_native_value = device_info.get(self.entity_description.key)
                 self._available = True
             else:
                 self._available = False
