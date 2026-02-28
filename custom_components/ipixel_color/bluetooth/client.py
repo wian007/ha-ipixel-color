@@ -87,7 +87,7 @@ class BluetoothClient:
         self._address = address
         self._client: BleakClientWithServiceCache | None = None  
         self._connected = False
-        self._ack_mgr = Optional[AckManager] = None
+        self._ack_mgr: Optional[AckManager] = None
         self._device_info: Optional[DeviceInfo] = None
 
     def _disconnected_callback(self, client: BleakClientWithServiceCache) -> None:
