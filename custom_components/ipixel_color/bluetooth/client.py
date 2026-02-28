@@ -231,7 +231,7 @@ class BluetoothClient:
             True if plan sent successfully, False otherwise
         """
         try:
-            return await self.send_windowed_command(plan.windows, plan.chunk_size, plan.ack_timeout)
+            return await self.send_windowed_command(plan.windows, plan.chunk_size)
         except iPIXELConnectionError as err:
             _LOGGER.error("Failed to send SendPlan: %s", err)
             return False
