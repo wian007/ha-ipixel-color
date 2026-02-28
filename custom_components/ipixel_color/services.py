@@ -66,9 +66,8 @@ EFFECT_MAP = {
     "scroll_up": 3,
     "scroll_down": 4,
     "blink": 5,
-    "breeze": 6,
-    "snow": 7,
-    "lazer": 8,
+    "breathe": 6,
+    "snow": 7,    
 }
 
 def rgb_to_hex(rgb) -> str:
