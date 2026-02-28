@@ -1287,9 +1287,7 @@ class iPIXELAPI:
             elif 'bmp' in content_type or url.lower().endswith('.bmp'):
                 file_ext = '.bmp'
             elif 'gif' in content_type or url.lower().endswith('.gif'):
-                # For GIFs, use the existing GIF method
-                _LOGGER.debug("URL is a GIF, using display_gif method")
-                return await self.display_gif(image_bytes, buffer_slot)
+                file_ext = '.gif'
             else:
                 file_ext = '.png'  # Default to PNG
 
