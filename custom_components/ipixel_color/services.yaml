@@ -31,8 +31,7 @@ display_text:
             - "scroll_down"
             - "blink"
             - "breeze"
-            - "snow"
-            - "laser"
+            - "snow"            
     speed:
       name: Speed
       description: Animation speed (1-100)

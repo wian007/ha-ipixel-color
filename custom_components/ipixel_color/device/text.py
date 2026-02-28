@@ -12,7 +12,7 @@ except ImportError:
     SendPlan = None
 
 
-def make_text_command(
+def make_text_plan(
     text: str,
     color: str = "ffffff",
     bg_color: Optional[str] = None,
@@ -23,7 +23,7 @@ def make_text_command(
     save_slot: int = 0,
     device_height: Optional[int] = None,
     device_info_obj: Optional[DeviceInfo] = None
-) -> list[bytes]:
+) -> SendPlan:
     """Build text display command using pypixelcolor.
 
     Args:
@@ -61,10 +61,4 @@ def make_text_command(
         device_info=device_info_obj
     )
 
-    # Extract command bytes from all windows
-    # send_text may return multiple windows for large text
-    commands = []
-    for window in send_plan.windows:
-        commands.append(window.data)
-
-    return commands
+    return send_plan

@@ -49,7 +49,7 @@ from .device.commands import (
     RAW_RGB_CHUNK_SIZE,
 )
 from .device.clock import make_clock_mode_command, make_time_command
-from .device.text import make_text_command
+from .device.text import make_text_plan
 from .device.image import make_image_command
 from .device.gif import make_gif_windows, extract_and_process_gif, get_gif_frame_count
 from .device.info import build_device_info_command, parse_device_response
@@ -891,7 +891,7 @@ class iPIXELAPI:
             device_height = matrix_height if matrix_height else None
 
             # Generate text commands using pypixelcolor
-            commands = make_text_command(
+            plan = make_text_plan(
                 text=text,
                 color=color,
                 bg_color=bg_color,
@@ -905,27 +905,21 @@ class iPIXELAPI:
             )
 
             # Send all command frames
-            for i, command in enumerate(commands):
-                _LOGGER.debug(
-                    "Sending pypixelcolor text frame %d/%d: %d bytes",
-                    i + 1,
-                    len(commands),
-                    len(command)
-                )
-                success = await self._bluetooth.send_command(command)
-                if not success:
-                    _LOGGER.error("Failed to send text frame %d/%d", i + 1, len(commands))
-                    return False
+            _LOGGER.debug("Sending pypixelcolor plan")
+            success = await self._bluetooth.send_plan(plan)
+            if not success:
+                _LOGGER.error("Failed to send plan")
+                return False
 
             _LOGGER.info(
-                "Pypixelcolor text sent: '%s' (color=%s, bg=%s, font=%s, anim=%d, speed=%d, frames=%d)",
+                "Pypixelcolor text sent: '%s' (color=%s, bg=%s, font=%s, anim=%d, speed=%d, windows=%d)",
                 text,
                 color,
                 bg_color or "none",
                 font,
                 animation,
                 speed,
-                len(commands)
+                len(plan.windows)
             )
             return True
 

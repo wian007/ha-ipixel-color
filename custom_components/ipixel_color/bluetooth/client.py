@@ -221,6 +221,22 @@ class BluetoothClient:
             _LOGGER.error("Failed to send command: %s", err)
             return False
 
+    async def send_plan(self, plan: SendPlan) -> bool:
+        """Send a SendPlan to the device.
+
+        Args:
+            plan: SendPlan object containing windows of command data
+
+        Returns:
+            True if plan sent successfully, False otherwise
+        """
+        try:
+            return await self.send_windowed_command(plan.windows, plan.chunk_size, plan.ack_timeout)
+        except iPIXELConnectionError as err:
+            _LOGGER.error("Failed to send SendPlan: %s", err)
+            return False
+        
+
     async def send_windowed_command(
         self,
         windows: list[dict],
