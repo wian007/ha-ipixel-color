@@ -292,7 +292,7 @@ async def _update_text_mode(hass: HomeAssistant, device_name: str, api, text: st
         if color == "000000":
             # WORKAROUND: the device does not render pure-black text as visible.
             # The channel weighting below picks the least-visible single-LSB
-            # channel shift so the replacement colour is as close to black as
+            # channel shift so the replacement color is as close to black as
             # possible without being invisible.
             # TODO: Investigate whether a slightly lighter shade (e.g. "080808")
             #       or a per-device threshold produces better results across all

@@ -43,7 +43,6 @@ class TestTimeSlotIsActiveNow:
 
     def _patch_now(self, weekday_abbr: str, time_str: str):
         """Return a context manager that patches datetime.now() to a fixed moment."""
-        dt_str = f"2024-01-01 {time_str}"  # 2024-01-01 is a Monday
         # Map abbreviated weekday to an actual Monday–Sunday date
         day_offsets = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
         offset = day_offsets.get(weekday_abbr, 0)
