@@ -6,13 +6,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.template import Template
 from homeassistant.helpers import entity_registry as er
 from .const import MODE_TEXT_IMAGE, MODE_TEXT, MODE_CLOCK, MODE_GIF, MODE_RHYTHM, DOMAIN
+from .color import rgb_to_hex
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def rgb_to_hex(r: int, g: int, b: int) -> str:
-    """Convert RGB tuple to hex color string."""
-    return f"{r:02x}{g:02x}{b:02x}"
 
 
 def get_color_from_light_entity(hass: HomeAssistant, address: str, entity_suffix: str, default: str | None = None) -> str | None:
@@ -294,11 +290,15 @@ async def _update_text_mode(hass: HomeAssistant, device_name: str, api, text: st
         # Get text color from light entity
         color = get_color_from_light_entity(hass, api._address, "text_color", default="ffffff")
         if color == "000000":
-            # WORKAROUND the dispaly does not show black text.
-            # We weight the channels since not each color appears as bright as the others.
-            # In this way we choose the channel which should be less obvious.
+            # WORKAROUND: the device does not render pure-black text as visible.
+            # The channel weighting below picks the least-visible single-LSB
+            # channel shift so the replacement color is as close to black as
+            # possible without being invisible.
+            # TODO: Investigate whether a slightly lighter shade (e.g. "080808")
+            #       or a per-device threshold produces better results across all
+            #       iPIXEL hardware variants.
             bg = bg_color or "000000"
-            r, g, b = int(bg[0:2], 16)*333, int(bg[2:4], 16)*169, int(bg[4:6], 16)*909 
+            r, g, b = int(bg[0:2], 16)*333, int(bg[2:4], 16)*169, int(bg[4:6], 16)*909
             if g >= r and g >= b:
                 color = "000100"
             elif b >= r:

@@ -1,0 +1,71 @@
+{
+  // ─────────────────────────────────────────────────────────────────────────
+  // Dev Container for iPIXEL Color HA integration
+  //
+  // Opens a ready-to-use environment with:
+  //   • Python 3.11
+  //   • Home Assistant core (from requirements_dev.txt)
+  //   • All integration runtime dependencies
+  //   • VS Code extensions for Python, Pylance, and Ruff
+  //
+  // Usage:
+  //   1. Install the "Dev Containers" VS Code extension.
+  //   2. Open this repository folder in VS Code.
+  //   3. Click "Reopen in Container" when prompted (or F1 → "Dev Containers:
+  //      Reopen in Container").
+  //   4. Wait for the container to build and the post-create setup to finish.
+  //   5. Open a terminal and run `make test` to verify everything works.
+  // ─────────────────────────────────────────────────────────────────────────
+  "name": "iPIXEL Color – HA Integration Dev",
+
+  // Use the official HA dev-container image; it ships Python 3.12 + all HA
+  // dev tooling (pre-commit, pytest-homeassistant-custom-component, etc.)
+  // Pin to a specific HA version that matches manifest.json homeassistant min.
+  "image": "ghcr.io/home-assistant/devcontainer:2024.11",
+
+  // ── VS Code customisations ───────────────────────────────────────────────
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "eamodio.gitlens",
+        "GitHub.copilot",
+        "redhat.vscode-yaml"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python3",
+        "editor.formatOnSave": true,
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff",
+          "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+          }
+        },
+        "ruff.lint.args": ["--config=pyproject.toml"],
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": ["tests"]
+      }
+    }
+  },
+
+  // ── Post-create setup ────────────────────────────────────────────────────
+  // Install integration-specific dev dependencies on top of the base image.
+  "postCreateCommand": "pip install -r requirements_dev.txt",
+
+  // Mount the repo into /workspaces so HA can discover the custom_component.
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/ha-ipixel-color,type=bind,consistency=cached",
+  "workspaceFolder": "/workspaces/ha-ipixel-color",
+
+  // ── Port forwarding ──────────────────────────────────────────────────────
+  // Forward HA's web UI so you can interact with it from your browser while
+  // running integration tests or the HA dev server.
+  "forwardPorts": [8123],
+  "portsAttributes": {
+    "8123": {
+      "label": "Home Assistant UI",
+      "onAutoForward": "notify"
+    }
+  }
+}

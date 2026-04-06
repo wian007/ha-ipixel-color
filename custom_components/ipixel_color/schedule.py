@@ -116,7 +116,14 @@ class TimeSlot:
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
     def is_active_now(self) -> bool:
-        """Check if this time slot is currently active."""
+        """Check if this time slot is currently active.
+
+        TODO: This uses datetime.now() (local time).  For installations where
+              the HA timezone differs from the OS timezone, the slot times will
+              be interpreted against the OS clock.  Replace datetime.now() with
+              dt_util.now() from homeassistant.util.dt so that the HA timezone
+              setting is respected.
+        """
         if not self.enabled:
             return False
 
@@ -159,7 +166,12 @@ class PowerSchedule:
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
     def should_be_on(self) -> bool:
-        """Check if display should be on right now."""
+        """Check if display should be on right now.
+
+        TODO: Same timezone caveat as TimeSlot.is_active_now – use
+              dt_util.now() instead of datetime.now() to honour the HA
+              configured timezone.
+        """
         if not self.enabled:
             return True  # Default to on if schedule disabled
 
@@ -619,7 +631,15 @@ class iPIXELScheduleManager:
         return False
 
     def get_active_time_slot(self) -> TimeSlot | None:
-        """Get the currently active time slot (highest priority)."""
+        """Get the currently active time slot (highest priority).
+
+        When multiple slots have the same priority and overlap in time the first
+        one in the sorted list wins.
+
+        TODO: Define a clear tie-breaking policy (e.g. most-recently-added wins,
+              or shortest remaining duration wins) so the behaviour is predictable
+              to end-users rather than depending on insertion order.
+        """
         for ts in self._time_slots:  # Already sorted by priority
             if ts.is_active_now():
                 return ts

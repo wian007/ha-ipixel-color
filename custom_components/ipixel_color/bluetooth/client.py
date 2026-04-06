@@ -39,6 +39,10 @@ DEFAULT_CHUNK_SIZE = 244
 DEFAULT_WINDOW_SIZE = 12 * 1024  # 12KB
 DEFAULT_ACK_TIMEOUT = 30.0
 
+# TODO: Consider making DEFAULT_ACK_TIMEOUT configurable via const.py / config
+#       options so users with poor RF environments can tune it up without a
+#       code change.
+
 
 class BleAckManager:
     """Manages ACK events for windowed BLE protocol.
@@ -107,7 +111,7 @@ class BluetoothClient:
         """Connect to the iPIXEL device.
 
         Returns:
-            True if connected successfully
+            DeviceInfo fetched from the device after connecting.
 
         Raises:
             iPIXELConnectionError: If connection fails
@@ -134,6 +138,8 @@ class BluetoothClient:
                 ble_device,
                 ble_device.name or "iPIXEL Display",
                 disconnected_callback=self._disconnected_callback,
+                # TODO: Expose max_attempts via const.py (currently mirrors
+                #       RECONNECT_ATTEMPTS but is not wired up to it).
                 max_attempts=3,
             )
 
