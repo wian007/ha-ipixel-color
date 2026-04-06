@@ -1,0 +1,31 @@
+[tool.pytest.ini_options]
+# Discover tests in the tests/ directory
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+# Suppress noisy HA deprecation warnings that are not actionable here
+filterwarnings = [
+    "ignore::DeprecationWarning:homeassistant",
+    "ignore::DeprecationWarning:pytest_homeassistant_custom_component",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+ignore = [
+    "E501",   # line too long – handled by formatter
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["custom_components.ipixel_color"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_return_any = true
+warn_unused_configs = true
+# Exclude generated / third-party stubs
+exclude = ["venv", ".venv", "tests/"]

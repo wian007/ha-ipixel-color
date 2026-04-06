@@ -74,7 +74,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return await self._handle_device_selection(user_input)
 
     async def _show_discovery_form(self) -> FlowResult:
-        """Show the discovery form with found devices."""
+        """Show the discovery form with found devices.
+
+        TODO: Cache discovery results for ~30 s so that re-opening the config
+              flow (e.g. after an error) does not trigger a full BLE scan again.
+              A simple timestamp check in self._discovered_devices would suffice.
+        """
         errors = {}
         
         # Discover devices using HA's bluetooth API

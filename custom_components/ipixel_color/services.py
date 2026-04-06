@@ -2,6 +2,7 @@
 
 from . import DOMAIN
 from .api import iPIXELAPI
+from .color import rgb_tuple_to_hex, hex_to_rgb
 from .schedule import iPIXELScheduleManager, ScheduleItem
 from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.core import HomeAssistant, ServiceCall, callback
@@ -57,12 +58,6 @@ SERVICE_DISPLAY_IMAGE_RAW_RGB_URL = "display_image_raw_rgb_url"
 SERVICE_DRAW_SOLID_COLOR = "draw_solid_color"
 # Visual rendering service (from UnexpectedMatrixPixels)
 SERVICE_DRAW_VISUALS = "draw_visuals"
-
-def rgb_to_hex(rgb) -> str:
-    """Convert RGB array [r, g, b] to hex string 'rrggbb'."""
-    if isinstance(rgb, (list, tuple)) and len(rgb) >= 3:
-        return f"{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
-    return "ffffff"  # Default white
 
 def async_get_entry_for_service_call(
     call: ServiceCall,
@@ -132,8 +127,8 @@ async def handle_display_text(call: ServiceCall) -> None:
         animation = int(effect)
 
         # Convert RGB arrays to hex strings
-        fg_hex = rgb_to_hex(color_fg)
-        bg_hex = rgb_to_hex(color_bg)
+        fg_hex = rgb_tuple_to_hex(color_fg)
+        bg_hex = rgb_tuple_to_hex(color_bg)
 
         # Parse matrix height (empty string means auto)
         matrix_height = int(matrix_height_str) if matrix_height_str else None
@@ -381,7 +376,6 @@ async def handle_draw_visuals(call: ServiceCall) -> None:
         if isinstance(background, list) and len(background) >= 3:
             bg_color = (int(background[0]), int(background[1]), int(background[2]))
         elif isinstance(background, str):
-            from .color import hex_to_rgb
             bg_color = hex_to_rgb(background)
         else:
             bg_color = (0, 0, 0)

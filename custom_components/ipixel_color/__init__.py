@@ -38,21 +38,22 @@ PLATFORMS: list[Platform] = [
 ]
 
 
-# Frontend card registration flag
-FRONTEND_REGISTERED = False
+# Key used in hass.data to record that the Lovelace card has been registered.
+# Stored per-hass-instance to avoid race conditions when multiple config entries
+# load concurrently (the old module-level bool was not safe in that scenario).
+_FRONTEND_REGISTERED_KEY = f"{DOMAIN}_frontend_registered"
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the Bring! services."""
-
-
+    """Set up the iPIXEL Color services."""
+    # TODO: Consider supporting YAML-based configuration here in addition to
+    #       config-flow, e.g. allowing default display text templates to be
+    #       specified in configuration.yaml for power users.
     async_setup_services(hass)
     return True
 
 async def _async_register_frontend(hass: HomeAssistant) -> None:
-    """Register the Lovelace card as a frontend resource."""
-    global FRONTEND_REGISTERED
-
-    if FRONTEND_REGISTERED:
+    """Register the Lovelace card as a frontend resource (idempotent)."""
+    if hass.data.get(_FRONTEND_REGISTERED_KEY):
         return
 
     # Get the path to our www folder
@@ -64,8 +65,10 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
         StaticPathConfig(card_url, str(www_path / "ipixel-display-card.js"), cache_headers=False)
     ])
 
-    # Add the card as a Lovelace resource
-    # This uses the built-in resource registration
+    # TODO: HA 2024.x introduced async_register_frontend_panel as the proper
+    #       API for Lovelace resources.  Evaluate migrating away from the
+    #       manual lovelace_resources hass.data key once the minimum HA
+    #       version is raised to a release that supports it.
     hass.data.setdefault("lovelace_resources", set())
     if card_url not in hass.data["lovelace_resources"]:
         hass.data["lovelace_resources"].add(card_url)
@@ -73,7 +76,7 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
         # Fire event to notify frontend of new resource
         hass.bus.async_fire("lovelace_updated", {"url_path": card_url})
 
-    FRONTEND_REGISTERED = True
+    hass.data[_FRONTEND_REGISTERED_KEY] = True
     _LOGGER.info("iPIXEL Display Card frontend registered at %s", card_url)
 
 
@@ -123,7 +126,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except Exception as err:
             _LOGGER.warning("Hourly time sync failed: %s", err)
 
-    # Register the hourly sync
+    # TODO: Make the time-sync interval configurable via a config-entry option
+    #       (OptionsFlow) so users can choose e.g. every 15 min or every 6 h.
     entry.async_on_unload(
         async_track_time_interval(hass, _sync_time, timedelta(hours=1))
     )

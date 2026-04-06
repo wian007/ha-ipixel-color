@@ -168,16 +168,16 @@ custom_components/*/*/__pycache__/
 !custom_components/ipixel_color/www/lib/
 
 # Testing files
-test_*.py
-*_test.py
+# Note: test_*.py / *_test.py are intentionally ignored at the root (one-off
+# scripts) but the canonical tests/ directory IS tracked.
 test_output/
 .pytest_cache/
 test_venv/
 homeassistant/
 test_font_rendering.py
 
-# Local development
-.devcontainer/
+# Local development – devcontainer config IS tracked so team members can run
+# the same HA dev environment with a single "Reopen in Container" click.
 *.code-workspace
 
 # Temporary files

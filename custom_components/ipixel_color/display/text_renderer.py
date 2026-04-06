@@ -16,6 +16,9 @@ from .font_cache import FontCache
 _LOGGER = logging.getLogger(__name__)
 
 # Global font cache instance
+# TODO: The module-level singleton is not thread-safe and holds fonts in memory
+#       indefinitely.  Consider replacing with an LRU cache (e.g. functools.lru_cache
+#       or cachetools.LRUCache) keyed on (font_path, size) with a bounded capacity.
 _font_cache: FontCache | None = None
 
 

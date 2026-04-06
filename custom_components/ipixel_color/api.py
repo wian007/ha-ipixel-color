@@ -57,6 +57,16 @@ from .exceptions import iPIXELConnectionError
 
 _LOGGER = logging.getLogger(__name__)
 
+# TODO: api.py has grown to ~1 300 lines.  Consider splitting into focused
+#       sub-facades grouped by concern, e.g.:
+#         api_power.py    – power, brightness, orientation, rhythm, fun mode
+#         api_display.py  – text, image, GIF display methods
+#         api_pixel.py    – per-pixel and raw-RGB operations
+#         api_storage.py  – slot management, save/load operations
+#         api_device.py   – device info, clock, time sync, advanced commands
+#       Each sub-module can be imported and re-exported from api.py to keep
+#       backward compatibility.
+
 class iPIXELAPI:
     """iPIXEL Color device API client - simplified facade."""
 
@@ -72,6 +82,8 @@ class iPIXELAPI:
         self._power_state = True  # Assume on until we check
         self._device_info: DeviceInfo | None = None
         # Frame diffing support for draw_visuals
+        # TODO: Add an LRU eviction limit to the frame cache to prevent
+        #       unbounded memory growth when many different frames are displayed.
         self._last_frame_bytes: bytes | None = None
         self._last_frame_png: bytes | None = None
         
@@ -729,7 +741,15 @@ class iPIXELAPI:
             return False
     
     async def _get_device_info(self) -> DeviceInfo | None:
-        """Query device information and store it."""
+        """Query device information and store it.
+
+        Note: Device info is fetched once at connect time and cached.  There is
+        currently no mechanism to refresh it if the device firmware is updated
+        or if the device type changes between connections.
+
+        TODO: Add a refresh path (e.g. call from async_reload_entry) so callers
+              can request a fresh device-info query without fully disconnecting.
+        """
         if self._device_info is None:
             raise RuntimeError("Device info not loaded yet")
         return self._device_info
