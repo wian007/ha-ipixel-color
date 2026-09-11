@@ -541,58 +541,41 @@ def make_mix_block_header(
 
     return bytes(header)
 
-def _make_windows_from_payload(payload: bytes, screen_slot: int, command: bytes) -> list[Window]:
-    """Helper function to split payload into windows for SendPlan."""
-    # Calculate CRC32 of mix data
+def _make_windows_from_payload(data_payload: bytes, screen_slot: int, command: bytes) -> list[Window]:
+    """Split a payload into 12KB transport windows for multi-frame uploads.
+
+    Frame layout (per window):
+    ``[len(2)] [command(2)] [option] [payload_size(4)] [crc32(4)] [0x02] [slot] [chunk]``
+    where option is 0x00 for the first window and 0x02 for continuation windows.
+    """
+    import zlib
+
     crc = zlib.crc32(data_payload) & 0xFFFFFFFF
     payload_size = len(data_payload)
 
-    #########################
-    #      MULTI-FRAME      #
-    #########################
-
-    windows = []
+    windows: list[Window] = []
     window_size = 12 * 1024
     pos = 0
     window_index = 0
-    
+
     while pos < payload_size:
         window_end = min(pos + window_size, payload_size)
         chunk_payload = data_payload[pos:window_end]
-        
-        # Option: 0x00 for first frame, 0x02 for subsequent frames
+
         option = 0x00 if window_index == 0 else 0x02
-        
-        # Construct header for this frame
-        # [00 01 Option] [Payload Size (4)] [CRC (4)] [00 SaveSlot]
-        
+
         frame_header = bytearray()
-        frame_header += command  # Command (e.g., [0x04 0x00] for mix data)
-        frame_header += bytes([
-            option  # Option
-        ])
-        
-        # Payload Size (Total) - 4 bytes little endian
+        frame_header += command
+        frame_header += bytes([option])
         frame_header += payload_size.to_bytes(4, byteorder="little")
-        
-        # CRC - 4 bytes little endian
         frame_header += crc.to_bytes(4, byteorder="little")
-        
-        # Tail - 2 bytes
-        frame_header += bytes([0x02])                   # Reserved
-        frame_header += bytes([int(screen_slot) & 0xFF])  # save_slot
-        
-        # Combine header and chunk
-        frame_content = frame_header + chunk_payload
-        
-        # Calculate frame length prefix
-        # Total size = len(frame_content) + 2 (for the prefix itself)
-        frame_len = len(frame_content) + 2
-        prefix = frame_len.to_bytes(2, byteorder="little")
-        
-        message = prefix + frame_content
-        windows.append(Window(data=message, requires_ack=True))
-        
+        frame_header += bytes([0x02, int(screen_slot) & 0xFF])
+
+        frame_content = bytes(frame_header) + chunk_payload
+        prefix = (len(frame_content) + 2).to_bytes(2, byteorder="little")
+
+        windows.append(Window(data=prefix + frame_content, requires_ack=True))
+
         window_index += 1
         pos = window_end
 
@@ -619,8 +602,6 @@ def make_mix_data_plan(
     Raises:
         ValueError: If blocks list is empty or screen_slot is invalid
     """
-    import zlib
-
     if not blocks:
         raise ValueError("At least one block must be provided")
     if screen_slot < 1 or screen_slot > 255:
@@ -654,8 +635,6 @@ def make_mix_data_raw_plan(
     Returns:
         Command bytes for mixed data upload
     """
-    import zlib
-
     if not raw_mix_data:
         raise ValueError("Mix data cannot be empty")
     if screen_slot < 1 or screen_slot > 255:
@@ -806,7 +785,6 @@ def make_raw_rgb_chunk_command(
     Returns:
         Command bytes for raw RGB chunk
     """
-    import zlib
 
     # Apply brightness if not 100%
     if brightness != 100 and brightness > 0:
@@ -839,22 +817,9 @@ def make_raw_rgb_chunk_command(
 
 
 def _apply_brightness(data: bytes, brightness: int) -> bytes:
-    """Apply brightness modification to RGB data.
-
-    Multiplies each byte by brightness percentage.
-
-    Args:
-        data: Raw RGB bytes
-        brightness: Brightness level 1-100
-
-    Returns:
-        Modified RGB bytes
-    """
-    result = bytearray(len(data))
-    for i, byte_val in enumerate(data):
-        new_val = (byte_val * brightness) // 100
-        result[i] = min(255, max(0, new_val))
-    return bytes(result)
+    """Scale every RGB byte by ``brightness`` percent (1-100)."""
+    table = bytes(min(255, (value * brightness) // 100) for value in range(256))
+    return data.translate(table)
 
 
 def split_rgb_into_chunks(rgb_data: bytes, chunk_size: int = RAW_RGB_CHUNK_SIZE) -> list[bytes]:
@@ -903,13 +868,4 @@ def image_to_rgb_bytes(
     # Resize to target dimensions using nearest neighbor (like go-ipxl)
     img = img.resize((width, height), Image.Resampling.NEAREST)
 
-    # Extract RGB bytes
-    rgb_data = bytearray()
-    for y in range(height):
-        for x in range(width):
-            r, g, b = img.getpixel((x, y))
-            rgb_data.append(r)
-            rgb_data.append(g)
-            rgb_data.append(b)
-
-    return bytes(rgb_data)
+    return img.tobytes()

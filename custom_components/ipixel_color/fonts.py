@@ -5,7 +5,6 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,7 +19,7 @@ class FontMetrics:
     var_width: bool
 
     @classmethod
-    def from_dict(cls, data: dict) -> "FontMetrics":
+    def from_dict(cls, data: dict) -> FontMetrics:
         """Create FontMetrics from dictionary."""
         return cls(
             font_size=data.get("font_size", 16),
@@ -56,7 +55,7 @@ def load_font_metrics(font_path: Path) -> dict[int, FontMetrics]:
         return result
 
     try:
-        with open(metrics_path, "r", encoding="utf-8") as f:
+        with open(metrics_path, encoding="utf-8") as f:
             data = json.load(f)
 
         for height_str, metrics_data in data.items():
@@ -73,7 +72,7 @@ def load_font_metrics(font_path: Path) -> dict[int, FontMetrics]:
     return result
 
 
-def get_font_metrics(font_name: str, height: int) -> Optional[FontMetrics]:
+def get_font_metrics(font_name: str, height: int) -> FontMetrics | None:
     """Get font metrics for a specific display height.
 
     Args:

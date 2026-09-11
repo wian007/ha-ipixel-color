@@ -1,175 +1,245 @@
-"""The iPIXEL Color integration."""
+"""The iPIXEL Color integration.
+
+Controls one or more iPIXEL Color LED matrix panels over the Home Assistant
+Bluetooth stack. Panels can be combined into one large virtual display.
+"""
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
-
 from pathlib import Path
 
-from homeassistant.components.frontend import async_register_built_in_panel
-from homeassistant.components.http import StaticPathConfig
-from homeassistant.config_entries import ConfigEntry, ConfigType
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
+from homeassistant.helpers.typing import ConfigType
 
-from .api import iPIXELAPI, iPIXELConnectionError, iPIXELTimeoutError
-from .const import DOMAIN, CONF_ADDRESS, CONF_NAME
-from .common import update_ipixel_display
-from .schedule import iPIXELScheduleManager, ScheduleItem
+from .api import iPIXELAPI
+from .const import (
+    CARD_URL_PATH,
+    CONF_ACK_TIMEOUT,
+    CONF_ADDRESS,
+    CONF_COL,
+    CONF_ENTRY_TYPE,
+    CONF_HEIGHT,
+    CONF_MEMBER_ENTRY_ID,
+    CONF_MEMBERS,
+    CONF_NAME,
+    CONF_ROW,
+    CONF_WIDTH,
+    DEFAULT_ACK_TIMEOUT,
+    DEFAULT_NAME,
+    DOMAIN,
+    ENTRY_TYPE_GROUP,
+    ENTRY_TYPE_PANEL,
+)
+from .display.composite import CompositeDisplay, MemberSpec
+from .display.panel import PanelDisplay
+from .exceptions import iPIXELError
+from .runtime import iPIXELRuntime
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
-# Set pypixelcolor logging to current level for detailed command info
-logging.getLogger("pypixelcolor").setLevel(_LOGGER.getEffectiveLevel())
 
-# Platforms supported by this integration
 PLATFORMS: list[Platform] = [
-    Platform.SWITCH,
-    Platform.TEXT,
-    Platform.SENSOR,
-    Platform.SELECT,
-    Platform.NUMBER,
     Platform.BUTTON,
+    Platform.CAMERA,
     Platform.LIGHT,
     Platform.MEDIA_PLAYER,
-    Platform.CAMERA,
+    Platform.NUMBER,
+    Platform.SELECT,
+    Platform.SENSOR,
+    Platform.SWITCH,
+    Platform.TEXT,
 ]
 
+_FRONTEND_REGISTERED_KEY = f"{DOMAIN}_frontend_registered"
 
-# Frontend card registration flag
-FRONTEND_REGISTERED = False
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the Bring! services."""
-
-
+    """Register the services (they target displays by device id)."""
+    hass.data.setdefault(DOMAIN, {})
     async_setup_services(hass)
     return True
 
-async def _async_register_frontend(hass: HomeAssistant) -> None:
-    """Register the Lovelace card as a frontend resource."""
-    global FRONTEND_REGISTERED
 
-    if FRONTEND_REGISTERED:
-        return
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate config entries created before combined displays existed."""
+    if entry.version == 1:
+        data = {**entry.data}
+        data.setdefault(CONF_ENTRY_TYPE, ENTRY_TYPE_PANEL)
+        data.setdefault(CONF_NAME, entry.title or DEFAULT_NAME)
+        hass.config_entries.async_update_entry(entry, data=data, version=2)
+        _LOGGER.info("Migrated iPIXEL config entry %s to version 2", entry.title)
+    return True
 
-    # Get the path to our www folder
-    www_path = Path(__file__).parent / "www"
-    card_url = f"/{DOMAIN}/ipixel-display-card.js"
 
-    # Register static path for serving the card
-    await hass.http.async_register_static_paths([
-        StaticPathConfig(card_url, str(www_path / "ipixel-display-card.js"), cache_headers=False)
-    ])
-
-    # Add the card as a Lovelace resource
-    # This uses the built-in resource registration
-    hass.data.setdefault("lovelace_resources", set())
-    if card_url not in hass.data["lovelace_resources"]:
-        hass.data["lovelace_resources"].add(card_url)
-
-        # Fire event to notify frontend of new resource
-        hass.bus.async_fire("lovelace_updated", {"url_path": card_url})
-
-    FRONTEND_REGISTERED = True
-    _LOGGER.info("iPIXEL Display Card frontend registered at %s", card_url)
+def get_runtime(hass: HomeAssistant, entry_id: str) -> iPIXELRuntime | None:
+    """Return the runtime of a loaded config entry."""
+    runtime = hass.data.get(DOMAIN, {}).get(entry_id)
+    return runtime if isinstance(runtime, iPIXELRuntime) else None
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up iPIXEL Color from a config entry."""
-    address = entry.data[CONF_ADDRESS]
-    name = entry.data[CONF_NAME]
-
-    _LOGGER.debug("Setting up iPIXEL Color for %s (%s)", name, address)
-
-    # Create API instance with hass for Bluetooth proxy support
-    api = iPIXELAPI(hass, address)
-
-    # Test connection
-    try:
-        await api.connect()
-        _LOGGER.info("Successfully connected to iPIXEL device %s", address)
-
-    except iPIXELTimeoutError as err:
-        _LOGGER.error("Connection timeout to iPIXEL device %s: %s", address, err)
-        raise ConfigEntryNotReady(f"Connection timeout: {err}") from err
-
-    except iPIXELConnectionError as err:
-        _LOGGER.error("Failed to connect to iPIXEL device %s: %s", address, err)
-        raise ConfigEntryNotReady(f"Connection failed: {err}") from err
-
-    # Store API instance in hass.data
+    """Set up a panel or a combined display."""
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = api
-    entry.runtime_data = api
+    kind = entry.data.get(CONF_ENTRY_TYPE, ENTRY_TYPE_PANEL)
 
-    # Initialize schedule manager
-    schedule_manager = iPIXELScheduleManager(hass, api, address)
-    await schedule_manager.async_load()
-    hass.data[DOMAIN][f"{entry.entry_id}_schedule"] = schedule_manager
+    if kind == ENTRY_TYPE_GROUP:
+        runtime = _create_group_runtime(hass, entry)
+    else:
+        runtime = await _async_create_panel_runtime(hass, entry)
 
-    # Register Lovelace card frontend resources
+    await runtime.async_setup()
+    hass.data[DOMAIN][entry.entry_id] = runtime
+
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await _async_register_frontend(hass)
-
-    # Set up hourly time sync
-    async def _sync_time(now=None) -> None:
-        """Sync time to device hourly."""
-        try:
-            if api.is_connected:
-                await api.sync_time()
-                _LOGGER.debug("Hourly time sync completed")
-        except Exception as err:
-            _LOGGER.warning("Hourly time sync failed: %s", err)
-
-    # Register the hourly sync
-    entry.async_on_unload(
-        async_track_time_interval(hass, _sync_time, timedelta(hours=1))
-    )
-
-    # Set up platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    if kind == ENTRY_TYPE_PANEL:
+        # Groups resolve their members lazily; tell them a panel (re)appeared.
+        _notify_groups(hass)
     return True
+
+
+async def _async_create_panel_runtime(hass: HomeAssistant, entry: ConfigEntry) -> iPIXELRuntime:
+    address: str = entry.data[CONF_ADDRESS]
+    name: str = entry.data.get(CONF_NAME) or entry.title or DEFAULT_NAME
+    options = entry.options
+    width = int(options.get(CONF_WIDTH, 0) or 0)
+    height = int(options.get(CONF_HEIGHT, 0) or 0)
+    size_override = (width, height) if width and height else None
+
+    api = iPIXELAPI(
+        hass,
+        address,
+        name=name,
+        ack_timeout=float(options.get(CONF_ACK_TIMEOUT, DEFAULT_ACK_TIMEOUT)),
+        size_override=size_override,
+    )
+    try:
+        await api.connect()
+    except iPIXELError as err:
+        raise ConfigEntryNotReady(f"{name} ({address}): {err}") from err
+
+    display = PanelDisplay(api, key=entry.entry_id, name=name)
+    return iPIXELRuntime(hass, entry, display)
+
+
+def _create_group_runtime(hass: HomeAssistant, entry: ConfigEntry) -> iPIXELRuntime:
+    name: str = entry.options.get(CONF_NAME) or entry.data.get(CONF_NAME) or entry.title
+    members_conf = entry.options.get(CONF_MEMBERS) or entry.data.get(CONF_MEMBERS) or []
+    members: list[MemberSpec] = []
+    for member in members_conf:
+        member_id = member.get(CONF_MEMBER_ENTRY_ID)
+        if hass.config_entries.async_get_entry(member_id) is None:
+            _LOGGER.warning(
+                "Combined display '%s' references a panel that no longer exists (%s)", name, member_id
+            )
+            continue
+        members.append(MemberSpec(key=member_id, row=int(member.get(CONF_ROW, 0)), col=int(member.get(CONF_COL, 0))))
+    if not members:
+        raise ConfigEntryError(f"Combined display '{name}' has no valid panels; edit its options")
+
+    def _resolve(key: str) -> PanelDisplay | None:
+        runtime = get_runtime(hass, key)
+        if runtime is None or not isinstance(runtime.display, PanelDisplay):
+            return None
+        return runtime.display
+
+    display = CompositeDisplay(name=name, members=members, resolver=_resolve)
+    return iPIXELRuntime(hass, entry, display)
+
+
+def _notify_groups(hass: HomeAssistant) -> None:
+    for runtime in list(hass.data.get(DOMAIN, {}).values()):
+        if isinstance(runtime, iPIXELRuntime) and runtime.is_group:
+            runtime.display._notify()  # noqa: SLF001 - refresh member subscriptions/entities
+
+
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the entry when its options change."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    _LOGGER.debug("Unloading iPIXEL Color integration")
-
-    # Unload platforms
-    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        # Stop animation controller if running
-        animation_controller = hass.data[DOMAIN].pop(f"{entry.entry_id}_animation", None)
-        if animation_controller:
-            try:
-                await animation_controller.stop()
-                _LOGGER.debug("Stopped animation controller")
-            except Exception as err:
-                _LOGGER.debug("Error stopping animation controller: %s", err)
-
-        # Stop schedule manager playlist loop
-        schedule_manager = hass.data[DOMAIN].pop(f"{entry.entry_id}_schedule", None)
-        if schedule_manager:
-            try:
-                await schedule_manager.stop_playlist_loop()
-                _LOGGER.debug("Stopped schedule manager")
-            except Exception as err:
-                _LOGGER.debug("Error stopping schedule manager: %s", err)
-
-        # Disconnect from device
-        api: iPIXELAPI = hass.data[DOMAIN].pop(entry.entry_id)
-        try:
-            await api.disconnect()
-            _LOGGER.debug("Disconnected from iPIXEL device")
-        except Exception as err:
-            _LOGGER.error("Error disconnecting from device: %s", err)
-
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        runtime: iPIXELRuntime | None = hass.data[DOMAIN].pop(entry.entry_id, None)
+        if runtime is not None:
+            await runtime.async_shutdown()
+        _notify_groups(hass)
     return unload_ok
 
 
-async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload config entry."""
-    await async_unload_entry(hass, entry)
-    await async_setup_entry(hass, entry)
+async def _async_register_frontend(hass: HomeAssistant) -> None:
+    """Serve the bundled Lovelace cards and register them as a dashboard resource."""
+    if hass.data.get(_FRONTEND_REGISTERED_KEY):
+        return
+    hass.data[_FRONTEND_REGISTERED_KEY] = True
+
+    card_path = Path(__file__).parent / "www" / "ipixel-display-card.js"
+    if not card_path.exists():
+        _LOGGER.debug("Frontend card bundle not found at %s", card_path)
+        return
+
+    try:
+        # Home Assistant 2024.6+ has async_register_static_paths; older versions register_static_path.
+        if hasattr(hass.http, "async_register_static_paths"):
+            from homeassistant.components.http import StaticPathConfig
+
+            await hass.http.async_register_static_paths(
+                [StaticPathConfig(CARD_URL_PATH, str(card_path), False)]
+            )
+        else:  # pragma: no cover - old HA
+            hass.http.register_static_path(CARD_URL_PATH, str(card_path), cache_headers=False)
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.warning("Could not serve the iPIXEL Lovelace card: %s", err)
+        return
+
+    await _async_add_lovelace_resource(hass, f"{CARD_URL_PATH}?v={_card_version()}")
+
+
+def _card_version() -> str:
+    try:
+        import json
+
+        manifest = json.loads((Path(__file__).parent / "manifest.json").read_text())
+        return str(manifest.get("version", "0"))
+    except Exception:  # noqa: BLE001
+        return "0"
+
+
+async def _async_add_lovelace_resource(hass: HomeAssistant, url: str) -> None:
+    """Add the card to the Lovelace resources (storage mode only)."""
+    lovelace = hass.data.get("lovelace")
+    if lovelace is None:
+        _LOGGER.debug("Lovelace not loaded yet; add %s as a dashboard resource manually", url)
+        return
+    # 2024.x: dataclass with .resources / .mode; older: dict
+    if isinstance(lovelace, dict):
+        resources = lovelace.get("resources")
+        mode = lovelace.get("mode")
+    else:
+        resources = getattr(lovelace, "resources", None)
+        mode = getattr(lovelace, "mode", None)
+    if resources is None or mode != "storage":
+        _LOGGER.debug("Lovelace in %s mode; add %s as a resource manually", mode, url)
+        return
+    try:
+        if hasattr(resources, "loaded") and not resources.loaded:
+            await resources.async_load()
+        base = url.split("?")[0]
+        for item in resources.async_items():
+            item_url = item.get("url", "")
+            if item_url.split("?")[0] == base:
+                if item_url != url:
+                    await resources.async_update_item(item["id"], {"url": url})
+                    _LOGGER.info("Updated iPIXEL card resource to %s", url)
+                return
+        await resources.async_create_item({"res_type": "module", "url": url})
+        _LOGGER.info("Registered iPIXEL card as Lovelace resource %s", url)
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.warning("Could not register Lovelace resource %s: %s", url, err)

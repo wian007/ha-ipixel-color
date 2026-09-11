@@ -2,40 +2,95 @@
   "config": {
     "step": {
       "user": {
-        "title": "Select iPIXEL Device",
-        "description": "Choose your iPIXEL Color display from the discovered devices, or select manual entry.",
+        "title": "iPIXEL Color",
+        "menu_options": {
+          "panel": "Add a panel (Bluetooth device)",
+          "group": "Combine panels into one display"
+        }
+      },
+      "panel": {
+        "title": "Select panel",
+        "description": "Choose your iPIXEL panel from the devices seen by the Home Assistant Bluetooth stack ({device_count} found, ★ = recognised iPIXEL panel), or enter the address manually.",
         "data": {
           "device": "Device"
         }
       },
       "manual": {
-        "title": "Manual Setup",
-        "description": "Enter the Bluetooth address of your iPIXEL Color display manually.",
+        "title": "Manual setup",
+        "description": "Enter the Bluetooth address of the panel.",
         "data": {
-          "address": "Bluetooth Address",
-          "name": "Device Name"
+          "address": "Bluetooth address",
+          "name": "Name"
         }
       },
       "bluetooth_confirm": {
-        "title": "Confirm iPIXEL Device",
-        "description": "Do you want to add the iPIXEL device {name} ({address}) to Home Assistant?"
+        "title": "Confirm iPIXEL panel",
+        "description": "Add the iPIXEL panel {name} ({address})?",
+        "data": {
+          "name": "Name"
+        }
+      },
+      "group": {
+        "title": "Combined display",
+        "description": "Select the panels that together form one large display. In the next steps you place each panel on a grid (row/column).",
+        "data": {
+          "name": "Name",
+          "members": "Panels"
+        }
+      },
+      "group_position": {
+        "title": "Position of {panel} ({index}/{total})",
+        "description": "Row 0 is the top row, column 0 the left-most panel. Panels in the same row are placed side by side ordered by column.",
+        "data": {
+          "row": "Row",
+          "col": "Column"
+        }
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to the device. Make sure the device is powered on and in range.",
-      "invalid_address": "Invalid Bluetooth address format.",
-      "discovery_failed": "Failed to discover devices. Make sure Bluetooth is enabled.",
-      "no_devices_found": "No iPIXEL devices found. Make sure your device is powered on and in pairing mode.",
+      "cannot_connect": "Could not connect. Make sure the panel is powered on, in range of a Bluetooth adapter or proxy, and not connected to the phone app.",
+      "invalid_address": "Invalid Bluetooth address.",
       "device_not_found": "Selected device not found.",
-      "unknown": "Unexpected error occurred."
+      "need_two_panels": "Select at least two panels.",
+      "unknown": "Unexpected error."
     },
     "abort": {
-      "already_configured": "Device is already configured.",
-      "cannot_connect": "Failed to connect to the device.",
-      "device_not_found": "Device not found.",
-      "discovery_failed": "Device discovery failed.",
-      "no_devices_found": "No devices found.",
-      "unknown": "Unknown error occurred."
+      "already_configured": "This panel is already configured.",
+      "not_enough_panels": "Add at least two panels before creating a combined display.",
+      "cannot_connect": "Could not connect to the panel.",
+      "unknown": "Unexpected error."
+    }
+  },
+  "options": {
+    "step": {
+      "panel": {
+        "title": "Panel options",
+        "description": "Override the detected size when it is wrong (0 = automatic).",
+        "data": {
+          "width": "Width (px)",
+          "height": "Height (px)",
+          "ack_timeout": "Command timeout (s)"
+        }
+      },
+      "group": {
+        "title": "Combined display",
+        "description": "Change the panels of this combined display. In the next steps you place each panel on the grid.",
+        "data": {
+          "name": "Name",
+          "members": "Panels"
+        }
+      },
+      "group_position": {
+        "title": "Position of {panel} ({index}/{total})",
+        "description": "Row 0 is the top row, column 0 the left-most panel.",
+        "data": {
+          "row": "Row",
+          "col": "Column"
+        }
+      }
+    },
+    "error": {
+      "need_two_panels": "Select at least two panels."
     }
   },
   "entity": {
@@ -43,24 +98,136 @@
       "power": {
         "name": "Power"
       },
+      "antialiasing": {
+        "name": "Antialiasing"
+      },
+      "auto_update": {
+        "name": "Auto update"
+      },
+      "clock_24h": {
+        "name": "Clock 24h"
+      },
+      "clock_show_date": {
+        "name": "Clock show date"
+      },
+      "program_list": {
+        "name": "Playlist"
+      },
       "fun_mode": {
-        "name": "Fun Mode"
+        "name": "Fun mode"
       },
       "screen_visible": {
-        "name": "Screen Visible"
+        "name": "Screen visible"
+      }
+    },
+    "text": {
+      "display": {
+        "name": "Display"
+      },
+      "gif_url": {
+        "name": "Image URL"
       }
     },
     "select": {
+      "mode": {
+        "name": "Mode",
+        "state": {
+          "textimage": "Text (rendered)",
+          "text": "Text (native)",
+          "clock": "Clock",
+          "gif": "Image / GIF",
+          "rhythm": "Rhythm"
+        }
+      },
+      "font": {
+        "name": "Font"
+      },
+      "clock_style": {
+        "name": "Clock style"
+      },
+      "effect": {
+        "name": "Effect"
+      },
       "orientation": {
         "name": "Orientation"
       },
       "rhythm_style": {
-        "name": "Rhythm Style"
+        "name": "Rhythm style"
       }
     },
     "number": {
+      "font_size": {
+        "name": "Font size"
+      },
+      "line_spacing": {
+        "name": "Line spacing"
+      },
+      "brightness": {
+        "name": "Brightness"
+      },
+      "text_animation": {
+        "name": "Text animation"
+      },
+      "text_speed": {
+        "name": "Text speed"
+      },
+      "text_rainbow": {
+        "name": "Text rainbow"
+      },
+      "schedule_interval": {
+        "name": "Schedule interval"
+      },
       "rhythm_speed": {
-        "name": "Rhythm Speed"
+        "name": "Rhythm speed"
+      }
+    },
+    "light": {
+      "text_color": {
+        "name": "Text color"
+      },
+      "background_color": {
+        "name": "Background color"
+      }
+    },
+    "button": {
+      "update_display": {
+        "name": "Update display"
+      },
+      "sync_time": {
+        "name": "Sync time"
+      },
+      "clear_display": {
+        "name": "Clear display"
+      }
+    },
+    "sensor": {
+      "width": {
+        "name": "Width"
+      },
+      "height": {
+        "name": "Height"
+      },
+      "device_type": {
+        "name": "Device type"
+      },
+      "mcu_version": {
+        "name": "MCU version"
+      },
+      "wifi_version": {
+        "name": "WiFi version"
+      },
+      "panel_count": {
+        "name": "Panels loaded"
+      }
+    },
+    "camera": {
+      "preview": {
+        "name": "Preview"
+      }
+    },
+    "media_player": {
+      "gif_player": {
+        "name": "Image player"
       }
     }
   }

@@ -9,9 +9,8 @@ from __future__ import annotations
 
 import io
 import logging
-import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -27,8 +26,6 @@ from ..const import (
 )
 from .font_cache import get_font_cache, FontCache
 
-if TYPE_CHECKING:
-    from aiohttp import ClientSession
 
 _LOGGER = logging.getLogger(__name__)
 

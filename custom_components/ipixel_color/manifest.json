@@ -1,12 +1,17 @@
 {
   "domain": "ipixel_color",
   "name": "iPIXEL Color",
+  "after_dependencies": [
+    "lovelace"
+  ],
   "bluetooth": [
     {
-      "local_name": "LED_BLE_*"
+      "local_name": "LED_BLE_*",
+      "connectable": true
     },
     {
-      "service_uuid": "0000fa01-0000-1000-8000-00805f9b34fb"
+      "service_uuid": "0000fa01-0000-1000-8000-00805f9b34fb",
+      "connectable": true
     }
   ],
   "codeowners": [
@@ -14,20 +19,19 @@
   ],
   "config_flow": true,
   "dependencies": [
-    "bluetooth"
+    "bluetooth_adapters"
   ],
-  "documentation": "https://github.com/cagcoach/ha-ipixel-color",
+  "documentation": "https://github.com/wian007/ha-ipixel-color",
   "integration_type": "device",
   "iot_class": "local_push",
-  "issue_tracker": "https://github.com/cagcoach/ha-ipixel-color/issues",
+  "issue_tracker": "https://github.com/wian007/ha-ipixel-color/issues",
   "loggers": [
     "custom_components.ipixel_color"
   ],
   "requirements": [
-    "bleak>=0.20.0",
     "bleak-retry-connector>=3.5.0",
     "pillow>=10.0.0",
-    "pypixelcolor>=0.4.0"
+    "pypixelcolor>=0.5.0"
   ],
-  "version": "0.1.0"
+  "version": "0.2.0"
 }

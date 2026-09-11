@@ -16,16 +16,18 @@ import logging
 import random
 import uuid
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, time, timedelta
-from typing import Any, Callable, TYPE_CHECKING
+from datetime import datetime, timedelta
+from typing import Any, TYPE_CHECKING
+from collections.abc import Callable
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
+    from .runtime import iPIXELRuntime
+
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.event import (
     async_track_time_interval,
-    async_track_time_change,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -67,7 +69,7 @@ class ScheduleItem:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ScheduleItem":
+    def from_dict(cls, data: dict[str, Any]) -> ScheduleItem:
         """Create from dictionary."""
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
@@ -88,7 +90,7 @@ class Playlist:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Playlist":
+    def from_dict(cls, data: dict[str, Any]) -> Playlist:
         """Create from dictionary."""
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
@@ -111,7 +113,7 @@ class TimeSlot:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "TimeSlot":
+    def from_dict(cls, data: dict[str, Any]) -> TimeSlot:
         """Create from dictionary."""
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
@@ -154,7 +156,7 @@ class PowerSchedule:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "PowerSchedule":
+    def from_dict(cls, data: dict[str, Any]) -> PowerSchedule:
         """Create from dictionary."""
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
@@ -193,25 +195,19 @@ class iPIXELScheduleManager:
     - Integration with HA automations
     """
 
-    def __init__(
-        self,
-        hass: "HomeAssistant",
-        api: Any,
-        address: str,
-    ) -> None:
+    def __init__(self, hass: HomeAssistant, runtime: iPIXELRuntime) -> None:
         """Initialize schedule manager.
 
         Args:
             hass: Home Assistant instance
-            api: iPIXEL API instance for device control
-            address: Device Bluetooth address (for unique storage)
+            runtime: Runtime of the display (panel or combined display)
         """
         self._hass = hass
-        self._api = api
-        self._address = address
+        self._runtime = runtime
+        self._address = runtime.unique_prefix
 
-        # Storage
-        safe_address = address.replace(":", "").lower()
+        # Storage (key kept identical to previous versions for existing panels)
+        safe_address = self._address.replace(":", "").lower()
         self._store: Store = Store(
             hass, STORAGE_VERSION, f"{STORAGE_KEY}_{safe_address}"
         )
@@ -547,38 +543,47 @@ class iPIXELScheduleManager:
 
     async def _display_item(self, item: ScheduleItem) -> None:
         """Display a schedule item on the device."""
+        from .const import MODE_CLOCK, MODE_GIF, MODE_RHYTHM, MODE_TEXT, MODE_TEXT_IMAGE
+
         try:
+            display = self._runtime.display
             # If item has a slot, just show the slot (instant, no BLE transfer)
             if item.slot is not None:
-                await self._api.show_slot(item.slot)
+                await display.async_call("show_slot", item.slot)
                 return
 
-            # Otherwise, send content based on mode
-            from .common import update_ipixel_display
-
-            # Get device name for entity lookups
-            device_name = self._address.replace(":", "").lower()
-
-            if item.mode == "clock":
-                await self._api.set_clock_mode(
-                    style=item.clock_style,
-                    show_date=True,
-                    format_24=True
+            if item.mode == MODE_CLOCK:
+                await self._runtime.async_update_display(
+                    mode=MODE_CLOCK, overrides={"clock_style": item.clock_style}
                 )
-            elif item.mode == "rhythm":
-                await self._api.set_rhythm_mode(
-                    style=item.rhythm_style,
-                    speed=item.rhythm_speed
+            elif item.mode == MODE_RHYTHM:
+                await self._runtime.async_update_display(
+                    mode=MODE_RHYTHM,
+                    overrides={"rhythm_style": item.rhythm_style, "rhythm_speed": item.rhythm_speed},
                 )
-            elif item.mode == "gif" and item.gif_url:
-                await self._api.display_image_url(item.gif_url)
-            elif item.mode in ("text", "textimage"):
-                # Use the common update function with item's text
-                await update_ipixel_display(
-                    self._hass, device_name, self._api, item.text
+            elif item.mode == MODE_GIF:
+                await self._runtime.async_update_display(
+                    mode=MODE_GIF, overrides={"gif_url": item.gif_url} if item.gif_url else None
                 )
+            elif item.mode in (MODE_TEXT, MODE_TEXT_IMAGE):
+                overrides: dict[str, Any] = {}
+                if item.color:
+                    overrides["text_color"] = item.color
+                if item.bg_color:
+                    overrides["bg_color"] = item.bg_color
+                if item.font:
+                    overrides["font"] = item.font
+                if item.font_size:
+                    overrides["font_size"] = item.font_size
+                if item.mode == MODE_TEXT:
+                    overrides.update(
+                        {"animation": item.animation, "speed": item.speed, "rainbow_mode": item.rainbow_mode}
+                    )
+                await self._runtime.async_update_display(item.text, mode=item.mode, overrides=overrides)
+            else:
+                _LOGGER.warning("Unknown schedule item mode '%s'", item.mode)
 
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001 - keep the playlist running
             _LOGGER.error("Error displaying item '%s': %s", item.name, err)
 
     # =========================================================================
@@ -692,7 +697,7 @@ class iPIXELScheduleManager:
             if last_state != should_be_on:
                 last_state = should_be_on
                 try:
-                    await self._api.set_power(should_be_on)
+                    await self._runtime.async_set_power(should_be_on)
                     _LOGGER.info(
                         "Power schedule: turned %s",
                         "ON" if should_be_on else "OFF"

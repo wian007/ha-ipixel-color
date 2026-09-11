@@ -84,6 +84,12 @@ export class iPIXELCardBase extends HTMLElement {
       console.info(`iPIXEL [Test Mode]: ${domain}.${service}`, data);
       return;
     }
+    // Integration services target a display through any of its entities, so
+    // the card always passes its configured entity (works with several
+    // panels and with combined displays).
+    if (domain === 'ipixel_color' && this._config.entity && !data.entity_id && !data.device_id) {
+      data = { ...data, entity_id: this._config.entity };
+    }
     try {
       await this._hass.callService(domain, service, data);
     } catch (err) {

@@ -2,126 +2,159 @@
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/A4747U9)
 
-A Home Assistant custom integration for iPIXEL Color LED matrix displays via Bluetooth.
-These displays have been recently available as B.K. Light LED Pixel Board from Action and thus get increasing popularity.
+A Home Assistant custom integration for iPIXEL Color LED matrix panels
+(also sold as *B.K. Light LED Pixel Board* by Action). Panels are driven over
+the **Home Assistant Bluetooth stack**, so local adapters *and* ESPHome /
+Shelly Bluetooth proxies work. Several panels can be combined into **one large
+virtual display**.
 
 ## Features
 
-- **Multiple Display Modes**: Text Image, Native Text, Clock, GIF, and Rhythm modes
-- **RGB Color Support**: Separate text and background colors via RGB light entities
-- **Clock Display**: 9 different clock styles with automatic time synchronization
-- **Rich Text Display**: Custom fonts, sizes, multiline text with `\n`, antialiasing
-- **Template Support**: Use Home Assistant variables like `{{ states('sensor.temperature') }}°C`
-- **Font Management**: Load TTF/OTF fonts from `fonts/` folder
-- **Brightness Control**: Adjustable display brightness (1-100)
-- **Orientation Control**: Rotate display (0°, 90°, 180°, 270°)
-- **Rhythm/Music Visualizer**: Audio-reactive display with 5 visual styles
-- **Direct Pixel Control**: Set individual LED pixels via service calls
-- **Digital Signage**: Playlists, time slots, power scheduling
-- **Lovelace Card**: Built-in visual control card
-- **Auto/Manual Updates**: Choose automatic updates or manual refresh
-- **State Persistence**: Settings preserved across HA restarts
-- **Bluetooth Proxy Support**: Compatible with Bluetooth proxy devices
-- **Auto-discovery**: Finds iPIXEL devices automatically via Bluetooth
+- **Multiple panels** – every panel is its own device with its own entities
+- **Combined display** – place panels on a grid (for example 2×1 or 2×2) and drive
+  them as one screen: text, images, GIFs and `draw_visuals` are rendered once and
+  spread over the panels; power, brightness, clock and native text are sent to all
+- **Display modes** – rendered text (`textimage`), native device text with scroll /
+  blink effects (`text`), clock (9 styles), image / GIF from URL, music visualiser
+- **Templates** – `{{ states('sensor.temperature') }}°C` is re-rendered automatically
+  when the sensor changes (with *Auto update* on)
+- **Colours, fonts, effects** – RGB text & background pickers, TTF/OTF fonts from
+  the `fonts/` folder, image effects (blur, invert, mirror, ...)
+- **Preview** – a camera entity shows what Home Assistant rendered last
+- **Digital signage** – playlists, time slots and power schedules
+- **Lovelace cards** – bundled cards are registered as a dashboard resource automatically
+- **Robust Bluetooth** – one connection per panel, automatic reconnect, commands are
+  serialised so uploads never interleave, errors are shown in the UI instead of
+  being swallowed
+- **Auto-discovery** – panels advertising as `LED_BLE_*` show up in *Devices & Services*
 
 ## Installation
 
-### HACS (Recommended)
+### HACS (recommended)
 
-1. Open HACS in Home Assistant
-2. Click on the three dots in the top right corner
-3. Select **Custom repositories**
-4. Add the repository URL: `https://github.com/cagcoach/ha-ipixel-color`
-5. Select **Integration** as the category
-6. Click **Add**
-7. Search for "iPIXEL Color" in HACS and install it
-8. Restart Home Assistant
-9. Add the integration via Settings → Devices & Services → Add Integration
+1. HACS → three dots → **Custom repositories**
+2. Add `https://github.com/wian007/ha-ipixel-color` as **Integration**
+3. Install *iPIXEL Color* and restart Home Assistant
+4. Settings → Devices & Services → **Add Integration** → *iPIXEL Color*
 
-### Manual Installation
+### Manual
 
-1. Copy `custom_components/ipixel_color` to your HA `custom_components` directory
-2. Restart Home Assistant
-3. Add integration via Settings → Devices & Services → Add Integration
+Copy `custom_components/ipixel_color` into your `custom_components` folder and
+restart Home Assistant.
 
-### Optional: Custom Fonts
+### Requirements
 
-Place `.ttf`/`.otf` font files in the `fonts/` folder within the integration directory for additional font options.
+- Home Assistant 2024.3 or newer with the Bluetooth integration set up
+  (a local adapter or a Bluetooth proxy in range of every panel)
+- The panel must **not** be connected to the phone app while Home Assistant uses it
+
+## Setting up panels
+
+*Add Integration → iPIXEL Color → Add a panel*. Pick the panel from the list of
+Bluetooth devices Home Assistant sees (★ marks recognised iPIXEL panels) or enter
+its address manually. The integration connects once to detect the panel size.
+
+If the detected size is wrong you can override it under the panel's **Configure**
+(options) dialog, together with the command timeout.
+
+## Combining panels into one display
+
+Once at least two panels are configured: *Add Integration → iPIXEL Color →
+Combine panels into one display*.
+
+1. Give the combined display a name and select its panels
+2. For every panel enter its **row** and **column** on the grid
+   (row 0 = top, column 0 = left)
+
+Two 64×16 panels on row 0, columns 0 and 1, become a 128×16 display; a 64×16 panel
+above another one becomes 64×32. Mixed sizes work too (each grid row is as high as
+its tallest panel).
+
+The combined display gets its own device with the same entities as a panel.
+Everything Home Assistant renders itself is sliced over the panels and uploaded to
+all of them in parallel:
+
+| Content | Combined display behaviour |
+|---------|----------------------------|
+| Rendered text (`textimage` mode), image / GIF, `draw_visuals`, `set_pixels`, `draw_solid_color` | one canvas, spread over the panels |
+| Native text (`text` mode), clock, rhythm | sent to every panel (each panel shows it on its own) |
+| Power, brightness, orientation, clear, sync time, slots, ... | sent to every panel |
+
+The layout (pixel rectangle per panel) is exposed as attributes of the combined
+display's *Width* sensor. Panels that are temporarily unavailable are skipped; the
+*Panels loaded* sensor shows how many are online. Change panels or positions later
+through **Configure** on the combined display.
+
+> GIF playback over several panels is synchronised on a best-effort basis: every
+> panel starts its animation when its own upload has finished.
 
 ## Entities
 
-Once configured, you'll get these entities:
+Every panel and every combined display provides:
 
-**Display Control:**
-- `select.{device}_mode` - Display mode (textimage, text, clock)
-- `text.{device}_display` - Enter text with templates and `\n` for newlines
-- `switch.{device}_power` - Turn display on/off
-- `number.{device}_brightness` - Display brightness level (1-100)
+| Entity | Purpose |
+|--------|---------|
+| `text.<name>_display` | Text to show (templates and `\n` supported) |
+| `text.<name>_image_url` | Image / GIF URL for `gif` mode |
+| `select.<name>_mode` | `textimage`, `text`, `clock`, `gif`, `rhythm` |
+| `switch.<name>_auto_update` | Re-render automatically when a setting or template changes |
+| `button.<name>_update_display` | Render the current settings now |
+| `switch.<name>_power`, `number.<name>_brightness`, `select.<name>_orientation` | Device control (sent immediately) |
+| `light.<name>_text_color`, `light.<name>_background_color` | Colour pickers |
+| `select.<name>_font`, `number.<name>_font_size`, `number.<name>_line_spacing`, `switch.<name>_antialiasing` | Text rendering |
+| `number.<name>_text_animation`, `number.<name>_text_speed`, `number.<name>_text_rainbow` | Native text effects |
+| `select.<name>_clock_style`, `switch.<name>_clock_24h`, `switch.<name>_clock_show_date` | Clock mode |
+| `select.<name>_rhythm_style`, `number.<name>_rhythm_speed` | Music visualiser |
+| `select.<name>_effect` | Image effect applied to rendered content |
+| `switch.<name>_screen_visible`, `button.<name>_clear_display`, `button.<name>_sync_time`, `switch.<name>_fun_mode` | Misc. device control |
+| `switch.<name>_playlist`, `number.<name>_schedule_interval` | Playlist loop |
+| `camera.<name>_preview` | Last rendered frame |
+| `media_player.<name>_image_player` | Play an image / GIF URL |
+| `sensor.<name>_width`, `sensor.<name>_height`, ... | Diagnostics |
 
-**Text Appearance:**
-- `select.{device}_font` - Choose from available fonts
-- `number.{device}_font_size` - Font size (0=auto, supports decimals like 12.5)
-- `number.{device}_line_spacing` - Spacing between lines (0-20px)
-- `switch.{device}_antialiasing` - Smooth vs sharp text
-- `light.{device}_text_color` - RGB text color
-- `light.{device}_background_color` - RGB background color
+Settings are restored after a restart; nothing is sent to the panels at startup.
 
-**Clock Mode:**
-- `select.{device}_clock_style` - Clock style (0-8)
-- `switch.{device}_clock_24h_format` - 24-hour time format
-- `switch.{device}_clock_show_date` - Show date below time
+## Services
 
-**Update Control:**
-- `switch.{device}_auto_update` - Auto-update on changes
-- `button.{device}_update_display` - Manual refresh
+All services take an optional `device_id` (panel or combined display) or
+`entity_id` (any entity of that display). When only one display is configured the
+target can be omitted.
 
-**Device Info:**
-- `sensor.{device}_width` - Display width in pixels
-- `sensor.{device}_height` - Display height in pixels
-- `sensor.{device}_device_type` - Device model information
+| Service | Description |
+|---------|-------------|
+| `ipixel_color.display_text` | Show text (`mode: text` native with effects, `mode: textimage` rendered) |
+| `ipixel_color.update_display` | Re-render the current entity settings |
+| `ipixel_color.display_image_url` | Show an image or GIF from a URL |
+| `ipixel_color.draw_visuals` / `stop_visuals` | Multi-element canvas (text, scrolling text, images, pixels) with animation |
+| `ipixel_color.draw_solid_color`, `set_pixel`, `set_pixels` | Pixel level control (combined coordinates on a combined display) |
+| `ipixel_color.set_power`, `set_brightness`, `set_orientation`, `set_upside_down` | Device control |
+| `ipixel_color.set_clock_mode`, `set_rhythm_mode`, `set_rhythm_mode_advanced` | Native modes |
+| `ipixel_color.sync_time`, `set_time` | Clock |
+| `ipixel_color.clear_pixels` (`clear_display`), `show_slot`, `delete_slot`, `erase_data`, `set_program_mode`, `set_screen`, `set_diy_mode`, `set_default_mode` | Storage / screens |
+| `ipixel_color.add_schedule`, `remove_schedule`, `trigger_schedule`, `set_playlist`, `create_playlist`, `start_playlist`, `stop_playlist`, `set_power_schedule`, `add_time_slot` | Digital signage |
+| `ipixel_color.send_raw_command`, `send_mix_data`, `set_password`, `verify_password` | Expert |
 
-## Template Examples
+Example:
 
-```jinja2
-Time: {{ now().strftime('%H:%M') }}
-Temp: {{ states('sensor.temperature') | round(1) }}°C
-{% if is_state('sun.sun', 'above_horizon') %}Day{% else %}Night{% endif %}
+```yaml
+service: ipixel_color.display_text
+target:
+  entity_id: text.living_room_wall_display   # combined display
+data:
+  text: "{{ states('sensor.outside_temperature') }}°C"
+  mode: textimage
+  color_fg: [255, 160, 0]
 ```
 
-## Quick Start
+See [`examples/`](examples/) for automations.
 
-**Text Mode:**
-1. Select mode: `textimage` (for RGB colors) or `text` (native)
-2. Set text: `"Hello\nWorld"`
-3. Choose text and background colors using light entities
-4. Select font and size (or use auto-sizing)
-5. Toggle auto-update ON or use manual update button
+## Lovelace cards
 
-**Clock Mode:**
-1. Select mode: `clock`
-2. Choose clock style (0-8)
-3. Set 24-hour format and date display preferences
-4. Time syncs automatically
-
-**Templates:**
-- Templates update automatically with sensor changes when auto-update is ON
-
-## Font Management
-
-- Place `.ttf`/`.otf` files in `fonts/` folder
-- Restart HA to see new fonts in dropdown
-- Recommended: pixel fonts like 5x5.ttf, 7x7.ttf
-
-## Troubleshooting
-
-- Enable debug logging: `custom_components.ipixel_color: debug`
-- Check auto-update is ON or use manual update button
-- Verify templates in Developer Tools → Template
-- Ensure device is in Bluetooth range
-
-## Lovelace Card
-
-The integration includes a built-in Lovelace card for visual control. After installation, add the resource to your Lovelace configuration:
+The bundled cards (`ipixel-display-card`, `ipixel-controls-card`, `ipixel-text-card`,
+`ipixel-playlist-card`, `ipixel-schedule-card`, `ipixel-editor-card`) are served at
+`/ipixel_color/ipixel-display-card.js` and registered as a dashboard resource
+automatically when your dashboards are in storage mode (the default). In YAML mode
+add the resource yourself:
 
 ```yaml
 resources:
@@ -129,77 +162,49 @@ resources:
     type: module
 ```
 
-Then add the card to your dashboard:
-
 ```yaml
 type: custom:ipixel-display-card
-entity: text.ipixel_living_room_text
-name: Living Room Display
-resolution: 64x16
-show_header: true
-show_display: true
-show_controls: true
-show_quick_actions: true
+entity: text.living_room_wall_display
+name: Living room wall
 ```
 
-**Card Features:**
-- Display preview with LED matrix visualization
-- Quick actions: Power, Clear, Clock, Sync Time
-- Text input with effects (scroll, blink, breeze, snow, laser)
-- Brightness and orientation controls
-- Playlist management
-- Power schedule configuration
+The card uses the configured entity to target the right display, so it works for
+panels and combined displays alike.
 
-## Services
+## Fonts
 
-The integration provides these services for automation:
+Put `.ttf` / `.otf` files in `custom_components/ipixel_color/fonts/` and restart.
+They are available for rendered text; for native text mode the built-in
+`UNIFONT` or a TTF file can be selected.
 
-| Service | Description |
-|---------|-------------|
-| `ipixel_color.display_text` | Display text with effects and colors |
-| `ipixel_color.set_brightness` | Set brightness level (1-100) |
-| `ipixel_color.set_clock_mode` | Enable clock display with style options |
-| `ipixel_color.sync_time` | Sync current time to device |
-| `ipixel_color.upload_gif` | Upload and display GIF animation |
-| `ipixel_color.set_pixel` | Set a single pixel color |
-| `ipixel_color.set_pixels` | Set multiple pixels (batch) |
-| `ipixel_color.clear_pixels` | Clear the display |
-| `ipixel_color.show_slot` | Display content from stored slot |
-| `ipixel_color.delete_slot` | Delete stored slot content |
-| `ipixel_color.create_playlist` | Create content playlist |
-| `ipixel_color.start_playlist` | Start playlist playback |
-| `ipixel_color.stop_playlist` | Stop playlist |
-| `ipixel_color.add_schedule` | Add scheduled display item |
-| `ipixel_color.set_power_schedule` | Configure auto on/off times |
-| `ipixel_color.add_time_slot` | Schedule playlist for specific times |
+## Troubleshooting
 
-## Status
+- Enable debug logging: `custom_components.ipixel_color: debug`
+- **Cannot connect** – the panel is off, out of range, or still connected to the
+  phone app. With Bluetooth proxies make sure the panel is in range of a proxy
+  that has a free connection slot.
+- **Timeout waiting for ACK** – increase the command timeout in the panel options;
+  large GIFs take a while over BLE.
+- **Wrong size** – override width/height in the panel options.
+- Download diagnostics from the device page for support requests.
 
-| Feature | Status |
-|---------|--------|
-| ✅ Text Display (3 modes) | Complete |
-| ✅ RGB Colors | Complete |
-| ✅ Clock Mode (9 styles) | Complete |
-| ✅ Custom Fonts | Complete |
-| ✅ Templates | Complete |
-| ✅ State Persistence | Complete |
-| ✅ Brightness Control | Complete |
-| ✅ Orientation Control | Complete |
-| ✅ Rhythm/Music Mode | Complete |
-| ✅ Pixel Control | Complete |
-| ✅ Digital Signage | Complete |
-| ✅ Lovelace Card | Complete |
-| 🔄 GIF Animations | In Progress |
-| 🔄 Animated Variable-Width Fonts | Planned |
+## Development
 
-## Technical
+```bash
+python -m venv .venv && . .venv/bin/activate
+pip install pytest-homeassistant-custom-component pypixelcolor
+pytest
+```
 
-- Requires: Home Assistant 2024.1+ and HACS
+The tests use a simulated panel, no hardware is needed. The Lovelace cards are
+built with `npm run build` in `custom_components/ipixel_color/www`.
 
 ## Acknowledgments
 
-Special thanks to the authors of [pypixelcolor](https://github.com/lucagoc/pypixelcolor) for their excellent library that powers the core functionality of this integration. Their work in reverse-engineering the iPIXEL protocol has been invaluable.
+Thanks to the authors of [pypixelcolor](https://github.com/lucagoc/pypixelcolor) for
+reverse-engineering the iPIXEL protocol; this integration uses it for command
+encoding. Originally started by [cagcoach](https://github.com/cagcoach/ha-ipixel-color).
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0 - see the LICENSE file for details.
+GNU General Public License v3.0 – see the LICENSE file.

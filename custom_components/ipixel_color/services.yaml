@@ -1,24 +1,41 @@
 display_text:
-  name: Display Text
-  description: Display text on the iPIXEL device with custom effects and colors
+  name: Display text
+  description: Show text on a panel or combined display.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
           integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
     text:
       name: Text
-      description: Text to display (max 500 characters)
+      description: Text to display (templates and \n are supported)
       required: true
       example: "Hello World"
       selector:
         text:
+    mode:
+      name: Mode
+      description: text = rendered by the panel itself (scroll/blink effects); textimage = rendered by Home Assistant (spread over a combined display)
+      required: false
+      default: "text"
+      selector:
+        select:
+          options:
+            - "text"
+            - "textimage"
     effect:
-      name: Effect
-      description: Display effect for the text
+      name: Animation
+      description: Native text animation (0 static, 1 scroll left, 2 scroll right, 3 up, 4 down, 5 blink, 6 fade, 7 snow)
       required: false
       default: 0
       selector:
@@ -28,323 +45,382 @@ display_text:
           mode: box
     speed:
       name: Speed
-      description: Animation speed (1-100)
+      description: Animation speed (0-100)
       required: false
-      default: 50
+      default: 80
       selector:
         number:
-          min: 1
+          min: 0
           max: 100
           mode: slider
+    rainbow_mode:
+      name: Rainbow
+      description: Rainbow colour mode (0-9)
+      required: false
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 9
+          mode: box
     color_fg:
-      name: Text Color
-      description: Foreground text color
+      name: Text colour
+      description: Text colour
       required: false
       default: [255, 255, 255]
       selector:
         color_rgb:
     color_bg:
-      name: Background Color
-      description: Background color
+      name: Background colour
+      description: Background colour
       required: false
       default: [0, 0, 0]
       selector:
         color_rgb:
     font:
       name: Font
-      description: Font name for text rendering
+      description: UNIFONT (built-in) or a font file name from the fonts folder
       required: false
-      default: "CUSONG"
+      example: "UNIFONT"
       selector:
-        select:
-          options:
-            - "CUSONG"
-            - "SIMSUN"
-            - "VCR_OSD_MONO"
-    matrix_height:
-      name: Matrix Height
-      description: Override display height for text rendering in pixels (leave empty for auto-detect from device)
+        text:
+    font_size:
+      name: Font size
+      description: Character height in pixels (0 = automatic)
       required: false
       selector:
         number:
-          min: 4
-          max: 512
+          min: 0
+          max: 128
           mode: box
           unit_of_measurement: "px"
 
-upload_gif:
-  name: Upload GIF
-  description: Upload and display a GIF animation on the iPIXEL device
+update_display:
+  name: Update display
+  description: Re-render the current entity settings (text, mode, colours, ...) to the display.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
           integration: ipixel_color
-    gif_url:
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+
+display_image_url:
+  name: Display image from URL
+  description: Download a PNG/JPG/BMP/WEBP/GIF and show it (spread over a combined display).
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+    url:
+      name: Image URL
+      description: URL of the image or GIF
+      required: true
+      example: "https://example.com/image.png"
+      selector:
+        text:
+    effect:
+      name: Effect
+      description: Optional image effect (blur, invert, mirror, ...)
+      required: false
+      selector:
+        text:
+    buffer_slot:
+      name: Storage slot
+      description: Store in a slot (1-255) instead of showing directly (0)
+      required: false
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 255
+          mode: box
+
+upload_gif:
+  name: Upload GIF
+  description: Alias of display_image_url.
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+    url:
       name: GIF URL
-      description: URL to the GIF file to display
+      description: URL of the GIF
       required: true
       example: "https://example.com/animation.gif"
       selector:
         text:
     buffer_slot:
-      name: Buffer Slot
-      description: Storage slot on device (1-255)
+      name: Storage slot
+      description: Store in a slot (1-255) instead of showing directly (0)
       required: false
-      default: 1
+      default: 0
       selector:
         number:
-          min: 1
+          min: 0
           max: 255
           mode: box
 
-add_schedule:
-  name: Add Schedule
-  description: Add a scheduled display item
+display_image_raw_rgb:
+  name: Display image (raw RGB)
+  description: Stream an image file from disk using the fast raw RGB protocol (not stored on the panel).
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
-      selector:
-        device:
-          integration: ipixel_color
-    name:
-      name: Schedule Name
-      description: Name for this schedule item
-      required: true
-      example: "Morning Message"
-      selector:
-        text:
-    text:
-      name: Text
-      description: Text to display when triggered
-      required: true
-      example: "Good Morning!"
-      selector:
-        text:
-    mode:
-      name: Mode
-      description: Display mode for this schedule
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
       required: false
-      default: "textimage"
       selector:
-        select:
-          options:
-            - "text"
-            - "textimage"
-            - "clock"
-            - "gif"
-    duration_ms:
-      name: Duration
-      description: How long to display this item (milliseconds)
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
       required: false
-      default: 5000
       selector:
-        number:
-          min: 1000
-          max: 3600000
-          mode: box
-          unit_of_measurement: "ms"
-
-remove_schedule:
-  name: Remove Schedule
-  description: Remove a scheduled item by ID
-  fields:
-    device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
-      selector:
-        device:
+        entity:
           integration: ipixel_color
-    schedule_id:
-      name: Schedule ID
-      description: ID of the schedule to remove
+    image_path:
+      name: Image path
+      description: Path to the image (must be in allowlist_external_dirs)
       required: true
+      example: "/config/www/images/display.png"
       selector:
         text:
-
-trigger_schedule:
-  name: Trigger Schedule
-  description: Manually trigger a schedule item (for HA automations)
-  fields:
-    device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
-      selector:
-        device:
-          integration: ipixel_color
-    schedule_id:
-      name: Schedule ID
-      description: ID of the schedule to trigger
-      required: true
-      selector:
-        text:
-
-set_playlist:
-  name: Set Playlist
-  description: Set the playlist order for cycling
-  fields:
-    device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
-      selector:
-        device:
-          integration: ipixel_color
-    schedule_ids:
-      name: Schedule IDs
-      description: Comma-separated list of schedule IDs in order
-      required: true
-      example: "morning_msg,weather,time"
-      selector:
-        text:
-
-sync_time:
-  name: Sync Time
-  description: Synchronize the current time to the iPIXEL device
-  fields:
-    device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
-      selector:
-        device:
-          integration: ipixel_color
-
-set_pixel:
-  name: Set Pixel
-  description: Set a single pixel color at specified coordinates
-  fields:
-    device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
-      selector:
-        device:
-          integration: ipixel_color
-    x:
-      name: X Coordinate
-      description: Horizontal position (0 to width-1)
-      required: true
-      example: 0
+    brightness:
+      name: Brightness
+      description: Scale the pixel values (1-100)
+      required: false
+      default: 100
       selector:
         number:
-          min: 0
-          max: 127
-          mode: box
-    y:
-      name: Y Coordinate
-      description: Vertical position (0 to height-1)
+          min: 1
+          max: 100
+          mode: slider
+          unit_of_measurement: "%"
+
+display_image_raw_rgb_url:
+  name: Display image URL (raw RGB)
+  description: Download an image and stream it using the raw RGB protocol.
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+    url:
+      name: Image URL
+      description: URL of the image
       required: true
-      example: 0
+      example: "https://example.com/image.png"
+      selector:
+        text:
+    brightness:
+      name: Brightness
+      description: Scale the pixel values (1-100)
+      required: false
+      default: 100
       selector:
         number:
-          min: 0
-          max: 63
-          mode: box
+          min: 1
+          max: 100
+          mode: slider
+          unit_of_measurement: "%"
+
+draw_solid_color:
+  name: Draw solid colour
+  description: Fill the whole display with one colour.
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
     color:
-      name: Color
-      description: Hex color value (e.g., 'ff0000' for red)
+      name: Colour
+      description: Hex colour (ff0000) or RGB list
       required: true
       example: "ff0000"
       selector:
         text:
 
-set_pixels:
-  name: Set Pixels
-  description: Set multiple pixels at once (batch mode)
+draw_visuals:
+  name: Draw visuals
+  description: Render multiple elements (text, scrolling text, long text, images, pixels) with animation on the whole display.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
           integration: ipixel_color
-    pixels:
-      name: Pixels
-      description: List of pixel objects with x, y, and color properties
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+    elements:
+      name: Elements
+      description: "List of elements. Types - text (content, x, y, color, font, font_size), textscroll (content, y, speed), textlong (content, x, y, speed, direction), image (source, x, y, width, height), pixels (data: [{x, y, color}])"
       required: true
-      example: '[{"x": 0, "y": 0, "color": "ff0000"}, {"x": 1, "y": 0, "color": "00ff00"}]'
+      example: |
+        - type: text
+          content: "Hello"
+          x: 0
+          y: 0
+          color: "ffffff"
+        - type: textscroll
+          content: "Scrolling message..."
+          y: 8
+          speed: 50
       selector:
         object:
-
-clear_pixels:
-  name: Clear Pixels
-  description: Clear the display (blank screen without powering off)
-  fields:
-    device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+    background:
+      name: Background
+      description: Background colour
+      required: false
+      default: [0, 0, 0]
       selector:
-        device:
-          integration: ipixel_color
-
-show_slot:
-  name: Show Slot
-  description: Display content from a stored slot on the device
-  fields:
-    device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
-      selector:
-        device:
-          integration: ipixel_color
-    slot:
-      name: Slot Number
-      description: Slot number to display (0-255)
-      required: true
-      example: 0
+        color_rgb:
+    fps:
+      name: FPS
+      description: Animation frames per second (1-30)
+      required: false
+      default: 10
       selector:
         number:
-          min: 0
-          max: 255
-          mode: box
+          min: 1
+          max: 30
+          mode: slider
+    brightness:
+      name: Brightness
+      description: Scale the pixel values (1-100)
+      required: false
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 100
+          mode: slider
+          unit_of_measurement: "%"
 
-delete_slot:
-  name: Delete Slot
-  description: Delete stored content from a specific slot
+stop_visuals:
+  name: Stop visuals
+  description: Stop a running draw_visuals animation.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
           integration: ipixel_color
-    slot:
-      name: Slot Number
-      description: Slot index to delete (0-255)
-      required: true
-      example: 0
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
       selector:
-        number:
-          min: 0
-          max: 255
-          mode: box
+        entity:
+          integration: ipixel_color
+
+set_power:
+  name: Set power
+  description: Turn the display on or off.
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+    on:
+      name: On
+      description: True to turn on
+      required: false
+      default: true
+      selector:
+        boolean:
 
 set_brightness:
-  name: Set Brightness
-  description: Set display brightness level directly via service
+  name: Set brightness
+  description: Set the display brightness.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
           integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
     level:
-      name: Brightness Level
-      description: Brightness percentage (1-100)
+      name: Level
+      description: Brightness (1-100)
       required: true
       example: 50
       selector:
@@ -354,19 +430,57 @@ set_brightness:
           mode: slider
           unit_of_measurement: "%"
 
-set_clock_mode:
-  name: Set Clock Mode
-  description: Configure and activate clock display mode
+set_orientation:
+  name: Set orientation
+  description: Rotate the display.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
           integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+    orientation:
+      name: Orientation
+      description: 0, 90, 180 or 270 degrees (or 0-3)
+      required: true
+      default: "0"
+      selector:
+        select:
+          options:
+            - "0"
+            - "90"
+            - "180"
+            - "270"
+
+set_clock_mode:
+  name: Set clock mode
+  description: Show the built-in clock.
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
     style:
-      name: Clock Style
+      name: Style
       description: Clock style (0-8)
       required: false
       default: 1
@@ -376,37 +490,138 @@ set_clock_mode:
           max: 8
           mode: box
     show_date:
-      name: Show Date
-      description: Display date alongside time
+      name: Show date
+      description: Show the date
       required: false
       default: true
       selector:
         boolean:
     format_24:
-      name: 24-Hour Format
-      description: Use 24-hour time format
+      name: 24-hour
+      description: Use a 24 hour clock
       required: false
       default: true
       selector:
         boolean:
     date:
       name: Date
-      description: Date in DD/MM/YYYY format (defaults to today)
+      description: Date as DD/MM/YYYY (today when empty)
       required: false
       example: "25/12/2024"
       selector:
         text:
 
-set_time:
-  name: Set Time
-  description: Set specific time on device (does not sync with HA time)
+set_rhythm_mode:
+  name: Set rhythm mode
+  description: Music visualiser.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+    style:
+      name: Style
+      description: Visualiser style (0-4)
+      required: false
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 4
+          mode: box
+    speed:
+      name: Speed
+      description: Animation speed (0-7)
+      required: false
+      default: 4
+      selector:
+        number:
+          min: 0
+          max: 7
+          mode: box
+
+set_rhythm_mode_advanced:
+  name: Set rhythm mode (advanced)
+  description: Music visualiser with 11 band levels.
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+    style:
+      name: Style
+      description: Visualiser style (0-4)
+      required: true
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 4
+          mode: box
+    levels:
+      name: Levels
+      description: 11 band levels (0-15), comma separated
+      required: true
+      example: "8,8,8,8,8,8,8,8,8,8,8"
+      selector:
+        text:
+
+sync_time:
+  name: Sync time
+  description: Send the current time to the display.
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+
+set_time:
+  name: Set time
+  description: Set a specific time on the display.
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
           integration: ipixel_color
     hour:
       name: Hour
@@ -439,161 +654,529 @@ set_time:
           max: 59
           mode: box
 
-# Enhanced Digital Signage Services
-
-create_playlist:
-  name: Create Playlist
-  description: Create a new playlist for content rotation
+set_pixel:
+  name: Set pixel
+  description: Set one pixel (coordinates of the whole combined display).
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
           integration: ipixel_color
-    name:
-      name: Playlist Name
-      description: Name for the new playlist
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+    x:
+      name: X
+      description: Horizontal position
       required: true
-      example: "Morning Messages"
+      example: 0
+      selector:
+        number:
+          min: 0
+          max: 1023
+          mode: box
+    y:
+      name: Y
+      description: Vertical position
+      required: true
+      example: 0
+      selector:
+        number:
+          min: 0
+          max: 1023
+          mode: box
+    color:
+      name: Colour
+      description: Hex colour
+      required: true
+      example: "ff0000"
       selector:
         text:
+
+set_pixels:
+  name: Set pixels
+  description: Set several pixels, batched per colour (coordinates of the whole combined display).
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+    pixels:
+      name: Pixels
+      description: List of {x, y, color}
+      required: true
+      example: [{"x": 0, "y": 0, "color": "ff0000"}, {"x": 1, "y": 0, "color": "00ff00"}]
+      selector:
+        object:
+
+set_pixels_batched:
+  name: Set pixels (batched)
+  description: Alias of set_pixels.
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+    pixels:
+      name: Pixels
+      description: List of {x, y, color}
+      required: true
+      example: [{"x": 0, "y": 0, "color": "ff0000"}]
+      selector:
+        object:
+
+clear_pixels:
+  name: Clear display
+  description: Blank the display without powering it off.
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+
+show_slot:
+  name: Show slot
+  description: Show content stored in a slot.
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+    slot:
+      name: Slot
+      description: Slot number (0-255)
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 0
+          max: 255
+          mode: box
+
+delete_slot:
+  name: Delete slot
+  description: Delete content stored in a slot.
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+    slot:
+      name: Slot
+      description: Slot number (0-255)
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 0
+          max: 255
+          mode: box
+
+add_schedule:
+  name: Add schedule item
+  description: Add an item to the content library used by playlists.
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+    name:
+      name: Name
+      description: Name of the item
+      required: true
+      example: "Morning message"
+      selector:
+        text:
+    text:
+      name: Text
+      description: Text to display
+      required: false
+      example: "Good morning!"
+      selector:
+        text:
+    mode:
+      name: Mode
+      description: Display mode
+      required: false
+      default: "textimage"
+      selector:
+        select:
+          options:
+            - "textimage"
+            - "text"
+            - "clock"
+            - "gif"
+            - "rhythm"
+    gif_url:
+      name: Image URL
+      description: URL for gif mode
+      required: false
+      selector:
+        text:
+    color_fg:
+      name: Text colour
+      description: Text colour
+      required: false
+      selector:
+        color_rgb:
+    color_bg:
+      name: Background colour
+      description: Background colour
+      required: false
+      selector:
+        color_rgb:
+    duration_ms:
+      name: Duration
+      description: How long to show the item
+      required: false
+      default: 5000
+      selector:
+        number:
+          min: 1000
+          max: 3600000
+          mode: box
+          unit_of_measurement: "ms"
+    schedule_id:
+      name: Schedule id
+      description: Optional fixed id (generated when empty)
+      required: false
+      selector:
+        text:
+
+remove_schedule:
+  name: Remove schedule item
+  description: Remove an item from the content library.
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+    schedule_id:
+      name: Schedule id
+      description: Id of the item
+      required: true
+      selector:
+        text:
+
+trigger_schedule:
+  name: Trigger schedule item
+  description: Show an item from the library now.
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+    schedule_id:
+      name: Schedule id
+      description: Id of the item
+      required: true
+      selector:
+        text:
+
+set_playlist:
+  name: Set playlist
+  description: Set the order of the default playlist.
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+    schedule_ids:
+      name: Schedule ids
+      description: Comma separated ids
+      required: true
+      example: "morning,weather,time"
+      selector:
+        text:
+
+create_playlist:
+  name: Create playlist
+  description: Create a new playlist.
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+    name:
+      name: Name
+      description: Playlist name
+      required: true
+      example: "Morning"
+      selector:
+        text:
+    schedule_ids:
+      name: Schedule ids
+      description: Items to add
+      required: false
+      selector:
+        object:
     loop:
       name: Loop
-      description: Loop playlist when reaching end
+      description: Loop the playlist
       required: false
       default: true
       selector:
         boolean:
     shuffle:
       name: Shuffle
-      description: Randomize playback order
+      description: Random order
       required: false
       default: false
       selector:
         boolean:
 
 start_playlist:
-  name: Start Playlist
-  description: Start playing a playlist with per-item durations
+  name: Start playlist
+  description: Start a playlist (the active one when no id is given).
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
           integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
     playlist_id:
-      name: Playlist ID
-      description: ID of playlist to start (optional, uses active playlist if not specified)
+      name: Playlist id
+      description: Playlist id
       required: false
       selector:
         text:
 
 stop_playlist:
-  name: Stop Playlist
-  description: Stop the currently playing playlist
+  name: Stop playlist
+  description: Stop the running playlist.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
           integration: ipixel_color
 
 set_power_schedule:
-  name: Set Power Schedule
-  description: Configure automatic power on/off times
+  name: Set power schedule
+  description: Automatically power the display on and off.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
           integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
     enabled:
       name: Enabled
-      description: Enable power scheduling
+      description: Enable the schedule
       required: false
       default: true
       selector:
         boolean:
     on_time:
-      name: Power On Time
-      description: Time to turn display on (HH:MM format)
+      name: On time
+      description: HH:MM
       required: false
       default: "07:00"
-      example: "07:00"
       selector:
         time:
     off_time:
-      name: Power Off Time
-      description: Time to turn display off (HH:MM format)
+      name: Off time
+      description: HH:MM
       required: false
       default: "22:00"
-      example: "22:00"
       selector:
         time:
     days:
       name: Days
-      description: Days of week (mon, tue, wed, thu, fri, sat, sun)
+      description: Days of week (mon..sun)
       required: false
-      example: '["mon", "tue", "wed", "thu", "fri"]'
+      example: ["mon", "tue", "wed", "thu", "fri"]
       selector:
         object:
 
 add_time_slot:
-  name: Add Time Slot
-  description: Schedule a playlist to play at specific times
+  name: Add time slot
+  description: Play a playlist during a time window.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
           integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
     name:
-      name: Slot Name
-      description: Name for this time slot
+      name: Name
+      description: Slot name
       required: true
-      example: "Morning Shift"
+      example: "Morning shift"
       selector:
         text:
     playlist_id:
-      name: Playlist ID
-      description: ID of playlist to play during this slot
+      name: Playlist id
+      description: Playlist to play
       required: true
       selector:
         text:
     start_time:
-      name: Start Time
-      description: When to start this playlist (HH:MM format)
+      name: Start
+      description: HH:MM
       required: true
       example: "08:00"
       selector:
         time:
     end_time:
-      name: End Time
-      description: When to stop this playlist (HH:MM format)
+      name: End
+      description: HH:MM
       required: true
       example: "12:00"
       selector:
         time:
     days:
       name: Days
-      description: Days of week for this slot
+      description: Days of week (mon..sun)
       required: false
-      example: '["mon", "tue", "wed", "thu", "fri"]'
       selector:
         object:
     priority:
       name: Priority
-      description: Higher priority slots override lower ones
+      description: Higher wins
       required: false
       default: 0
       selector:
@@ -602,157 +1185,131 @@ add_time_slot:
           max: 100
           mode: box
 
-# New features from related projects
-
 set_upside_down:
-  name: Set Upside Down
-  description: Flip the display 180 degrees for inverted mounting
+  name: Set upside down
+  description: Flip the display 180 degrees.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
           integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
     upside_down:
-      name: Upside Down
-      description: Enable upside down mode (flip 180°)
+      name: Upside down
+      description: Enable
       required: true
       default: false
       selector:
         boolean:
 
 set_default_mode:
-  name: Set Default Mode
-  description: Reset device to factory default display mode
+  name: Set default mode
+  description: Reset to the factory default display mode.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
           integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+
 erase_data:
-  name: Erase Data
-  description: Erase stored data from device EEPROM (slots/buffers)
+  name: Erase data
+  description: Erase stored slots/buffers.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
           integration: ipixel_color
     erase_all:
-      name: Erase All
-      description: Erase all stored data (ignores buffers field if true)
+      name: Erase all
+      description: Erase everything
       required: false
       default: false
       selector:
         boolean:
     buffers:
       name: Buffers
-      description: List of buffer numbers to erase (1-255), comma-separated
+      description: Comma separated buffer numbers (1-255)
       required: false
       example: "1,2,3"
       selector:
         text:
 
 set_program_mode:
-  name: Set Program Mode
-  description: Auto-cycle through stored screens (slideshow mode)
+  name: Set program mode
+  description: Cycle through stored screens.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
           integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
     buffers:
       name: Buffers
-      description: List of buffer numbers to cycle through (1-9), comma-separated
+      description: Comma separated buffer numbers (1-9)
       required: true
       example: "1,2,3"
       selector:
         text:
 
-set_rhythm_mode_advanced:
-  name: Set Rhythm Mode (Advanced)
-  description: Set music visualizer mode with 11 frequency band level controls
-  fields:
-    device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
-      selector:
-        device:
-          integration: ipixel_color
-    style:
-      name: Style
-      description: Rhythm visualizer style (0-4)
-      required: true
-      default: 0
-      selector:
-        number:
-          min: 0
-          max: 4
-          mode: box
-    levels:
-      name: Frequency Levels
-      description: 11 frequency band levels (0-15 each), comma-separated
-      required: true
-      example: "8,8,8,8,8,8,8,8,8,8,8"
-      selector:
-        text:
-
-display_image_url:
-  name: Display Image URL
-  description: Download and display an image from a URL (PNG, JPG, BMP, GIF)
-  fields:
-    device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
-      selector:
-        device:
-          integration: ipixel_color
-    url:
-      name: Image URL
-      description: URL to the image file to display
-      required: true
-      example: "https://example.com/image.png"
-      selector:
-        text:
-    buffer_slot:
-      name: Buffer Slot
-      description: Storage slot on device (1-255)
-      required: false
-      default: 1
-      selector:
-        number:
-          min: 1
-          max: 255
-          mode: box
-
-# Screen and mode control
-
 set_screen:
-  name: Set Screen
-  description: Select which stored screen buffer to display (1-9)
+  name: Set screen
+  description: Select a stored screen buffer.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
           integration: ipixel_color
     screen:
-      name: Screen Number
-      description: Screen buffer to display (1-9)
+      name: Screen
+      description: Screen (1-9)
       required: true
       example: 1
       selector:
@@ -762,123 +1319,147 @@ set_screen:
           mode: box
 
 set_diy_mode:
-  name: Set DIY Mode
-  description: Control DIY mode with extended options for custom content creation
+  name: Set DIY mode
+  description: Control DIY mode.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
           integration: ipixel_color
     mode:
       name: Mode
-      description: "DIY mode option: 0=Exit (keep prev), 1=Enter (clear), 2=Exit (keep current), 3=Enter (preserve)"
+      description: 0 exit keep previous, 1 enter clear, 2 exit keep current, 3 enter preserve
       required: true
       default: 1
       selector:
-        select:
-          options:
-            - label: "Exit - Keep Previous Display"
-              value: "0"
-            - label: "Enter - Clear Display (Recommended)"
-              value: "1"
-            - label: "Exit - Keep Current Display"
-              value: "2"
-            - label: "Enter - Preserve Content"
-              value: "3"
+        number:
+          min: 0
+          max: 3
+          mode: box
 
 send_raw_command:
-  name: Send Raw Command
-  description: Send raw hex command to device (for expert/debugging use)
+  name: Send raw command
+  description: Send raw bytes (expert use).
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
           integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
     hex_data:
-      name: Hex Data
-      description: Raw command as hex string (e.g., 'AABBCC' or 'AA BB CC')
+      name: Hex data
+      description: Hex string
       required: true
       example: "05 00 07 01 01"
       selector:
         text:
 
-# Password management (from ipixel-ctrl protocol)
-
 set_password:
-  name: Set Password
-  description: Enable or disable password protection on the device
+  name: Set password
+  description: Enable/disable password protection.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
           integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
     enabled:
       name: Enabled
-      description: Enable password protection
+      description: Enable
       required: true
       default: true
       selector:
         boolean:
     password:
       name: Password
-      description: 6-digit password (e.g., '123456')
+      description: 6 digits
       required: true
       example: "123456"
       selector:
         text:
 
 verify_password:
-  name: Verify Password
-  description: Verify password on a password-protected device (required before other commands)
+  name: Verify password
+  description: Unlock a password protected panel.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
           integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
     password:
       name: Password
-      description: 6-digit password to verify (e.g., '123456')
+      description: 6 digits
       required: true
       example: "123456"
       selector:
         text:
 
-# Mixed data command (0x0004 - combines PNG, GIF, and TEXT)
-
 send_mix_data:
-  name: Send Mixed Data
-  description: Send combined PNG/GIF/TEXT data to device (advanced, partially documented protocol)
+  name: Send mixed data
+  description: Send raw mixed PNG/GIF/TEXT blocks (advanced).
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
           integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
     hex_data:
-      name: Hex Data
-      description: Raw mixed data blocks as hex string (block headers + content)
+      name: Hex data
+      description: Mixed data blocks as hex
       required: true
-      example: "8000 0000 0300 0060 1000 6400 0064 0000 <text_data>"
       selector:
         text:
           multiline: true
     screen_slot:
-      name: Screen Slot
-      description: Storage slot on device (1-255)
+      name: Screen slot
+      description: Storage slot (1-255)
       required: false
       default: 1
       selector:
@@ -887,158 +1468,74 @@ send_mix_data:
           max: 255
           mode: box
 
-# Optimized pixel and image services (from go-ipxl)
 
-set_pixels_batched:
-  name: Set Pixels (Batched)
-  description: Set multiple pixels using optimized batch sending, grouped by color. More efficient than set_pixels for drawing shapes or patterns.
+clear_display:
+  name: Clear display
+  description: Alias of clear_pixels.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
-      selector:
-        device:
-          integration: ipixel_color
-    pixels:
-      name: Pixels
-      description: List of pixel objects with x, y, and color properties. Pixels are automatically grouped by color for efficient transmission.
-      required: true
-      example: '[{"x": 0, "y": 0, "color": "ff0000"}, {"x": 1, "y": 0, "color": "ff0000"}, {"x": 2, "y": 0, "color": "00ff00"}]'
-      selector:
-        object:
-
-display_image_raw_rgb:
-  name: Display Image (Raw RGB)
-  description: Display image using raw RGB protocol (camera mode). Sends pixel data directly without PNG encoding, useful for real-time streaming applications.
-  fields:
-    device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
-      selector:
-        device:
-          integration: ipixel_color
-    image_path:
-      name: Image Path
-      description: Path to the image file (PNG, JPEG, etc.)
-      required: true
-      example: "/config/www/images/display.png"
-      selector:
-        text:
-    brightness:
-      name: Brightness
-      description: Brightness level applied to image data (1-100)
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
       required: false
-      default: 100
-      selector:
-        number:
-          min: 1
-          max: 100
-          mode: slider
-          unit_of_measurement: "%"
-
-display_image_raw_rgb_url:
-  name: Display Image URL (Raw RGB)
-  description: Download and display image using raw RGB protocol. Uses direct pixel data transmission for potentially faster updates.
-  fields:
-    device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
       selector:
         device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+
+display_image:
+  name: Display image
+  description: Alias of display_image_url.
+  fields:
+    device_id:
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
+      selector:
+        device:
+          integration: ipixel_color
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
           integration: ipixel_color
     url:
       name: Image URL
-      description: URL to the image file (PNG, JPEG, etc.)
+      description: URL of the image or GIF
       required: true
       example: "https://example.com/image.png"
       selector:
         text:
-    brightness:
-      name: Brightness
-      description: Brightness level applied to image data (1-100)
-      required: false
-      default: 100
-      selector:
-        number:
-          min: 1
-          max: 100
-          mode: slider
-          unit_of_measurement: "%"
 
-draw_solid_color:
-  name: Draw Solid Color
-  description: Fill the entire display with a single color using raw RGB protocol. Faster than setting each pixel individually.
+display_gif:
+  name: Display GIF
+  description: Alias of display_image_url.
   fields:
     device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
+      name: Display
+      description: Target panel or combined display (optional when only one is configured)
+      required: false
       selector:
         device:
           integration: ipixel_color
-    color:
-      name: Color
-      description: Hex color to fill display with (e.g., 'ff0000' for red)
+    entity_id:
+      name: Entity
+      description: Any entity of the target display (alternative to device)
+      required: false
+      selector:
+        entity:
+          integration: ipixel_color
+    url:
+      name: Image URL
+      description: URL of the image or GIF
       required: true
-      example: "ff0000"
+      example: "https://example.com/image.png"
       selector:
         text:
-
-draw_visuals:
-  name: Draw Visuals
-  description: Render multiple visual elements (text, scrolling text, images, pixels) with animation support. Based on UnexpectedMatrixPixels.
-  fields:
-    device_id:
-      name: Device
-      description: Target iPIXEL device to display text on
-      required: true
-      selector:
-        device:
-          integration: ipixel_color
-    elements:
-      name: Elements
-      description: |
-        List of visual elements to render. Each element is an object with a 'type' field and type-specific properties.
-
-        Supported types:
-        - text: Static text (content, x, y, color, font, font_size, spacing)
-        - textscroll: Horizontal scrolling text (content, y, color, font, font_size, speed)
-        - textlong: Word-wrapped text with vertical scroll animation (content, x, y, color, font, speed, scroll_duration, direction)
-        - icon: MDI icon (icon, x, y, size, color)
-        - image: Image from URL or path (source, x, y, width, height)
-        - pixels: Raw pixels (data: [{x, y, color}])
-      required: true
-      example: |
-        - type: text
-          content: "Hello"
-          x: 0
-          y: 0
-          color: "ffffff"
-          font: "CUSONG"
-        - type: textscroll
-          content: "Scrolling message..."
-          y: 8
-          speed: 50
-          color: "00ff00"
-      selector:
-        object:
-    background:
-      name: Background Color
-      description: Background color as RGB array [r, g, b] or hex string
-      required: false
-      default: [0, 0, 0]
-      selector:
-        color_rgb:
-    fps:
-      name: FPS
-      description: Animation frames per second (1-30). Higher values = smoother animation but more BLE traffic.
-      required: false
-      default: 10
-      selector:
-        number:
-          min: 1
-          max: 30
-          mode: slider

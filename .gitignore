@@ -194,4 +194,4 @@ test_font_rendering.py
 *.tar.gz
 
 # Claude Code specific
-.claude/
+.claude/.ruff_cache/

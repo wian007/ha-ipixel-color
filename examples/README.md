@@ -50,7 +50,7 @@ Replace these placeholder entity IDs with your actual entities:
 
 ```yaml
 # Change these to match your setup:
-light.ipixel_color          # Your iPIXEL light entity
+text.ipixel_display_display          # Your iPIXEL light entity
 weather.home                # Your weather entity
 calendar.personal           # Your calendar entity
 sensor.speedtest_download   # Speedtest sensors
@@ -92,7 +92,7 @@ data:
 # Set brightness
 service: ipixel_color.set_brightness
 data:
-  brightness: 80          # 1-100
+  level: 80               # 1-100
 
 # Clear display
 service: ipixel_color.clear_display
@@ -176,11 +176,11 @@ conditions:
 Automatically adjust brightness:
 
 ```yaml
-- service: light.turn_on
+- service: ipixel_color.set_brightness
   target:
-    entity_id: light.ipixel_color
+    entity_id: text.ipixel_display_display
   data:
-    brightness_pct: >-
+    level: >-
       {% set hour = now().hour %}
       {% if hour >= 22 or hour < 7 %}20
       {% elif hour >= 7 and hour < 9 %}60
