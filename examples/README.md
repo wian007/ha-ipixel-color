@@ -98,12 +98,12 @@ data:
 service: ipixel_color.clear_display
 
 # Display image from URL
-service: ipixel_color.display_image_url
+service: ipixel_color.display_image
 data:
   url: "https://example.com/image.png"
 
 # Display GIF animation
-service: ipixel_color.display_image_url
+service: ipixel_color.display_image
 data:
   url: "https://example.com/animation.gif"
 ```

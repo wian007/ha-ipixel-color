@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.0] - 2026-09-12
 
 ### Added
+- Services use the standard Home Assistant target selector (device, entity or area).
+- `display_image` replaces `display_image_url`, `upload_gif`, `display_gif`,
+  `display_image_raw_rgb` and `display_image_raw_rgb_url` (`url` or `path`, `method: upload|stream`);
+  `set_rhythm_mode` takes optional `levels` (replaces `set_rhythm_mode_advanced`);
+  `clear_display` replaces `clear_pixels`; `set_pixels` replaces `set_pixels_batched`.
+  The old names keep working with a deprecation warning.
+- The Lovelace cards find their entities through the entity registry (any entity naming
+  works) and only call services and entities that exist.
 - Combined displays start animations synchronously: GIFs are stored in a configurable slot on
   every panel and then shown with one simultaneous show-slot command (*Animation sync slot*
   option, default 1, 0 = off).

@@ -622,11 +622,7 @@ Example:
         rhythmLevels: levels
       });
 
-      // Call rhythm service if available
-      this.callService('ipixel_color', 'set_rhythm_level', {
-        style,
-        levels
-      });
+      this.callService('ipixel_color', 'set_rhythm_mode', { style, levels });
     });
 
     // === Advanced/GFX Tab Listeners ===
@@ -645,10 +641,9 @@ Example:
         gfxData
       });
 
-      // Call GFX service if available
-      this.callService('ipixel_color', 'render_gfx', {
-        data: gfxData
-      });
+      // GFX JSON is a draw_visuals element list (or {elements: [...], background, fps})
+      const payload = Array.isArray(gfxData) ? { elements: gfxData } : gfxData;
+      this.callService('ipixel_color', 'draw_visuals', payload);
     });
 
     // Apply multicolor text button
@@ -662,11 +657,13 @@ Example:
           colors
         });
 
-        // Call multicolor text service if available
-        this.callService('ipixel_color', 'display_multicolor_text', {
-          text,
-          colors: colors.map(c => this.hexToRgb(c))
-        });
+        // Multicolour text uses inline colour tags: [#rrggbb]word[/]
+        const tagged = text.split(/(\s+)/).filter(part => part !== '').reduce((acc, part) => {
+          if (/^\s+$/.test(part)) return { out: acc.out + part, i: acc.i };
+          const color = colors[acc.i % colors.length].replace('#', '');
+          return { out: `${acc.out}[#${color}]${part}[/]`, i: acc.i + 1 };
+        }, { out: '', i: 0 }).out;
+        this.callService('ipixel_color', 'display_text', { text: tagged, mode: 'text' });
       }
     });
   }

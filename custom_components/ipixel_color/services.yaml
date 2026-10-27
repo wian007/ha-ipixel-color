@@ -1,21 +1,15 @@
+# iPIXEL Color services. Every service targets a panel or combined display
+# (device, entity or area); the target may be omitted when only one is configured.
+
 display_text:
   name: Display text
   description: Show text on a panel or combined display.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     text:
       name: Text
       description: Text to display (templates and \n are supported)
@@ -25,7 +19,7 @@ display_text:
         text:
     mode:
       name: Mode
-      description: text = rendered by the panel itself (scroll/blink effects); textimage = rendered by Home Assistant (spread over a combined display)
+      description: text = rendered by the panel itself (scroll/blink animations), textimage = rendered by Home Assistant (one image over a combined display)
       required: false
       default: "text"
       selector:
@@ -33,9 +27,9 @@ display_text:
           options:
             - "text"
             - "textimage"
-    effect:
+    animation:
       name: Animation
-      description: Native text animation (0 static, 1 scroll left, 2 scroll right, 3 up, 4 down, 5 blink, 6 fade, 7 snow)
+      description: "Native text animation: 0 static, 1 scroll left, 2 scroll right, 3 up, 4 down, 5 blink, 6 fade, 7 snow (text mode only)"
       required: false
       default: 0
       selector:
@@ -45,7 +39,7 @@ display_text:
           mode: box
     speed:
       name: Speed
-      description: Animation speed (0-100)
+      description: Animation speed 0-100 (text mode only)
       required: false
       default: 80
       selector:
@@ -55,7 +49,7 @@ display_text:
           mode: slider
     rainbow_mode:
       name: Rainbow
-      description: Rainbow colour mode (0-9)
+      description: Rainbow colour mode 0-9 (text mode only)
       required: false
       default: 0
       selector:
@@ -97,57 +91,55 @@ display_text:
 
 update_display:
   name: Update display
-  description: Re-render the current entity settings (text, mode, colours, ...) to the display.
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
+  description: Re-render the current entity settings (mode, text, colours, font, ...) to the display.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
 
-display_image_url:
-  name: Display image from URL
-  description: Download a PNG/JPG/BMP/WEBP/GIF and show it (spread over a combined display).
+display_image:
+  name: Display image
+  description: Show an image or GIF from a URL or a local file (spread over a combined display).
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     url:
-      name: Image URL
-      description: URL of the image or GIF
-      required: true
-      example: "https://example.com/image.png"
+      name: URL
+      description: URL of a PNG/JPG/BMP/WEBP/GIF
+      required: false
+      example: "https://example.com/image.gif"
       selector:
         text:
+    path:
+      name: Path
+      description: Local file path (must be in allowlist_external_dirs)
+      required: false
+      example: "/config/www/image.png"
+      selector:
+        text:
+    method:
+      name: Method
+      description: upload = stored image/GIF upload (animated, default); stream = raw pixels, fast but still and not stored
+      required: false
+      default: "upload"
+      selector:
+        select:
+          options:
+            - "upload"
+            - "stream"
     effect:
       name: Effect
-      description: Optional image effect (blur, invert, mirror, ...)
+      description: Image effect (blur, sharpen, invert, mirror, flip, grayscale, ...)
       required: false
       selector:
         text:
-    buffer_slot:
+    slot:
       name: Storage slot
-      description: Store in a slot (1-255) instead of showing directly (0)
+      description: Store in a slot 1-255 instead of showing directly (0, upload only)
       required: false
       default: 0
       selector:
@@ -155,108 +147,9 @@ display_image_url:
           min: 0
           max: 255
           mode: box
-
-upload_gif:
-  name: Upload GIF
-  description: Alias of display_image_url.
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
-    url:
-      name: GIF URL
-      description: URL of the GIF
-      required: true
-      example: "https://example.com/animation.gif"
-      selector:
-        text:
-    buffer_slot:
-      name: Storage slot
-      description: Store in a slot (1-255) instead of showing directly (0)
-      required: false
-      default: 0
-      selector:
-        number:
-          min: 0
-          max: 255
-          mode: box
-
-display_image_raw_rgb:
-  name: Display image (raw RGB)
-  description: Stream an image file from disk using the fast raw RGB protocol (not stored on the panel).
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
-    image_path:
-      name: Image path
-      description: Path to the image (must be in allowlist_external_dirs)
-      required: true
-      example: "/config/www/images/display.png"
-      selector:
-        text:
     brightness:
       name: Brightness
-      description: Scale the pixel values (1-100)
-      required: false
-      default: 100
-      selector:
-        number:
-          min: 1
-          max: 100
-          mode: slider
-          unit_of_measurement: "%"
-
-display_image_raw_rgb_url:
-  name: Display image URL (raw RGB)
-  description: Download an image and stream it using the raw RGB protocol.
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
-    url:
-      name: Image URL
-      description: URL of the image
-      required: true
-      example: "https://example.com/image.png"
-      selector:
-        text:
-    brightness:
-      name: Brightness
-      description: Scale the pixel values (1-100)
+      description: Scale the pixel values 1-100 (stream only)
       required: false
       default: 100
       selector:
@@ -269,21 +162,12 @@ display_image_raw_rgb_url:
 draw_solid_color:
   name: Draw solid colour
   description: Fill the whole display with one colour.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     color:
       name: Colour
       description: Hex colour (ff0000) or RGB list
@@ -295,24 +179,15 @@ draw_solid_color:
 draw_visuals:
   name: Draw visuals
   description: Render multiple elements (text, scrolling text, long text, images, pixels) with animation on the whole display.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     elements:
       name: Elements
-      description: "List of elements. Types - text (content, x, y, color, font, font_size), textscroll (content, y, speed), textlong (content, x, y, speed, direction), image (source, x, y, width, height), pixels (data: [{x, y, color}])"
+      description: "List of elements. Types: text (content, x, y, color, font, font_size), textscroll (content, y, speed), textlong (content, x, y, speed, direction), image (source, x, y, width, height), pixels (data: [{x, y, color}])"
       required: true
       example: |
         - type: text
@@ -358,43 +233,24 @@ draw_visuals:
 stop_visuals:
   name: Stop visuals
   description: Stop a running draw_visuals animation.
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
 
 set_power:
   name: Set power
   description: Turn the display on or off.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     on:
       name: On
-      description: True to turn on
+      description: true = on, false = off
       required: false
       default: true
       selector:
@@ -403,24 +259,15 @@ set_power:
 set_brightness:
   name: Set brightness
   description: Set the display brightness.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     level:
       name: Level
-      description: Brightness (1-100)
+      description: Brightness 1-100
       required: true
       example: 50
       selector:
@@ -433,24 +280,15 @@ set_brightness:
 set_orientation:
   name: Set orientation
   description: Rotate the display.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     orientation:
       name: Orientation
-      description: 0, 90, 180 or 270 degrees (or 0-3)
+      description: Rotation in degrees
       required: true
       default: "0"
       selector:
@@ -461,27 +299,35 @@ set_orientation:
             - "180"
             - "270"
 
+set_upside_down:
+  name: Set upside down
+  description: Flip the display 180 degrees (for inverted mounting).
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
+  fields:
+    upside_down:
+      name: Upside down
+      description: true = flipped
+      required: true
+      default: false
+      selector:
+        boolean:
+
 set_clock_mode:
   name: Set clock mode
   description: Show the built-in clock.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     style:
       name: Style
-      description: Clock style (0-8)
+      description: Clock style 0-8
       required: false
       default: 1
       selector:
@@ -513,25 +359,16 @@ set_clock_mode:
 
 set_rhythm_mode:
   name: Set rhythm mode
-  description: Music visualiser.
+  description: Music visualiser. With levels the 11 frequency band levels are set explicitly.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     style:
       name: Style
-      description: Visualiser style (0-4)
+      description: Visualiser style 0-4
       required: false
       default: 0
       selector:
@@ -541,7 +378,7 @@ set_rhythm_mode:
           mode: box
     speed:
       name: Speed
-      description: Animation speed (0-7)
+      description: Animation speed 0-7
       required: false
       default: 4
       selector:
@@ -549,39 +386,10 @@ set_rhythm_mode:
           min: 0
           max: 7
           mode: box
-
-set_rhythm_mode_advanced:
-  name: Set rhythm mode (advanced)
-  description: Music visualiser with 11 band levels.
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
-    style:
-      name: Style
-      description: Visualiser style (0-4)
-      required: true
-      default: 0
-      selector:
-        number:
-          min: 0
-          max: 4
-          mode: box
     levels:
       name: Levels
-      description: 11 band levels (0-15), comma separated
-      required: true
+      description: "Optional: 11 band levels 0-15, comma separated"
+      required: false
       example: "8,8,8,8,8,8,8,8,8,8,8"
       selector:
         text:
@@ -589,43 +397,24 @@ set_rhythm_mode_advanced:
 sync_time:
   name: Sync time
   description: Send the current time to the display.
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
 
 set_time:
   name: Set time
   description: Set a specific time on the display.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     hour:
       name: Hour
-      description: Hour (0-23)
+      description: Hour 0-23
       required: true
       example: 12
       selector:
@@ -635,7 +424,7 @@ set_time:
           mode: box
     minute:
       name: Minute
-      description: Minute (0-59)
+      description: Minute 0-59
       required: true
       example: 30
       selector:
@@ -645,7 +434,7 @@ set_time:
           mode: box
     second:
       name: Second
-      description: Second (0-59)
+      description: Second 0-59
       required: false
       default: 0
       selector:
@@ -657,21 +446,12 @@ set_time:
 set_pixel:
   name: Set pixel
   description: Set one pixel (coordinates of the whole combined display).
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     x:
       name: X
       description: Horizontal position
@@ -702,22 +482,13 @@ set_pixel:
 
 set_pixels:
   name: Set pixels
-  description: Set several pixels, batched per colour (coordinates of the whole combined display).
+  description: Set several pixels at once, batched per colour (coordinates of the whole combined display).
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     pixels:
       name: Pixels
       description: List of {x, y, color}
@@ -726,72 +497,27 @@ set_pixels:
       selector:
         object:
 
-set_pixels_batched:
-  name: Set pixels (batched)
-  description: Alias of set_pixels.
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
-    pixels:
-      name: Pixels
-      description: List of {x, y, color}
-      required: true
-      example: [{"x": 0, "y": 0, "color": "ff0000"}]
-      selector:
-        object:
-
-clear_pixels:
+clear_display:
   name: Clear display
   description: Blank the display without powering it off.
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
 
 show_slot:
   name: Show slot
   description: Show content stored in a slot.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     slot:
       name: Slot
-      description: Slot number (0-255)
+      description: Slot number 0-255
       required: true
       example: 1
       selector:
@@ -803,24 +529,15 @@ show_slot:
 delete_slot:
   name: Delete slot
   description: Delete content stored in a slot.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     slot:
       name: Slot
-      description: Slot number (0-255)
+      description: Slot number 0-255
       required: true
       example: 1
       selector:
@@ -829,24 +546,105 @@ delete_slot:
           max: 255
           mode: box
 
+erase_data:
+  name: Erase data
+  description: Erase stored slots/buffers.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
+  fields:
+    erase_all:
+      name: Erase all
+      description: Erase everything
+      required: false
+      default: false
+      selector:
+        boolean:
+    buffers:
+      name: Buffers
+      description: Comma separated buffer numbers 1-255
+      required: false
+      example: "1,2,3"
+      selector:
+        text:
+
+set_program_mode:
+  name: Set program mode
+  description: Cycle through stored screens.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
+  fields:
+    buffers:
+      name: Buffers
+      description: Comma separated buffer numbers 1-9
+      required: true
+      example: "1,2,3"
+      selector:
+        text:
+
+set_screen:
+  name: Set screen
+  description: Select a stored screen buffer.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
+  fields:
+    screen:
+      name: Screen
+      description: Screen 1-9
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 9
+          mode: box
+
+set_diy_mode:
+  name: Set DIY mode
+  description: Control DIY mode.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
+  fields:
+    mode:
+      name: Mode
+      description: 0 exit keep previous, 1 enter clear, 2 exit keep current, 3 enter preserve
+      required: true
+      default: 1
+      selector:
+        number:
+          min: 0
+          max: 3
+          mode: box
+
+set_default_mode:
+  name: Set default mode
+  description: Reset to the factory default display mode.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
+
 add_schedule:
   name: Add schedule item
   description: Add an item to the content library used by playlists.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     name:
       name: Name
       description: Name of the item
@@ -874,7 +672,7 @@ add_schedule:
             - "clock"
             - "gif"
             - "rhythm"
-    gif_url:
+    url:
       name: Image URL
       description: URL for gif mode
       required: false
@@ -903,6 +701,15 @@ add_schedule:
           max: 3600000
           mode: box
           unit_of_measurement: "ms"
+    slot:
+      name: Slot
+      description: Show a stored slot instead of sending content
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 255
+          mode: box
     schedule_id:
       name: Schedule id
       description: Optional fixed id (generated when empty)
@@ -913,21 +720,12 @@ add_schedule:
 remove_schedule:
   name: Remove schedule item
   description: Remove an item from the content library.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     schedule_id:
       name: Schedule id
       description: Id of the item
@@ -938,21 +736,12 @@ remove_schedule:
 trigger_schedule:
   name: Trigger schedule item
   description: Show an item from the library now.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     schedule_id:
       name: Schedule id
       description: Id of the item
@@ -963,21 +752,12 @@ trigger_schedule:
 set_playlist:
   name: Set playlist
   description: Set the order of the default playlist.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     schedule_ids:
       name: Schedule ids
       description: Comma separated ids
@@ -989,21 +769,12 @@ set_playlist:
 create_playlist:
   name: Create playlist
   description: Create a new playlist.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     name:
       name: Name
       description: Playlist name
@@ -1013,7 +784,7 @@ create_playlist:
         text:
     schedule_ids:
       name: Schedule ids
-      description: Items to add
+      description: Items to add (list or comma separated)
       required: false
       selector:
         object:
@@ -1035,21 +806,12 @@ create_playlist:
 start_playlist:
   name: Start playlist
   description: Start a playlist (the active one when no id is given).
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     playlist_id:
       name: Playlist id
       description: Playlist id
@@ -1060,40 +822,21 @@ start_playlist:
 stop_playlist:
   name: Stop playlist
   description: Stop the running playlist.
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
 
 set_power_schedule:
   name: Set power schedule
   description: Automatically power the display on and off.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     enabled:
       name: Enabled
       description: Enable the schedule
@@ -1126,21 +869,12 @@ set_power_schedule:
 add_time_slot:
   name: Add time slot
   description: Play a playlist during a time window.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     name:
       name: Name
       description: Slot name
@@ -1185,186 +919,15 @@ add_time_slot:
           max: 100
           mode: box
 
-set_upside_down:
-  name: Set upside down
-  description: Flip the display 180 degrees.
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
-    upside_down:
-      name: Upside down
-      description: Enable
-      required: true
-      default: false
-      selector:
-        boolean:
-
-set_default_mode:
-  name: Set default mode
-  description: Reset to the factory default display mode.
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
-
-erase_data:
-  name: Erase data
-  description: Erase stored slots/buffers.
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
-    erase_all:
-      name: Erase all
-      description: Erase everything
-      required: false
-      default: false
-      selector:
-        boolean:
-    buffers:
-      name: Buffers
-      description: Comma separated buffer numbers (1-255)
-      required: false
-      example: "1,2,3"
-      selector:
-        text:
-
-set_program_mode:
-  name: Set program mode
-  description: Cycle through stored screens.
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
-    buffers:
-      name: Buffers
-      description: Comma separated buffer numbers (1-9)
-      required: true
-      example: "1,2,3"
-      selector:
-        text:
-
-set_screen:
-  name: Set screen
-  description: Select a stored screen buffer.
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
-    screen:
-      name: Screen
-      description: Screen (1-9)
-      required: true
-      example: 1
-      selector:
-        number:
-          min: 1
-          max: 9
-          mode: box
-
-set_diy_mode:
-  name: Set DIY mode
-  description: Control DIY mode.
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
-    mode:
-      name: Mode
-      description: 0 exit keep previous, 1 enter clear, 2 exit keep current, 3 enter preserve
-      required: true
-      default: 1
-      selector:
-        number:
-          min: 0
-          max: 3
-          mode: box
-
 send_raw_command:
   name: Send raw command
   description: Send raw bytes (expert use).
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     hex_data:
       name: Hex data
       description: Hex string
@@ -1373,24 +936,42 @@ send_raw_command:
       selector:
         text:
 
+send_mix_data:
+  name: Send mixed data
+  description: Send raw mixed PNG/GIF/TEXT blocks (advanced).
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
+  fields:
+    hex_data:
+      name: Hex data
+      description: Mixed data blocks as hex
+      required: true
+      selector:
+        text:
+          multiline: true
+    screen_slot:
+      name: Screen slot
+      description: Storage slot 1-255
+      required: false
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 255
+          mode: box
+
 set_password:
   name: Set password
   description: Enable/disable password protection.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     enabled:
       name: Enabled
       description: Enable
@@ -1409,21 +990,12 @@ set_password:
 verify_password:
   name: Verify password
   description: Unlock a password protected panel.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
   fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
     password:
       name: Password
       description: 6 digits
@@ -1432,110 +1004,3 @@ verify_password:
       selector:
         text:
 
-send_mix_data:
-  name: Send mixed data
-  description: Send raw mixed PNG/GIF/TEXT blocks (advanced).
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
-    hex_data:
-      name: Hex data
-      description: Mixed data blocks as hex
-      required: true
-      selector:
-        text:
-          multiline: true
-    screen_slot:
-      name: Screen slot
-      description: Storage slot (1-255)
-      required: false
-      default: 1
-      selector:
-        number:
-          min: 1
-          max: 255
-          mode: box
-
-
-clear_display:
-  name: Clear display
-  description: Alias of clear_pixels.
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
-
-display_image:
-  name: Display image
-  description: Alias of display_image_url.
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
-    url:
-      name: Image URL
-      description: URL of the image or GIF
-      required: true
-      example: "https://example.com/image.png"
-      selector:
-        text:
-
-display_gif:
-  name: Display GIF
-  description: Alias of display_image_url.
-  fields:
-    device_id:
-      name: Display
-      description: Target panel or combined display (optional when only one is configured)
-      required: false
-      selector:
-        device:
-          integration: ipixel_color
-    entity_id:
-      name: Entity
-      description: Any entity of the target display (alternative to device)
-      required: false
-      selector:
-        entity:
-          integration: ipixel_color
-    url:
-      name: Image URL
-      description: URL of the image or GIF
-      required: true
-      example: "https://example.com/image.png"
-      selector:
-        text:

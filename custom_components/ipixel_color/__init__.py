@@ -73,6 +73,10 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         data.setdefault(CONF_NAME, entry.title or DEFAULT_NAME)
         hass.config_entries.async_update_entry(entry, data=data, version=2)
         _LOGGER.info("Migrated iPIXEL config entry %s to version 2", entry.title)
+    if entry.data.get(CONF_ENTRY_TYPE) == ENTRY_TYPE_GROUP and CONF_MEMBERS in entry.options:
+        # Early builds stored edited group layouts in options; data is the single source now.
+        data = {**entry.data, **{k: v for k, v in entry.options.items() if k in (CONF_NAME, CONF_MEMBERS, CONF_SYNC_SLOT)}}
+        hass.config_entries.async_update_entry(entry, data=data, options={})
     return True
 
 
@@ -130,8 +134,8 @@ async def _async_create_panel_runtime(hass: HomeAssistant, entry: ConfigEntry) -
 
 
 def _create_group_runtime(hass: HomeAssistant, entry: ConfigEntry) -> iPIXELRuntime:
-    name: str = entry.options.get(CONF_NAME) or entry.data.get(CONF_NAME) or entry.title
-    members_conf = entry.options.get(CONF_MEMBERS) or entry.data.get(CONF_MEMBERS) or []
+    name: str = entry.data.get(CONF_NAME) or entry.title
+    members_conf = entry.data.get(CONF_MEMBERS) or []
     members: list[MemberSpec] = []
     for member in members_conf:
         member_id = member.get(CONF_MEMBER_ENTRY_ID)
@@ -150,7 +154,7 @@ def _create_group_runtime(hass: HomeAssistant, entry: ConfigEntry) -> iPIXELRunt
             return None
         return runtime.display
 
-    sync_slot = entry.options.get(CONF_SYNC_SLOT, entry.data.get(CONF_SYNC_SLOT, DEFAULT_SYNC_SLOT))
+    sync_slot = entry.data.get(CONF_SYNC_SLOT, DEFAULT_SYNC_SLOT)
     display = CompositeDisplay(
         name=name, members=members, resolver=_resolve, sync_slot=int(sync_slot or 0) or None
     )

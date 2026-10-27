@@ -6,7 +6,7 @@
 #
 # Available services:
 #   - ipixel_color.display_text: Display text with colors and effects
-#   - ipixel_color.display_image_url: Display PNG/JPG/GIF images (also on a combined display)
+#   - ipixel_color.display_image: Display PNG/JPG/GIF images (also on a combined display)
 #   - ipixel_color.set_clock_mode: Show clock display
 #   - ipixel_color.set_brightness: Adjust brightness (1-100)
 #   - ipixel_color.clear_display: Clear the screen

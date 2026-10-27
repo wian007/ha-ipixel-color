@@ -144,8 +144,11 @@ async def test_group_options_flow(hass: HomeAssistant, fake_bluetooth):
     result = await hass.config_entries.options.async_configure(result["flow_id"], {CONF_ROW: 0, CONF_COL: 0})
     result = await hass.config_entries.options.async_configure(result["flow_id"], {CONF_ROW: 1, CONF_COL: 0})
     assert result["type"] == FlowResultType.CREATE_ENTRY
-    assert group.options[CONF_MEMBERS][1] == {CONF_MEMBER_ENTRY_ID: "right", CONF_ROW: 1, CONF_COL: 0}
-    assert group.options["sync_slot"] == 1  # default kept
+    # The layout lives in entry.data (single source of truth); options stay empty.
+    assert group.options == {}
+    assert group.data[CONF_NAME] == "Wall 2" and group.title == "Wall 2"
+    assert group.data[CONF_MEMBERS][1] == {CONF_MEMBER_ENTRY_ID: "right", CONF_ROW: 1, CONF_COL: 0}
+    assert group.data["sync_slot"] == 1  # default kept
 
 
 async def test_panel_options_flow(hass: HomeAssistant, fake_bluetooth):

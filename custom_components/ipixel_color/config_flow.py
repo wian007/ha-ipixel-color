@@ -397,7 +397,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Change the panels of a combined display."""
         errors: dict[str, str] = {}
         panels = panel_entries(self.hass)
-        current = self._entry.options.get(CONF_MEMBERS) or self._entry.data.get(CONF_MEMBERS, [])
+        current = self._entry.data.get(CONF_MEMBERS, [])
 
         if user_input is not None:
             members = list(user_input[CONF_MEMBERS])
@@ -410,7 +410,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 self._group_members = []
                 return await self.async_step_group_position()
 
-        current_slot = self._entry.options.get(CONF_SYNC_SLOT, self._entry.data.get(CONF_SYNC_SLOT, DEFAULT_SYNC_SLOT))
+        current_slot = self._entry.data.get(CONF_SYNC_SLOT, DEFAULT_SYNC_SLOT)
         options = [
             SelectOptionDict(value=entry.entry_id, label=f"{entry.title} ({entry.data.get(CONF_ADDRESS)})")
             for entry in panels
@@ -420,7 +420,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             step_id="group",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_NAME, default=self._entry.options.get(CONF_NAME, self._entry.data.get(CONF_NAME, self._entry.title))): TextSelector(),
+                    vol.Required(CONF_NAME, default=self._entry.data.get(CONF_NAME, self._entry.title)): TextSelector(),
                     vol.Required(CONF_MEMBERS, default=default_members): SelectSelector(
                         SelectSelectorConfig(options=options, multiple=True, mode=SelectSelectorMode.LIST)
                     ),
@@ -432,10 +432,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_group_position(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Ask the grid position of every selected panel."""
-        current = {
-            m[CONF_MEMBER_ENTRY_ID]: m
-            for m in (self._entry.options.get(CONF_MEMBERS) or self._entry.data.get(CONF_MEMBERS, []))
-        }
+        current = {m[CONF_MEMBER_ENTRY_ID]: m for m in self._entry.data.get(CONF_MEMBERS, [])}
         if user_input is not None:
             entry_id = self._group_pending.pop(0)
             self._group_members.append(
@@ -446,14 +443,19 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 }
             )
             if not self._group_pending:
-                return self.async_create_entry(
-                    title="",
+                # The layout lives in entry.data (single source of truth); updating
+                # it triggers the reload listener. Options stay empty for groups.
+                self.hass.config_entries.async_update_entry(
+                    self._entry,
+                    title=self._group_name,
                     data={
+                        **self._entry.data,
                         CONF_NAME: self._group_name,
                         CONF_MEMBERS: self._group_members,
                         CONF_SYNC_SLOT: self._group_sync_slot,
                     },
                 )
+                return self.async_create_entry(title="", data={})
 
         entry_id = self._group_pending[0]
         entry = self.hass.config_entries.async_get_entry(entry_id)

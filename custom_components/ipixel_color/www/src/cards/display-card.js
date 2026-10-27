@@ -291,7 +291,7 @@ export class iPIXELDisplayCard extends iPIXELCardBase {
     const sharedState = getDisplayState();
     const textEntity = this.getEntity();
     const entityText = textEntity?.state || '';
-    const modeEntity = this.getRelatedEntity('select', '_mode');
+    const modeEntity = this.getRelatedEntity('select', 'mode');
     const currentMode = modeEntity?.state || sharedState.mode || 'text';
 
     const currentText = sharedState.text || entityText || (testMode ? 'iPIXEL' : '');
@@ -526,7 +526,7 @@ export class iPIXELDisplayCard extends iPIXELCardBase {
 
       let switchId = this._switchEntityId;
       if (!switchId) {
-        const sw = this.getRelatedEntity('switch');
+        const sw = this.getRelatedEntity('switch', 'power');
         if (sw) {
           this._switchEntityId = sw.entity_id;
           switchId = sw.entity_id;

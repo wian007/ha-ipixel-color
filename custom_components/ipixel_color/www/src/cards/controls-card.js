@@ -47,10 +47,6 @@ export class iPIXELControlsCard extends iPIXELCardBase {
     const isOn = this.isOn();
 
     // Get upside down state from entity if available
-    const upsideDownEntity = this.getRelatedEntity('switch', '_upside_down');
-    if (upsideDownEntity) {
-      this._upsideDown = upsideDownEntity.state === 'on';
-    }
 
     this.shadowRoot.innerHTML = `
       <style>${iPIXELCardStyles}
@@ -236,15 +232,8 @@ export class iPIXELControlsCard extends iPIXELCardBase {
           <div class="subsection">
             <div class="two-col" style="margin-bottom: 12px;">
               <div>
-                <div class="subsection-title">Size (1-128)</div>
-                <input type="number" class="text-input" id="font-size" value="16" min="1" max="128" style="width: 100%;">
-              </div>
-              <div>
-                <div class="subsection-title">Offset X, Y</div>
-                <div style="display: flex; gap: 4px;">
-                  <input type="number" class="text-input" id="font-offset-x" value="0" min="-64" max="64" style="width: 50%;">
-                  <input type="number" class="text-input" id="font-offset-y" value="0" min="-32" max="32" style="width: 50%;">
-                </div>
+                <div class="subsection-title">Size (0 = auto, max 128)</div>
+                <input type="number" class="text-input" id="font-size" value="${this.getRelatedEntity('number', 'font_size')?.state ?? 0}" min="0" max="128" style="width: 100%;">
               </div>
             </div>
           </div>
@@ -279,13 +268,13 @@ export class iPIXELControlsCard extends iPIXELCardBase {
       btn.addEventListener('click', (e) => {
         const action = e.currentTarget.dataset.action;
         if (action === 'power') {
-          const sw = this.getRelatedEntity('switch');
+          const sw = this.getRelatedEntity('switch', 'power');
           if (sw) {
             this._hass.callService('switch', 'toggle', { entity_id: sw.entity_id });
           }
         } else if (action === 'clear') {
           updateDisplayState({ text: '', mode: 'text', effect: 'fixed', speed: 50, fgColor: '#ff6600', bgColor: '#000000' });
-          this.callService('ipixel_color', 'clear_pixels');
+          this.callService('ipixel_color', 'clear_display');
         } else if (action === 'clock') {
           this._applyClockSettings();
         } else if (action === 'sync') {
@@ -311,7 +300,7 @@ export class iPIXELControlsCard extends iPIXELCardBase {
     this.shadowRoot.querySelectorAll('[data-mode]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const mode = e.currentTarget.dataset.mode;
-        const modeEntity = this.getRelatedEntity('select', '_mode');
+        const modeEntity = this.getRelatedEntity('select', 'mode');
         if (modeEntity) {
           this._hass.callService('select', 'select_option', { entity_id: modeEntity.entity_id, option: mode });
         }
@@ -355,7 +344,8 @@ export class iPIXELControlsCard extends iPIXELCardBase {
     this.shadowRoot.getElementById('animation-mode')?.addEventListener('change', (e) => {
       this._animationMode = parseInt(e.target.value);
       updateDisplayState({ animationMode: this._animationMode });
-      this.callService('ipixel_color', 'set_animation_mode', { mode: this._animationMode });
+      // Native text animation is a setting of the display (number entity)
+      this.setRelatedEntity('number', 'text_animation', this._animationMode);
     });
 
     // Orientation dropdown
@@ -368,15 +358,7 @@ export class iPIXELControlsCard extends iPIXELCardBase {
     this.shadowRoot.getElementById('toggle-upside-down')?.addEventListener('click', (e) => {
       this._upsideDown = !this._upsideDown;
       e.currentTarget.classList.toggle('active', this._upsideDown);
-
-      const upsideDownEntity = this.getRelatedEntity('switch', '_upside_down');
-      if (upsideDownEntity) {
-        this._hass.callService('switch', this._upsideDown ? 'turn_on' : 'turn_off', {
-          entity_id: upsideDownEntity.entity_id
-        });
-      } else {
-        this.callService('ipixel_color', 'set_upside_down', { enabled: this._upsideDown });
-      }
+      this.callService('ipixel_color', 'set_upside_down', { upside_down: this._upsideDown });
     });
 
     // Screen buffer selection
@@ -395,24 +377,16 @@ export class iPIXELControlsCard extends iPIXELCardBase {
       btn.addEventListener('click', (e) => {
         const slot = parseInt(e.currentTarget.dataset.delete);
         if (confirm(`Delete screen slot ${slot}?`)) {
-          this.callService('ipixel_color', 'delete_screen', { slot });
+          this.callService('ipixel_color', 'delete_slot', { slot });
         }
       });
     });
 
-    // Font settings
+    // Font size is a setting of the display (number entity)
     this.shadowRoot.getElementById('font-size')?.addEventListener('change', (e) => {
       const size = parseInt(e.target.value);
       updateDisplayState({ fontSize: size });
-      this.callService('ipixel_color', 'set_font_size', { size });
-    });
-
-    this.shadowRoot.getElementById('font-offset-x')?.addEventListener('change', () => {
-      this._updateFontOffset();
-    });
-
-    this.shadowRoot.getElementById('font-offset-y')?.addEventListener('change', () => {
-      this._updateFontOffset();
+      this.setRelatedEntity('number', 'font_size', size);
     });
 
     // DIY mode dropdown
@@ -458,16 +432,9 @@ export class iPIXELControlsCard extends iPIXELCardBase {
     });
     this.callService('ipixel_color', 'set_clock_mode', {
       style: this._clockStyle,
-      format_24h: this._is24Hour,
+      format_24: this._is24Hour,
       show_date: this._showDate
     });
-  }
-
-  _updateFontOffset() {
-    const x = parseInt(this.shadowRoot.getElementById('font-offset-x')?.value || '0');
-    const y = parseInt(this.shadowRoot.getElementById('font-offset-y')?.value || '0');
-    updateDisplayState({ fontOffsetX: x, fontOffsetY: y });
-    this.callService('ipixel_color', 'set_font_offset', { x, y });
   }
 
   static getConfigElement() { return document.createElement('ipixel-simple-editor'); }
