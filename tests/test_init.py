@@ -501,3 +501,21 @@ async def test_display_text_parameter_aliases(hass: HomeAssistant, fake_bluetoot
     payload = upload[0].data[15:]
     # payload: [num_chars][00 01 01][animation][speed][rainbow][r g b]...
     assert payload[4] == 2 and payload[7:10] == bytes([255, 0, 0])
+
+
+async def test_panels_are_linked_via_group_device(hass: HomeAssistant, fake_bluetooth):
+    await _setup_panel(hass, fake_bluetooth, LEFT, "Left", "left")
+    await _setup_panel(hass, fake_bluetooth, RIGHT, "Right", "right")
+    group = make_group_entry("Wall", [("left", 0, 0), ("right", 0, 1)], entry_id="wall")
+    group.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(group.entry_id)
+    await hass.async_block_till_done()
+
+    registry = dr.async_get(hass)
+    group_device = registry.async_get_device(identifiers={(DOMAIN, "group_wall")})
+    for address in (LEFT, RIGHT):
+        assert registry.async_get_device(identifiers={(DOMAIN, address)}).via_device_id == group_device.id
+
+    assert await hass.config_entries.async_unload(group.entry_id)
+    await hass.async_block_till_done()
+    assert registry.async_get_device(identifiers={(DOMAIN, LEFT)}).via_device_id is None

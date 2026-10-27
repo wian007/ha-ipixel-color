@@ -30,7 +30,7 @@ async def test_manual_panel_flow(hass: HomeAssistant, fake_bluetooth):
     fake_bluetooth.add(ADDRESS)
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
     assert result["type"] == FlowResultType.MENU
-    assert result["menu_options"] == ["panel"]
+    assert result["menu_options"] == ["panel", "group"]
 
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {"next_step_id": "panel"})
     assert result["type"] == FlowResultType.FORM and result["step_id"] == "panel"
@@ -79,7 +79,6 @@ async def test_group_flow(hass: HomeAssistant, fake_bluetooth):
     make_panel_entry("AA:BB:CC:DD:EE:02", "Right", entry_id="right").add_to_hass(hass)
 
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
-    assert result["menu_options"] == ["panel", "group"]
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {"next_step_id": "group"})
     assert result["step_id"] == "group"
 
@@ -161,3 +160,56 @@ async def test_panel_options_flow(hass: HomeAssistant, fake_bluetooth):
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert entry.options == {"width": 96, "height": 16, "ack_timeout": 15}
+
+
+async def test_group_flow_aborts_without_panels(hass: HomeAssistant, fake_bluetooth):
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {"next_step_id": "group"})
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "not_enough_panels"
+
+
+async def test_group_flow_adds_discovered_panels(hass: HomeAssistant, fake_bluetooth):
+    """A group can be created directly from panels that are not configured yet."""
+    make_panel_entry("AA:BB:CC:DD:EE:01", "Left", entry_id="left").add_to_hass(hass)
+    fake_bluetooth.add("AA:BB:CC:DD:EE:02")
+    discovered = [{"address": "AA:BB:CC:DD:EE:02", "name": "LED_BLE_RIGHT", "rssi": -50, "is_compatible": True}]
+
+    with patch("custom_components.ipixel_color.config_flow.discover_ipixel_devices", return_value=discovered), patch(
+        "custom_components.ipixel_color.async_setup_entry", return_value=True
+    ):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {"next_step_id": "group"})
+        assert result["step_id"] == "group"
+        values = [o["value"] for o in result["data_schema"].schema[CONF_MEMBERS].config["options"]]
+        assert values == ["left", "new:AA:BB:CC:DD:EE:02"]
+
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_NAME: "Wall", CONF_MEMBERS: ["left", "new:AA:BB:CC:DD:EE:02"]}
+        )
+        assert result["step_id"] == "group_position"
+        # the new panel got its own config entry
+        new_entry = next(e for e in hass.config_entries.async_entries(DOMAIN) if e.unique_id == "AA:BB:CC:DD:EE:02")
+        assert new_entry.data == {CONF_ENTRY_TYPE: ENTRY_TYPE_PANEL, CONF_ADDRESS: "AA:BB:CC:DD:EE:02", CONF_NAME: "LED_BLE_RIGHT"}
+
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_ROW: 0, CONF_COL: 0})
+        assert result["description_placeholders"]["panel"] == "LED_BLE_RIGHT"
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_ROW: 0, CONF_COL: 1})
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert [m[CONF_MEMBER_ENTRY_ID] for m in result["data"][CONF_MEMBERS]] == ["left", new_entry.entry_id]
+
+
+async def test_group_flow_reports_unreachable_new_panel(hass: HomeAssistant, fake_bluetooth):
+    make_panel_entry("AA:BB:CC:DD:EE:01", "Left", entry_id="left").add_to_hass(hass)
+    fake_bluetooth.add("AA:BB:CC:DD:EE:02").fail_connect = True
+    discovered = [{"address": "AA:BB:CC:DD:EE:02", "name": "LED_BLE_RIGHT", "rssi": -50, "is_compatible": True}]
+    with patch("custom_components.ipixel_color.config_flow.discover_ipixel_devices", return_value=discovered):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {"next_step_id": "group"})
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_NAME: "Wall", CONF_MEMBERS: ["left", "new:AA:BB:CC:DD:EE:02"]}
+        )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_MEMBERS: "panel_cannot_connect"}
+    assert result["description_placeholders"] == {"panel": "LED_BLE_RIGHT"}
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 1

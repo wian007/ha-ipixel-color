@@ -10,7 +10,7 @@ from pathlib import Path
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
 from homeassistant.helpers.typing import ConfigType
 
@@ -106,6 +106,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if kind == ENTRY_TYPE_PANEL:
         # Groups resolve their members lazily; tell them a panel (re)appeared.
         _notify_groups(hass)
+    _async_link_group_devices(hass)
     return True
 
 
@@ -161,6 +162,45 @@ def _create_group_runtime(hass: HomeAssistant, entry: ConfigEntry) -> iPIXELRunt
     return iPIXELRuntime(hass, entry, display)
 
 
+@callback
+def _async_link_group_devices(hass: HomeAssistant) -> None:
+    """Mark panel devices as connected via their combined display (device registry)."""
+    from homeassistant.helpers import device_registry as dr
+
+    registry = dr.async_get(hass)
+    for runtime in list(hass.data.get(DOMAIN, {}).values()):
+        if not isinstance(runtime, iPIXELRuntime) or not isinstance(runtime.display, CompositeDisplay):
+            continue
+        group_device = registry.async_get_device(identifiers={(DOMAIN, runtime.unique_prefix)})
+        if group_device is None:
+            continue
+        for member in runtime.display.members:
+            panel_runtime = get_runtime(hass, member.key)
+            if panel_runtime is None:
+                continue
+            panel_device = registry.async_get_device(identifiers={(DOMAIN, panel_runtime.unique_prefix)})
+            if panel_device is not None and panel_device.via_device_id != group_device.id:
+                registry.async_update_device(panel_device.id, via_device_id=group_device.id)
+
+
+@callback
+def _async_unlink_group_devices(hass: HomeAssistant, runtime: iPIXELRuntime) -> None:
+    """Remove the via-device link of the panels of a combined display being unloaded."""
+    from homeassistant.helpers import device_registry as dr
+
+    registry = dr.async_get(hass)
+    group_device = registry.async_get_device(identifiers={(DOMAIN, runtime.unique_prefix)})
+    if group_device is None:
+        return
+    for member in runtime.display.members:  # type: ignore[union-attr]
+        panel_runtime = get_runtime(hass, member.key)
+        if panel_runtime is None:
+            continue
+        panel_device = registry.async_get_device(identifiers={(DOMAIN, panel_runtime.unique_prefix)})
+        if panel_device is not None and panel_device.via_device_id == group_device.id:
+            registry.async_update_device(panel_device.id, via_device_id=None)
+
+
 def _notify_groups(hass: HomeAssistant) -> None:
     for runtime in list(hass.data.get(DOMAIN, {}).values()):
         if isinstance(runtime, iPIXELRuntime) and runtime.is_group:
@@ -178,6 +218,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         runtime: iPIXELRuntime | None = hass.data[DOMAIN].pop(entry.entry_id, None)
         if runtime is not None:
+            if isinstance(runtime.display, CompositeDisplay):
+                _async_unlink_group_devices(hass, runtime)
             await runtime.async_shutdown()
         _notify_groups(hass)
     return unload_ok

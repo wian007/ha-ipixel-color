@@ -32,7 +32,7 @@
       },
       "group": {
         "title": "Gecombineerd scherm",
-        "description": "Selecteer de panelen die samen één groot scherm vormen. In de volgende stappen plaats je elk paneel in een raster (rij/kolom). GIF's worden eerst in het opgegeven slot op elk paneel opgeslagen en daarna tegelijk gestart, zodat de animatie op alle panelen synchroon loopt.",
+        "description": "Selecteer de panelen die samen één groot scherm vormen. In de volgende stappen plaats je elk paneel in een raster (rij/kolom). GIF's worden eerst in het opgegeven slot op elk paneel opgeslagen en daarna tegelijk gestart, zodat de animatie op alle panelen synchroon loopt. Panelen met \"new\" zijn nog niet geconfigureerd en worden automatisch toegevoegd.",
         "data": {
           "name": "Naam",
           "members": "Panelen",
@@ -53,11 +53,12 @@
       "invalid_address": "Ongeldig Bluetooth-adres.",
       "device_not_found": "Gekozen apparaat niet gevonden.",
       "need_two_panels": "Selecteer minimaal twee panelen.",
-      "unknown": "Onverwachte fout."
+      "unknown": "Onverwachte fout.",
+      "panel_cannot_connect": "Paneel {panel} is niet bereikbaar; controleer of het aan staat en niet verbonden is met de telefoon-app."
     },
     "abort": {
       "already_configured": "Dit paneel is al geconfigureerd.",
-      "not_enough_panels": "Voeg eerst minimaal twee panelen toe voordat je een gecombineerd scherm maakt.",
+      "not_enough_panels": "Minimaal twee panelen nodig (geconfigureerd of zichtbaar via Bluetooth) om een gecombineerd scherm te maken.",
       "cannot_connect": "Verbinden met het paneel mislukt.",
       "unknown": "Onverwachte fout."
     }

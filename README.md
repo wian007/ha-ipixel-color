@@ -59,12 +59,17 @@ If the detected size is wrong you can override it under the panel's **Configure*
 
 ## Combining panels into one display
 
-Once at least two panels are configured: *Add Integration → iPIXEL Color →
-Combine panels into one display*.
+*Add Integration → iPIXEL Color → Combine panels into one display*.
 
-1. Give the combined display a name and select its panels
+1. Give the combined display a name and select its panels. The list shows the
+   panels you already configured **and** panels Home Assistant currently sees over
+   Bluetooth (marked *new*); new ones are added as panel devices automatically.
 2. For every panel enter its **row** and **column** on the grid
    (row 0 = top, column 0 = left)
+
+The result is two layers of devices: one device per panel (with its own entities,
+usable on its own) and one device for the combined display. In the device list
+the panels show up as *connected via* their combined display.
 
 Two 64×16 panels on row 0, columns 0 and 1, become a 128×16 display; a 64×16 panel
 above another one becomes 64×32. Mixed sizes work too (each grid row is as high as

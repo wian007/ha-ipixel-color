@@ -53,6 +53,7 @@ from .exceptions import iPIXELError
 _LOGGER = logging.getLogger(__name__)
 
 MANUAL_OPTION = "manual"
+NEW_PANEL_PREFIX = "new:"
 
 
 def entry_type(entry: config_entries.ConfigEntry) -> str:
@@ -122,10 +123,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # ------------------------------------------------------------------
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Let the user choose between adding a panel or a combined display."""
-        menu = ["panel"]
-        if len(panel_entries(self.hass)) >= 2:
-            menu.append("group")
-        return self.async_show_menu(step_id="user", menu_options=menu)
+        return self.async_show_menu(step_id="user", menu_options=["panel", "group"])
 
     # ------------------------------------------------------------------
     # Panel
@@ -232,6 +230,17 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_import(self, import_data: dict[str, Any]) -> FlowResult:
+        """Create a panel entry programmatically (used when a group adds new panels)."""
+        address = import_data[CONF_ADDRESS]
+        await self.async_set_unique_id(address, raise_on_progress=False)
+        self._abort_if_unique_id_configured()
+        name = import_data.get(CONF_NAME) or DEFAULT_NAME
+        return self.async_create_entry(
+            title=name,
+            data={CONF_ENTRY_TYPE: ENTRY_TYPE_PANEL, CONF_ADDRESS: address, CONF_NAME: name},
+        )
+
     async def async_step_bluetooth(self, discovery_info: BluetoothServiceInfoBleak) -> FlowResult:
         """Handle a panel discovered by the Bluetooth integration."""
         await self.async_set_unique_id(discovery_info.address)
@@ -280,27 +289,62 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # Combined display (group)
     # ------------------------------------------------------------------
     async def async_step_group(self, user_input: dict[str, Any] | None = None) -> FlowResult:
-        """Name the combined display and pick its panels."""
+        """Name the combined display and pick its panels.
+
+        Panels that are not configured yet but visible over Bluetooth can be
+        selected too; they are added as panel entries on the fly.
+        """
         errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {}
         panels = panel_entries(self.hass)
+        configured = {entry.data.get(CONF_ADDRESS) for entry in panels}
+        discovered = {
+            device["address"]: device
+            for device in discover_ipixel_devices(self.hass, return_all=False)
+            if device["address"] not in configured
+        }
 
         if user_input is not None:
-            members = list(user_input[CONF_MEMBERS])
-            if len(members) < 2:
+            selected = list(user_input[CONF_MEMBERS])
+            if len(selected) < 2:
                 errors[CONF_MEMBERS] = "need_two_panels"
             else:
-                self._group_name = user_input[CONF_NAME]
-                self._group_sync_slot = int(user_input.get(CONF_SYNC_SLOT, DEFAULT_SYNC_SLOT))
-                self._group_pending = members
-                self._group_members = []
-                return await self.async_step_group_position()
+                members: list[str] = []
+                for value in selected:
+                    if not value.startswith(NEW_PANEL_PREFIX):
+                        members.append(value)
+                        continue
+                    address = value[len(NEW_PANEL_PREFIX):]
+                    device = discovered.get(address, {"name": address})
+                    try:
+                        entry_id = await self._async_add_panel(address, device["name"])
+                    except iPIXELError as err:
+                        _LOGGER.warning("Could not add panel %s: %s", address, err)
+                        errors[CONF_MEMBERS] = "panel_cannot_connect"
+                        placeholders["panel"] = device["name"]
+                        break
+                    members.append(entry_id)
+                if not errors:
+                    self._group_name = user_input[CONF_NAME]
+                    self._group_sync_slot = int(user_input.get(CONF_SYNC_SLOT, DEFAULT_SYNC_SLOT))
+                    self._group_pending = members
+                    self._group_members = []
+                    return await self.async_step_group_position()
+            # refresh the lists; panels added above are configured now
+            panels = panel_entries(self.hass)
+            configured = {entry.data.get(CONF_ADDRESS) for entry in panels}
+            discovered = {a: d for a, d in discovered.items() if a not in configured}
 
-        if len(panels) < 2:
+        if len(panels) + len(discovered) < 2:
             return self.async_abort(reason="not_enough_panels")
 
         options = [
             SelectOptionDict(value=entry.entry_id, label=f"{entry.title} ({entry.data.get(CONF_ADDRESS)})")
             for entry in panels
+        ]
+        options += [
+            SelectOptionDict(value=f"{NEW_PANEL_PREFIX}{address}", label=f"+ {device['name']} ({address}) - new")
+            for address, device in discovered.items()
         ]
         return self.async_show_form(
             step_id="group",
@@ -314,7 +358,20 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
+            description_placeholders=placeholders,
         )
+
+    async def _async_add_panel(self, address: str, name: str) -> str:
+        """Validate a new panel and create its config entry; returns the entry id."""
+        await async_validate_panel(self.hass, address, name)
+        result = await self.hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_IMPORT},
+            data={CONF_ADDRESS: address, CONF_NAME: name},
+        )
+        if result.get("type") != "create_entry":
+            raise iPIXELError(f"Panel {name} could not be added ({result.get('reason', 'unknown')})")
+        return result["result"].entry_id
 
     async def async_step_group_position(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Ask the grid position of every selected panel, one at a time."""

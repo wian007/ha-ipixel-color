@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.0] - 2026-09-12
 
 ### Added
+- A combined display can be created directly from panels that are not configured yet
+  (they are added as panel devices on the fly); panel devices are linked *via* their
+  combined display in the device registry.
 - Services use the standard Home Assistant target selector (device, entity or area).
 - `display_image` replaces `display_image_url`, `upload_gif`, `display_gif`,
   `display_image_raw_rgb` and `display_image_raw_rgb_url` (`url` or `path`, `method: upload|stream`);

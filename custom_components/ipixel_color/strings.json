@@ -32,7 +32,7 @@
       },
       "group": {
         "title": "Combined display",
-        "description": "Select the panels that together form one large display. In the next steps you place each panel on a grid (row/column). GIFs are first stored in the given slot on every panel and then started simultaneously so the animation runs in sync on all panels.",
+        "description": "Select the panels that together form one large display. In the next steps you place each panel on a grid (row/column). GIFs are first stored in the given slot on every panel and then started simultaneously so the animation runs in sync on all panels. Panels marked \"new\" are not configured yet and will be added automatically.",
         "data": {
           "name": "Name",
           "members": "Panels",
@@ -53,11 +53,12 @@
       "invalid_address": "Invalid Bluetooth address.",
       "device_not_found": "Selected device not found.",
       "need_two_panels": "Select at least two panels.",
-      "unknown": "Unexpected error."
+      "unknown": "Unexpected error.",
+      "panel_cannot_connect": "Panel {panel} could not be reached; make sure it is powered on and not connected to the phone app."
     },
     "abort": {
       "already_configured": "This panel is already configured.",
-      "not_enough_panels": "Add at least two panels before creating a combined display.",
+      "not_enough_panels": "At least two panels (configured or visible over Bluetooth) are needed for a combined display.",
       "cannot_connect": "Could not connect to the panel.",
       "unknown": "Unexpected error."
     }
