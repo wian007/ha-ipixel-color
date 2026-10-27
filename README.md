@@ -178,11 +178,9 @@ See [`examples/`](examples/) for automations.
 
 ## Lovelace cards
 
-The bundled cards (`ipixel-display-card`, `ipixel-controls-card`, `ipixel-text-card`,
-`ipixel-playlist-card`, `ipixel-schedule-card`, `ipixel-editor-card`) are served at
-`/ipixel_color/ipixel-display-card.js` and registered as a dashboard resource
-automatically when your dashboards are in storage mode (the default). In YAML mode
-add the resource yourself:
+The bundled cards are served at `/ipixel_color/ipixel-display-card.js` and
+registered as a dashboard resource automatically when your dashboards are in
+storage mode (the default). In YAML mode add the resource yourself:
 
 ```yaml
 resources:
@@ -190,14 +188,61 @@ resources:
     type: module
 ```
 
+### iPIXEL Wall card (recommended)
+
+Shows what Home Assistant actually sent to the display: the preview frame drawn
+as an LED matrix, with the panels of a combined display drawn as separate tiles.
+Includes power, brightness, mode and a quick text input. Works for a single panel
+and for a combined display; any entity of the display can be used as `entity`.
+
 ```yaml
-type: custom:ipixel-display-card
+type: custom:ipixel-wall-card
 entity: text.living_room_wall_display
-name: Living room wall
+name: Living room wall      # optional
+refresh: 2                  # seconds between frame refreshes (optional)
+show_controls: true         # optional
+show_panels: true           # draw the panels of a combined display (optional)
 ```
 
-The card uses the configured entity to target the right display, so it works for
-panels and combined displays alike.
+Native modes (device rendered text, clock, rhythm) have no frame; the card says so
+instead of guessing.
+
+### Other cards
+
+| Card | Purpose |
+|------|---------|
+| `custom:ipixel-display-card` | Simulated LED preview with browser-side effects (also works without a device, *test mode*) |
+| `custom:ipixel-text-card` | Text input with native animations, colours, rhythm levels, GFX JSON (`draw_visuals`) and multicolour text |
+| `custom:ipixel-controls-card` | Brightness, orientation, clock settings, slots, DIY mode, raw commands |
+| `custom:ipixel-playlist-card` / `custom:ipixel-schedule-card` | Playlists, power schedule and time slots |
+| `custom:ipixel-editor-card` | Pixel editor that sends `set_pixels` (combined coordinates on a combined display) |
+
+Example dashboard for a combined display and its panels:
+
+```yaml
+type: vertical-stack
+cards:
+  - type: custom:ipixel-wall-card
+    entity: text.living_room_wall_display
+  - type: entities
+    title: Settings
+    entities:
+      - switch.living_room_wall_auto_update
+      - select.living_room_wall_font
+      - number.living_room_wall_font_size
+      - light.living_room_wall_text_color
+      - light.living_room_wall_background_color
+      - select.living_room_wall_effect
+  - type: grid
+    columns: 2
+    cards:
+      - type: custom:ipixel-wall-card
+        entity: text.panel_1_display
+        show_controls: false
+      - type: custom:ipixel-wall-card
+        entity: text.panel_2_display
+        show_controls: false
+```
 
 ## Fonts
 

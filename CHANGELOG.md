@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.0] - 2026-09-12
 
 ### Added
+- New `ipixel-wall-card`: live preview of the frame Home Assistant sent (camera preview),
+  panels of a combined display drawn as tiles, power, brightness, mode and quick text.
 - A combined display can be created directly from panels that are not configured yet
   (they are added as panel devices on the fly); panel devices are linked *via* their
   combined display in the device registry.

@@ -5,6 +5,7 @@
 
 import { CARD_VERSION } from './version.js';
 import { iPIXELDisplayCard } from './cards/display-card.js';
+import { iPIXELWallCard } from './cards/wall-card.js';
 import { iPIXELControlsCard } from './cards/controls-card.js';
 import { iPIXELTextCard } from './cards/text-card.js';
 import { iPIXELPlaylistCard } from './cards/playlist-card.js';
@@ -16,6 +17,7 @@ import { iPIXELSimpleEditor } from './editor.js';
 import './state.js';
 
 // Register custom elements
+customElements.define('ipixel-wall-card', iPIXELWallCard);
 customElements.define('ipixel-display-card', iPIXELDisplayCard);
 customElements.define('ipixel-controls-card', iPIXELControlsCard);
 customElements.define('ipixel-text-card', iPIXELTextCard);
@@ -27,7 +29,8 @@ customElements.define('ipixel-simple-editor', iPIXELSimpleEditor);
 // Register with Home Assistant's custom card registry
 window.customCards = window.customCards || [];
 [
-  { type: 'ipixel-display-card', name: 'iPIXEL Display', description: 'LED matrix preview with power control' },
+  { type: 'ipixel-wall-card', name: 'iPIXEL Wall', description: 'Live preview of a panel or combined display (real frames, panels shown as tiles) with power, brightness, mode and text' },
+  { type: 'ipixel-display-card', name: 'iPIXEL Display', description: 'Simulated LED matrix preview with effects (no device needed)' },
   { type: 'ipixel-controls-card', name: 'iPIXEL Controls', description: 'Brightness, mode, and orientation controls' },
   { type: 'ipixel-text-card', name: 'iPIXEL Text', description: 'Text input with effects and colors' },
   { type: 'ipixel-playlist-card', name: 'iPIXEL Playlist', description: 'Playlist management' },
@@ -36,7 +39,7 @@ window.customCards = window.customCards || [];
 ].forEach(card => window.customCards.push({
   ...card,
   preview: true,
-  documentationURL: 'https://github.com/cagcoach/ha-ipixel-color'
+  documentationURL: 'https://github.com/wian007/ha-ipixel-color'
 }));
 
 // Log version
