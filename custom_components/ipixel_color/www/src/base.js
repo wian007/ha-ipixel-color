@@ -49,33 +49,60 @@ export class iPIXELCardBase extends HTMLElement {
     return this._hass.states[this._config.entity];
   }
 
+  /**
+   * Find an entity of the same device as the configured entity.
+   * Uses the entity registry (hass.entities / translation_key), falling back to
+   * entity id heuristics for older Home Assistant versions.
+   *
+   * @param {string} domain  e.g. 'switch'
+   * @param {string} suffix  translation key / unique id suffix, e.g. '_mode' or 'power'
+   */
   getRelatedEntity(domain, suffix = '') {
     if (!this._hass || !this._config.entity) return null;
+    const key = (suffix || (domain === 'switch' ? 'power' : '')).replace(/^_/, '');
 
-    // Extract base name from config entity
-    const baseName = this._config.entity.replace(/^[^.]+\./, '').replace(/_?(text|display|gif_url)$/i, '');
-
-    // Try exact match first
-    const exactId = `${domain}.${baseName}${suffix}`;
-    if (this._hass.states[exactId]) return this._hass.states[exactId];
-
-    // Search for matching entities in the domain
-    const matches = Object.keys(this._hass.states).filter(id => {
-      if (!id.startsWith(`${domain}.`)) return false;
-      const entityName = id.replace(/^[^.]+\./, '');
-      return entityName.includes(baseName) || baseName.includes(entityName.replace(suffix, ''));
-    });
-
-    // Prefer entities without suffix for power switch, with suffix for others
-    if (suffix) {
-      const withSuffix = matches.find(id => id.endsWith(suffix));
-      if (withSuffix) return this._hass.states[withSuffix];
-    } else {
-      const sorted = matches.sort((a, b) => a.length - b.length);
-      if (sorted.length > 0) return this._hass.states[sorted[0]];
+    // 1. Registry based (robust, works with any entity naming)
+    const registry = this._hass.entities || {};
+    const own = registry[this._config.entity];
+    if (own?.device_id) {
+      const candidates = Object.values(registry).filter(e =>
+        e.device_id === own.device_id && e.entity_id.startsWith(`${domain}.`) && this._hass.states[e.entity_id]);
+      const byKey = candidates.find(e => e.translation_key === key)
+        || candidates.find(e => e.entity_id.endsWith(`_${key}`));
+      if (byKey) return this._hass.states[byKey.entity_id];
+      if (!key && candidates.length) return this._hass.states[candidates[0].entity_id];
     }
 
-    return matches.length > 0 ? this._hass.states[matches[0]] : null;
+    // 2. Fallback: derive from the entity id
+    const baseName = this._config.entity.replace(/^[^.]+\./, '').replace(/_?(text|display|gif_url|image_url)$/i, '');
+    const exactId = `${domain}.${baseName}${key ? `_${key}` : ''}`;
+    if (this._hass.states[exactId]) return this._hass.states[exactId];
+    const matches = Object.keys(this._hass.states).filter(id =>
+      id.startsWith(`${domain}.`) && id.replace(/^[^.]+\./, '').startsWith(baseName));
+    if (key) {
+      const withSuffix = matches.find(id => id.endsWith(`_${key}`));
+      return withSuffix ? this._hass.states[withSuffix] : null;
+    }
+    const sorted = matches.sort((a, b) => a.length - b.length);
+    return sorted.length ? this._hass.states[sorted[0]] : null;
+  }
+
+  /** Set a number/select/switch entity of this display (used for settings). */
+  async setRelatedEntity(domain, key, value) {
+    const entity = this.getRelatedEntity(domain, key);
+    if (!entity) {
+      console.warn(`iPIXEL: no ${domain} entity '${key}' found for ${this._config.entity}`);
+      return;
+    }
+    if (this.isInTestMode()) {
+      console.info(`iPIXEL [Test Mode]: ${domain}.${key} = ${value}`);
+      return;
+    }
+    const data = { entity_id: entity.entity_id };
+    if (domain === 'number') return this._hass.callService('number', 'set_value', { ...data, value });
+    if (domain === 'select') return this._hass.callService('select', 'select_option', { ...data, option: String(value) });
+    if (domain === 'switch') return this._hass.callService('switch', value ? 'turn_on' : 'turn_off', data);
+    if (domain === 'text') return this._hass.callService('text', 'set_value', { ...data, value });
   }
 
   async callService(domain, service, data = {}) {
@@ -83,6 +110,12 @@ export class iPIXELCardBase extends HTMLElement {
     if (this.isInTestMode()) {
       console.info(`iPIXEL [Test Mode]: ${domain}.${service}`, data);
       return;
+    }
+    // Integration services target a display through any of its entities, so
+    // the card always passes its configured entity (works with several
+    // panels and with combined displays).
+    if (domain === 'ipixel_color' && this._config.entity && !data.entity_id && !data.device_id) {
+      data = { ...data, entity_id: this._config.entity };
     }
     try {
       await this._hass.callService(domain, service, data);
@@ -92,8 +125,8 @@ export class iPIXELCardBase extends HTMLElement {
   }
 
   getResolution() {
-    const widthEntity = this.getRelatedEntity('sensor', '_width') || this._hass?.states['sensor.display_width'];
-    const heightEntity = this.getRelatedEntity('sensor', '_height') || this._hass?.states['sensor.display_height'];
+    const widthEntity = this.getRelatedEntity('sensor', 'width');
+    const heightEntity = this.getRelatedEntity('sensor', 'height');
     if (widthEntity && heightEntity) {
       const w = parseInt(widthEntity.state), h = parseInt(heightEntity.state);
       if (!isNaN(w) && !isNaN(h) && w > 0 && h > 0) return [w, h];
@@ -104,7 +137,7 @@ export class iPIXELCardBase extends HTMLElement {
   isOn() {
     // In test mode, always report as "on" so preview works
     if (this.isInTestMode()) return true;
-    return this.getRelatedEntity('switch')?.state === 'on';
+    return this.getRelatedEntity('switch', 'power')?.state === 'on';
   }
 
   hexToRgb(hex) {

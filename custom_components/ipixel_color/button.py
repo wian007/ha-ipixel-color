@@ -1,18 +1,17 @@
-"""Button entity for iPIXEL Color manual controls."""
+"""Button platform for iPIXEL Color."""
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.entity import DeviceInfo
 
-from .api import iPIXELAPI
-from .const import DOMAIN, CONF_ADDRESS, CONF_NAME
-from .common import update_ipixel_display
+from .const import DOMAIN
+from .entity import iPIXELDeviceEntity
+from .runtime import iPIXELRuntime
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -22,114 +21,59 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the iPIXEL Color button entities."""
-    address = entry.data[CONF_ADDRESS]
-    name = entry.data[CONF_NAME]
-    
-    api = hass.data[DOMAIN][entry.entry_id]
-    
-    async_add_entities([
-        iPIXELUpdateButton(hass, api, entry, address, name),
-        iPIXELSyncTimeButton(hass, api, entry, address, name),
-    ])
+    """Set up buttons."""
+    runtime: iPIXELRuntime = hass.data[DOMAIN][entry.entry_id]
+    async_add_entities(
+        [
+            iPIXELUpdateButton(runtime),
+            iPIXELSyncTimeButton(runtime),
+            iPIXELClearButton(runtime),
+        ]
+    )
 
 
-class iPIXELUpdateButton(ButtonEntity):
-    """Representation of an iPIXEL Color update button."""
+class iPIXELUpdateButton(iPIXELDeviceEntity, ButtonEntity):
+    """Render the current settings to the display."""
 
+    _attr_translation_key = "update_display"
     _attr_icon = "mdi:refresh"
 
-    def __init__(
-        self, 
-        hass: HomeAssistant,
-        api: iPIXELAPI, 
-        entry: ConfigEntry, 
-        address: str, 
-        name: str
-    ) -> None:
-        """Initialize the update button."""
-        self.hass = hass
-        self._api = api
-        self._entry = entry
-        self._address = address
-        self._name = name
-        self._attr_name = "Update Display"
-        self._attr_unique_id = f"{address}_update_button"
-        self._attr_entity_description = "Manually update display with current text and settings"
-        
-        # Device info for grouping in device registry
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, address)},
-            name=name,
-            manufacturer="iPIXEL",
-            model="LED Matrix Display",
-            sw_version="1.0",
-        )
+    def __init__(self, runtime: iPIXELRuntime) -> None:
+        """Initialise the button."""
+        super().__init__(runtime, key="update_button")
 
     async def async_press(self) -> None:
-        """Handle button press to update display."""
-        _LOGGER.debug("Manual display update triggered")
-        await update_ipixel_display(self.hass, self._name, self._api)
-
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        return True
+        """Update the display."""
+        await self._async_run(self.runtime.async_update_display())
 
 
-class iPIXELSyncTimeButton(ButtonEntity):
-    """Representation of an iPIXEL Color time sync button."""
+class iPIXELSyncTimeButton(iPIXELDeviceEntity, ButtonEntity):
+    """Send the current time to the panels."""
 
+    _attr_translation_key = "sync_time"
     _attr_icon = "mdi:clock-sync"
+    _attr_entity_category = EntityCategory.CONFIG
 
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        api: iPIXELAPI,
-        entry: ConfigEntry,
-        address: str,
-        name: str
-    ) -> None:
-        """Initialize the sync time button."""
-        self.hass = hass
-        self._api = api
-        self._entry = entry
-        self._address = address
-        self._name = name
-        self._attr_name = "Sync Time"
-        self._attr_unique_id = f"{address}_sync_time_button"
-        self._attr_entity_description = "Sync current time to device clock"
-
-        # Device info for grouping in device registry
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, address)},
-            name=name,
-            manufacturer="iPIXEL",
-            model="LED Matrix Display",
-            sw_version="1.0",
-        )
+    def __init__(self, runtime: iPIXELRuntime) -> None:
+        """Initialise the button."""
+        super().__init__(runtime, key="sync_time_button")
 
     async def async_press(self) -> None:
-        """Handle button press to sync time."""
-        _LOGGER.debug("Manual time sync triggered")
-        try:
-            # Connect if needed
-            if not self._api.is_connected:
-                _LOGGER.debug("Reconnecting to device for time sync")
-                await self._api.connect()
+        """Sync the time."""
+        await self._async_run(self.runtime.display.async_sync_time())
 
-            # Sync time
-            success = await self._api.sync_time()
 
-            if success:
-                _LOGGER.info("Time synchronized successfully")
-            else:
-                _LOGGER.error("Failed to sync time")
+class iPIXELClearButton(iPIXELDeviceEntity, ButtonEntity):
+    """Clear the display."""
 
-        except Exception as err:
-            _LOGGER.error("Error during time sync: %s", err)
+    _attr_translation_key = "clear_display"
+    _attr_icon = "mdi:eraser"
 
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        return True
+    def __init__(self, runtime: iPIXELRuntime) -> None:
+        """Initialise the button."""
+        super().__init__(runtime, key="clear_button")
+
+    async def async_press(self) -> None:
+        """Clear the display."""
+        await self._async_run(self.runtime.display.async_clear())
+        self.runtime.set_last_frame(None)

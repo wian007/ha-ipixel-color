@@ -8,7 +8,7 @@ No external dependencies - uses PIL's built-in filters.
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 from PIL import Image, ImageFilter, ImageEnhance, ImageOps
 

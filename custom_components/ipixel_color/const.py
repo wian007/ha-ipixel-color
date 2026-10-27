@@ -1,29 +1,51 @@
 """Constants for the iPIXEL Color integration."""
+from __future__ import annotations
 
 DOMAIN = "ipixel_color"
 DEFAULT_NAME = "iPIXEL Display"
+MANUFACTURER = "iPIXEL"
 
 # Bluetooth UUIDs from protocol documentation
 WRITE_UUID = "0000fa02-0000-1000-8000-00805f9b34fb"
 NOTIFY_UUID = "0000fa03-0000-1000-8000-00805f9b34fb"
-CCCD_UUID = "00002902-0000-1000-8000-00805f9b34fb"
+SERVICE_UUID = "0000fa01-0000-1000-8000-00805f9b34fb"
 
 # Device discovery
 DEVICE_NAME_PREFIX = "LED_BLE_"
 
-# Configuration keys
+# Configuration keys (config entry data)
 CONF_ADDRESS = "address"
 CONF_NAME = "name"
+CONF_ENTRY_TYPE = "entry_type"
+CONF_MEMBERS = "members"
+CONF_MEMBER_ENTRY_ID = "entry_id"
+CONF_ROW = "row"
+CONF_COL = "col"
+CONF_SYNC_SLOT = "sync_slot"
 
-# Update interval
-SCAN_INTERVAL = 30
+# Options keys
+CONF_WIDTH = "width"
+CONF_HEIGHT = "height"
+CONF_ACK_TIMEOUT = "ack_timeout"
+
+ENTRY_TYPE_PANEL = "panel"
+ENTRY_TYPE_GROUP = "group"
+
+# Slot used to start animations on all panels of a combined display at once (0 = off)
+DEFAULT_SYNC_SLOT = 1
 
 # Connection settings
-CONNECTION_TIMEOUT = 10
-RECONNECT_ATTEMPTS = 3
-RECONNECT_DELAY = 1  # seconds between retry attempts
+CONNECTION_TIMEOUT = 20.0
+MAX_CONNECT_ATTEMPTS = 3
+DEFAULT_ACK_TIMEOUT = 10.0
+BLE_CHUNK_SIZE = 244
+BLE_MIN_CHUNK_SIZE = 20
+TIME_SYNC_INTERVAL_HOURS = 1
 
-# Display modes (based on pypixelcolor capabilities)
+# Debounce for coalescing rapid setting changes into one display update
+UPDATE_DEBOUNCE_SECONDS = 0.4
+
+# Display modes
 MODE_TEXT_IMAGE = "textimage"
 MODE_TEXT = "text"
 MODE_CLOCK = "clock"
@@ -37,18 +59,26 @@ AVAILABLE_MODES = [
     MODE_GIF,
     MODE_RHYTHM,
 ]
-
 DEFAULT_MODE = MODE_TEXT_IMAGE
 
-# Orientation options (0=normal, 1=90°, 2=180°, 3=270°)
+# Modes that are rendered by Home Assistant as an image (and can therefore be
+# spread over multiple panels as one large screen).
+IMAGE_MODES = (MODE_TEXT_IMAGE, MODE_GIF)
+
+# Orientation options (0=normal, 90, 180, 270 degrees)
 AVAILABLE_ORIENTATIONS = ["0", "90", "180", "270"]
 DEFAULT_ORIENTATION = "0"
+ORIENTATION_MAP = {"0": 0, "90": 1, "180": 2, "270": 3}
 
-# Rhythm mode styles (5 visualizer styles)
+# Rhythm mode styles
 AVAILABLE_RHYTHM_STYLES = ["0", "1", "2", "3", "4"]
 DEFAULT_RHYTHM_STYLE = "0"
 
-# Visual effects
+# Clock styles
+AVAILABLE_CLOCK_STYLES = [str(i) for i in range(9)]
+DEFAULT_CLOCK_STYLE = "1"
+
+# Visual effects (applied to rendered images)
 AVAILABLE_EFFECTS = [
     "none",
     "blur",
@@ -68,23 +98,15 @@ AVAILABLE_EFFECTS = [
     "brighten",
     "darken",
 ]
-
 DEFAULT_EFFECT = "none"
+
+DEFAULT_FONT = "OpenSans-Light.ttf"
+DEFAULT_NATIVE_FONT = "UNIFONT"
 
 # Schedule settings
 DEFAULT_SCHEDULE_INTERVAL_MS = 5000
 MIN_SCHEDULE_INTERVAL_MS = 1000
 MAX_SCHEDULE_INTERVAL_MS = 3600000  # 1 hour
-
-# GIF settings
-GIF_WINDOW_SIZE = 12 * 1024  # 12KB windows
-GIF_CHUNK_SIZE = 244  # BLE chunk size
-GIF_ACK_TIMEOUT = 8.0  # seconds
-
-# Media player states
-MEDIA_PLAYER_IDLE = "idle"
-MEDIA_PLAYER_PLAYING = "playing"
-MEDIA_PLAYER_PAUSED = "paused"
 
 # Animation/FPS constants for draw_visuals service
 FPS_MIN = 1
@@ -107,3 +129,6 @@ ELEMENT_TYPES = [
     ELEMENT_IMAGE,
     ELEMENT_PIXELS,
 ]
+
+# Frontend card
+CARD_URL_PATH = f"/{DOMAIN}/ipixel-display-card.js"

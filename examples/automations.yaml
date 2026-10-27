@@ -6,12 +6,11 @@
 #
 # Available services:
 #   - ipixel_color.display_text: Display text with colors and effects
-#   - ipixel_color.display_image: Display PNG/JPG images
-#   - ipixel_color.display_gif: Display animated GIFs
+#   - ipixel_color.display_image: Display PNG/JPG/GIF images (also on a combined display)
 #   - ipixel_color.set_clock_mode: Show clock display
 #   - ipixel_color.set_brightness: Adjust brightness (1-100)
 #   - ipixel_color.clear_display: Clear the screen
-#   - light.turn_on/off: Control power state
+#   - switch.turn_on/off on switch.<display>_power: Control power state
 #
 # =============================================================================
 
@@ -35,7 +34,7 @@
 
   conditions:
     - condition: state
-      entity_id: light.ipixel_color  # Replace with your entity
+      entity_id: text.ipixel_display_display  # Replace with your entity
       state: "on"
 
   actions:
@@ -67,7 +66,7 @@
 
     - service: ipixel_color.display_text
       target:
-        entity_id: light.ipixel_color  # Replace with your entity
+        entity_id: text.ipixel_display_display  # Replace with your entity
       data:
         text: "{{ display_text }}"
         text_color: "00a0ff"  # Light blue
@@ -90,7 +89,7 @@
 
   conditions:
     - condition: state
-      entity_id: light.ipixel_color
+      entity_id: switch.ipixel_display_power
       state: "on"
 
   actions:
@@ -128,7 +127,7 @@
 
     - service: ipixel_color.display_text
       target:
-        entity_id: light.ipixel_color
+        entity_id: text.ipixel_display_display
       data:
         text: "{{ hourly_text }}"
         text_color: "ffffff"
@@ -150,7 +149,7 @@
 
   conditions:
     - condition: state
-      entity_id: light.ipixel_color
+      entity_id: switch.ipixel_display_power
       state: "on"
 
   actions:
@@ -180,7 +179,7 @@
 
     - service: ipixel_color.display_text
       target:
-        entity_id: light.ipixel_color
+        entity_id: text.ipixel_display_display
       data:
         text: "{{ daily_text }}"
         text_color: "ffcc00"  # Gold
@@ -203,7 +202,7 @@
 
   conditions:
     - condition: state
-      entity_id: light.ipixel_color
+      entity_id: switch.ipixel_display_power
       state: "on"
     - condition: template
       value_template: "{{ state_attr('sensor.news_feed', 'entries') | length > 0 }}"
@@ -218,7 +217,7 @@
 
     - service: ipixel_color.display_text
       target:
-        entity_id: light.ipixel_color
+        entity_id: text.ipixel_display_display
       data:
         text: "{{ display_text }}"
         text_color: "ff6600"  # Orange
@@ -242,7 +241,7 @@
 
   conditions:
     - condition: state
-      entity_id: light.ipixel_color
+      entity_id: switch.ipixel_display_power
       state: "on"
     - condition: template
       value_template: >-
@@ -261,7 +260,7 @@
 
     - service: ipixel_color.display_text
       target:
-        entity_id: light.ipixel_color
+        entity_id: text.ipixel_display_display
       data:
         text: "{{ display_text[:100] }}"
         text_color: "00ff00"  # Green
@@ -283,7 +282,7 @@
 
   conditions:
     - condition: state
-      entity_id: light.ipixel_color
+      entity_id: switch.ipixel_display_power
       state: "on"
 
   actions:
@@ -317,7 +316,7 @@
 
     - service: ipixel_color.display_text
       target:
-        entity_id: light.ipixel_color
+        entity_id: text.ipixel_display_display
       data:
         text: "{{ status_text }}"
         text_color: "{{ 'ff0000' if '💾' in status_text or '📦' in status_text else '00ff00' }}"
@@ -339,7 +338,7 @@
 
   conditions:
     - condition: state
-      entity_id: light.ipixel_color
+      entity_id: switch.ipixel_display_power
       state: "on"
 
   actions:
@@ -351,7 +350,7 @@
 
     - service: ipixel_color.display_text
       target:
-        entity_id: light.ipixel_color
+        entity_id: text.ipixel_display_display
       data:
         text: "{{ display_text }}"
         text_color: "00ffff"  # Cyan
@@ -375,7 +374,7 @@
 
   conditions:
     - condition: state
-      entity_id: light.ipixel_color
+      entity_id: switch.ipixel_display_power
       state: "on"
 
   actions:
@@ -388,7 +387,7 @@
 
     - service: ipixel_color.display_text
       target:
-        entity_id: light.ipixel_color
+        entity_id: text.ipixel_display_display
       data:
         text: "{{ display_text }}"
         text_color: "{{ 'ff4400' if hvac_action == 'heating' else '0088ff' if hvac_action == 'cooling' else 'ffffff' }}"
@@ -410,7 +409,7 @@
 
   conditions:
     - condition: state
-      entity_id: light.ipixel_color
+      entity_id: switch.ipixel_display_power
       state: "on"
 
   actions:
@@ -421,7 +420,7 @@
 
     - service: ipixel_color.display_text
       target:
-        entity_id: light.ipixel_color
+        entity_id: text.ipixel_display_display
       data:
         text: "{{ display_text[:100] }}"
         text_color: "cc88ff"  # Purple
@@ -444,7 +443,7 @@
 
   conditions:
     - condition: state
-      entity_id: light.ipixel_color
+      entity_id: switch.ipixel_display_power
       state: "on"
 
   actions:
@@ -492,7 +491,7 @@
 
     - service: ipixel_color.display_text
       target:
-        entity_id: light.ipixel_color
+        entity_id: text.ipixel_display_display
       data:
         text: "{{ content }}"
         text_color: "{{ color }}"
@@ -522,7 +521,7 @@
   actions:
     - service: ipixel_color.display_text
       target:
-        entity_id: light.ipixel_color
+        entity_id: text.ipixel_display_display
       data:
         text: "{{ states('input_text.ipixel_notification') }}"
         text_color: "ffff00"  # Yellow for notifications
@@ -555,24 +554,24 @@
 
   conditions:
     - condition: state
-      entity_id: light.ipixel_color
+      entity_id: switch.ipixel_display_power
       state: "on"
 
   actions:
     - service: ipixel_color.set_clock_mode
       target:
-        entity_id: light.ipixel_color
+        entity_id: text.ipixel_display_display
       data:
         style: 1        # Clock style (0-8)
         format_24: true
         show_date: true
 
     # Dim the display at night
-    - service: light.turn_on
+    - service: ipixel_color.set_brightness
       target:
-        entity_id: light.ipixel_color
+        entity_id: text.ipixel_display_display
       data:
-        brightness_pct: 20
+        level: 20
 
 
 - alias: "iPIXEL Morning Wake"
@@ -586,21 +585,21 @@
 
   conditions:
     - condition: state
-      entity_id: light.ipixel_color
+      entity_id: switch.ipixel_display_power
       state: "on"
 
   actions:
     # Restore brightness
-    - service: light.turn_on
+    - service: ipixel_color.set_brightness
       target:
-        entity_id: light.ipixel_color
+        entity_id: text.ipixel_display_display
       data:
-        brightness_pct: 80
+        level: 80
 
     # Show weather (which will start the rotation)
     - service: ipixel_color.display_text
       target:
-        entity_id: light.ipixel_color
+        entity_id: text.ipixel_display_display
       data:
         text: "Good morning! ☀"
         text_color: "ffcc00"

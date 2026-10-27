@@ -1,32 +1,82 @@
-"""Select entity for iPIXEL Color font selection."""
+"""Select platform for iPIXEL Color."""
 from __future__ import annotations
 
 import logging
-import os
-from pathlib import Path
-from typing import Any
+from dataclasses import dataclass
 
-from homeassistant.components.select import SelectEntity
+from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, State
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .api import iPIXELAPI
 from .const import (
-    DOMAIN, CONF_ADDRESS, CONF_NAME,
-    AVAILABLE_MODES, DEFAULT_MODE,
-    AVAILABLE_EFFECTS, DEFAULT_EFFECT,
-    AVAILABLE_ORIENTATIONS, DEFAULT_ORIENTATION,
-    AVAILABLE_RHYTHM_STYLES, DEFAULT_RHYTHM_STYLE,
-    MODE_RHYTHM,
+    AVAILABLE_CLOCK_STYLES,
+    AVAILABLE_EFFECTS,
+    AVAILABLE_MODES,
+    AVAILABLE_ORIENTATIONS,
+    AVAILABLE_RHYTHM_STYLES,
+    DEFAULT_CLOCK_STYLE,
+    DEFAULT_EFFECT,
+    DEFAULT_FONT,
+    DEFAULT_MODE,
+    DEFAULT_NATIVE_FONT,
+    DEFAULT_RHYTHM_STYLE,
+    DOMAIN,
 )
-from .common import get_entity_id_by_unique_id
-from .common import update_ipixel_display
+from .entity import iPIXELDeviceEntity, iPIXELSettingEntity
 from .fonts import get_available_fonts
+from .runtime import iPIXELRuntime
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, kw_only=True)
+class iPIXELSettingSelectDescription(SelectEntityDescription):
+    """Describes a select setting."""
+
+    setting: str
+    default: str
+
+
+SETTING_SELECTS: tuple[iPIXELSettingSelectDescription, ...] = (
+    iPIXELSettingSelectDescription(
+        key="mode_select",
+        translation_key="mode",
+        icon="mdi:view-dashboard-variant",
+        setting="mode",
+        options=AVAILABLE_MODES,
+        default=DEFAULT_MODE,
+    ),
+    iPIXELSettingSelectDescription(
+        key="clock_style_select",
+        translation_key="clock_style",
+        icon="mdi:clock-outline",
+        setting="clock_style",
+        options=AVAILABLE_CLOCK_STYLES,
+        default=DEFAULT_CLOCK_STYLE,
+        entity_category=EntityCategory.CONFIG,
+    ),
+    iPIXELSettingSelectDescription(
+        key="effect_select",
+        translation_key="effect",
+        icon="mdi:image-filter-vintage",
+        setting="effect",
+        options=AVAILABLE_EFFECTS,
+        default=DEFAULT_EFFECT,
+        entity_category=EntityCategory.CONFIG,
+    ),
+    iPIXELSettingSelectDescription(
+        key="rhythm_style_select",
+        translation_key="rhythm_style",
+        icon="mdi:equalizer",
+        setting="rhythm_style",
+        options=AVAILABLE_RHYTHM_STYLES,
+        default=DEFAULT_RHYTHM_STYLE,
+        entity_category=EntityCategory.CONFIG,
+    ),
+)
 
 
 async def async_setup_entry(
@@ -34,515 +84,103 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the iPIXEL Color select entities."""
-    address = entry.data[CONF_ADDRESS]
-    name = entry.data[CONF_NAME]
-    
-    api = hass.data[DOMAIN][entry.entry_id]
-    
-    async_add_entities([
-        iPIXELFontSelect(hass, api, entry, address, name),
-        iPIXELModeSelect(hass, api, entry, address, name),
-        iPIXELClockStyleSelect(hass, api, entry, address, name),
-        iPIXELEffectSelect(hass, api, entry, address, name),
-        iPIXELOrientationSelect(hass, api, entry, address, name),
-        iPIXELRhythmStyleSelect(hass, api, entry, address, name),
-    ])
+    """Set up select entities."""
+    runtime: iPIXELRuntime = hass.data[DOMAIN][entry.entry_id]
+    fonts = await hass.async_add_executor_job(get_available_fonts)
+    entities: list[SelectEntity] = [
+        iPIXELSettingSelect(runtime, description) for description in SETTING_SELECTS
+    ]
+    entities += [iPIXELFontSelect(runtime, fonts), iPIXELOrientationSelect(runtime)]
+    async_add_entities(entities)
 
 
-class iPIXELFontSelect(SelectEntity, RestoreEntity):
-    """Representation of an iPIXEL Color font selection."""
+class iPIXELSettingSelect(iPIXELSettingEntity, SelectEntity):
+    """A select setting used when rendering content."""
 
-    def __init__(
-        self, 
-        hass: HomeAssistant,
-        api: iPIXELAPI, 
-        entry: ConfigEntry, 
-        address: str, 
-        name: str
-    ) -> None:
-        """Initialize the font select."""
-        self.hass = hass
-        self._api = api
-        self._entry = entry
-        self._address = address
-        self._name = name
-        self._attr_name = "Font"
-        self._attr_unique_id = f"{address}_font_select"
-        self._attr_entity_description = "Select font for text display"
+    entity_description: iPIXELSettingSelectDescription
 
-        # Get available fonts from all locations
-        self._attr_options = get_available_fonts()
-        self._attr_current_option = "OpenSans-Light.ttf" if "OpenSans-Light.ttf" in self._attr_options else self._attr_options[0]
-        
-        # Device info for grouping in device registry
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, address)},
-            name=name,
-            manufacturer="iPIXEL",
-            model="LED Matrix Display",
-            sw_version="1.0",
-        )
+    def __init__(self, runtime: iPIXELRuntime, description: iPIXELSettingSelectDescription) -> None:
+        """Initialise the select."""
+        super().__init__(runtime, description=description)
+        self.setting = description.setting
+        self._attr_options = list(description.options or [])
+        setattr(self.settings, self.setting, description.default)
 
-    async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
-        await super().async_added_to_hass()
-        
-        # Restore last state if available
-        last_state = await self.async_get_last_state()
-        if last_state is not None and last_state.state in self._attr_options:
-            self._attr_current_option = last_state.state
-            _LOGGER.debug("Restored font selection: %s", self._attr_current_option)
+    def _restore_from_state(self, state: State) -> None:
+        if state.state in self._attr_options:
+            setattr(self.settings, self.setting, state.state)
 
     @property
     def current_option(self) -> str | None:
-        """Return the current selected font."""
-        return self._attr_current_option
+        """Return the setting value."""
+        return getattr(self.settings, self.setting)
 
     async def async_select_option(self, option: str) -> None:
-        """Select a font option."""
-        if option in self._attr_options:
-            self._attr_current_option = option
-            _LOGGER.debug("Font changed to: %s", option)
-            
-            # Trigger display update if auto-update is enabled
-            await self._trigger_auto_update()
-        else:
-            _LOGGER.error("Invalid font option: %s", option)
-
-    async def _trigger_auto_update(self) -> None:
-        """Trigger display update if auto-update is enabled."""
-        try:
-            # Check auto-update setting
-            auto_update_entity_id = get_entity_id_by_unique_id(self.hass, self._address, "auto_update", "switch")
-            auto_update_state = self.hass.states.get(auto_update_entity_id) if auto_update_entity_id else None
-            
-            if auto_update_state and auto_update_state.state == "on":
-                # Use common update function directly
-                await update_ipixel_display(self.hass, self._name, self._api)
-                _LOGGER.debug("Auto-update triggered display refresh due to font change")
-        except Exception as err:
-            _LOGGER.debug("Could not trigger auto-update: %s", err)
-
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        return True
+        """Store the option."""
+        if option not in self._attr_options:
+            raise ValueError(f"Invalid option {option}")
+        self._set_setting(option)
 
 
-class iPIXELModeSelect(SelectEntity, RestoreEntity):
-    """Representation of an iPIXEL Color mode selection."""
+class iPIXELFontSelect(iPIXELSettingEntity, SelectEntity):
+    """Font used for rendered and native text."""
 
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        api: iPIXELAPI,
-        entry: ConfigEntry,
-        address: str,
-        name: str
-    ) -> None:
-        """Initialize the mode select."""
-        self.hass = hass
-        self._api = api
-        self._entry = entry
-        self._address = address
-        self._name = name
-        self._attr_name = "Mode"
-        self._attr_unique_id = f"{address}_mode_select"
-        self._attr_entity_description = "Select display mode (textimage, clock, rhythm, fun)"
+    _attr_translation_key = "font"
+    _attr_icon = "mdi:format-font"
+    _attr_entity_category = EntityCategory.CONFIG
+    setting = "font"
 
-        # Set available mode options
-        self._attr_options = AVAILABLE_MODES
-        self._attr_current_option = DEFAULT_MODE
+    def __init__(self, runtime: iPIXELRuntime, fonts: list[str]) -> None:
+        """Initialise the select."""
+        super().__init__(runtime, key="font_select")
+        options = list(fonts)
+        if DEFAULT_NATIVE_FONT not in options:
+            options.insert(0, DEFAULT_NATIVE_FONT)
+        self._attr_options = options
+        default = DEFAULT_FONT if DEFAULT_FONT in options else options[0]
+        self.settings.font = default
 
-        # Device info for grouping in device registry
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, address)},
-            name=name,
-            manufacturer="iPIXEL",
-            model="LED Matrix Display",
-            sw_version="1.0",
-        )
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
-        await super().async_added_to_hass()
-
-        # Restore last state if available
-        last_state = await self.async_get_last_state()
-        if last_state is not None and last_state.state in self._attr_options:
-            self._attr_current_option = last_state.state
-            _LOGGER.debug("Restored mode selection: %s", self._attr_current_option)
+    def _restore_from_state(self, state: State) -> None:
+        if state.state in self._attr_options:
+            self.settings.font = state.state
 
     @property
     def current_option(self) -> str | None:
-        """Return the current selected mode."""
-        return self._attr_current_option
+        """Return the font."""
+        return self.settings.font
 
     async def async_select_option(self, option: str) -> None:
-        """Select a mode option."""
-        if option in self._attr_options:
-            self._attr_current_option = option
-            _LOGGER.info("Mode changed to: %s", option)
-
-            # Trigger display update if auto-update is enabled
-            await self._trigger_auto_update()
-        else:
-            _LOGGER.error("Invalid mode option: %s", option)
-
-    async def _trigger_auto_update(self) -> None:
-        """Trigger display update if auto-update is enabled."""
-        try:
-            # Check auto-update setting
-            auto_update_entity_id = get_entity_id_by_unique_id(self.hass, self._address, "auto_update", "switch")
-            auto_update_state = self.hass.states.get(auto_update_entity_id) if auto_update_entity_id else None
-
-            if auto_update_state and auto_update_state.state == "on":
-                # Use common update function directly
-                await update_ipixel_display(self.hass, self._name, self._api)
-                _LOGGER.debug("Auto-update triggered display refresh due to mode change")
-        except Exception as err:
-            _LOGGER.debug("Could not trigger auto-update: %s", err)
-
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        return True
+        """Store the font."""
+        if option not in self._attr_options:
+            raise ValueError(f"Invalid font {option}")
+        self._set_setting(option)
 
 
-class iPIXELClockStyleSelect(SelectEntity, RestoreEntity):
-    """Representation of an iPIXEL Color clock style selection."""
+class iPIXELOrientationSelect(iPIXELDeviceEntity, SelectEntity, RestoreEntity):
+    """Display orientation (sent to the panels immediately)."""
 
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        api: iPIXELAPI,
-        entry: ConfigEntry,
-        address: str,
-        name: str
-    ) -> None:
-        """Initialize the clock style select."""
-        self.hass = hass
-        self._api = api
-        self._entry = entry
-        self._address = address
-        self._name = name
-        self._attr_name = "Clock Style"
-        self._attr_unique_id = f"{address}_clock_style_select"
-        self._attr_entity_description = "Select clock display style (0-8)"
-
-        # Clock styles 0-8
-        self._attr_options = ["0", "1", "2", "3", "4", "5", "6", "7", "8"]
-        self._attr_current_option = "1"  # Default style
-
-        # Device info for grouping in device registry
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, address)},
-            name=name,
-            manufacturer="iPIXEL",
-            model="LED Matrix Display",
-            sw_version="1.0",
-        )
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
-        await super().async_added_to_hass()
-
-        # Restore last state if available
-        last_state = await self.async_get_last_state()
-        if last_state is not None and last_state.state in self._attr_options:
-            self._attr_current_option = last_state.state
-            _LOGGER.debug("Restored clock style selection: %s", self._attr_current_option)
-
-    @property
-    def current_option(self) -> str | None:
-        """Return the current selected clock style."""
-        return self._attr_current_option
-
-    async def async_select_option(self, option: str) -> None:
-        """Select a clock style option."""
-        if option in self._attr_options:
-            self._attr_current_option = option
-            _LOGGER.info("Clock style changed to: %s", option)
-
-            # Trigger display update if auto-update is enabled and in clock mode
-            await self._trigger_auto_update()
-        else:
-            _LOGGER.error("Invalid clock style option: %s", option)
-
-    async def _trigger_auto_update(self) -> None:
-        """Trigger display update if auto-update is enabled and in clock mode."""
-        try:
-            # Check if we're in clock mode
-            mode_entity_id = get_entity_id_by_unique_id(self.hass, self._address, "mode_select", "select")
-            mode_state = self.hass.states.get(mode_entity_id) if mode_entity_id else None
-
-            if mode_state and mode_state.state == "clock":
-                # Check auto-update setting
-                auto_update_entity_id = get_entity_id_by_unique_id(self.hass, self._address, "auto_update", "switch")
-                auto_update_state = self.hass.states.get(auto_update_entity_id) if auto_update_entity_id else None
-
-                if auto_update_state and auto_update_state.state == "on":
-                    # Use common update function directly
-                    await update_ipixel_display(self.hass, self._name, self._api)
-                    _LOGGER.debug("Auto-update triggered display refresh due to clock style change")
-        except Exception as err:
-            _LOGGER.debug("Could not trigger auto-update: %s", err)
-
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        return True
-
-
-class iPIXELEffectSelect(SelectEntity, RestoreEntity):
-    """Representation of an iPIXEL Color visual effect selection."""
-
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        api: iPIXELAPI,
-        entry: ConfigEntry,
-        address: str,
-        name: str
-    ) -> None:
-        """Initialize the effect select."""
-        self.hass = hass
-        self._api = api
-        self._entry = entry
-        self._address = address
-        self._name = name
-        self._attr_name = "Effect"
-        self._attr_unique_id = f"{address}_effect_select"
-        self._attr_entity_description = "Select visual effect for display"
-
-        # Set available effect options
-        self._attr_options = AVAILABLE_EFFECTS
-        self._attr_current_option = DEFAULT_EFFECT
-
-        # Device info for grouping in device registry
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, address)},
-            name=name,
-            manufacturer="iPIXEL",
-            model="LED Matrix Display",
-            sw_version="1.0",
-        )
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
-        await super().async_added_to_hass()
-
-        # Restore last state if available
-        last_state = await self.async_get_last_state()
-        if last_state is not None and last_state.state in self._attr_options:
-            self._attr_current_option = last_state.state
-            _LOGGER.debug("Restored effect selection: %s", self._attr_current_option)
-
-    @property
-    def current_option(self) -> str | None:
-        """Return the current selected effect."""
-        return self._attr_current_option
-
-    async def async_select_option(self, option: str) -> None:
-        """Select an effect option."""
-        if option in self._attr_options:
-            self._attr_current_option = option
-            _LOGGER.info("Effect changed to: %s", option)
-
-            # Trigger display update if auto-update is enabled
-            await self._trigger_auto_update()
-        else:
-            _LOGGER.error("Invalid effect option: %s", option)
-
-    async def _trigger_auto_update(self) -> None:
-        """Trigger display update if auto-update is enabled."""
-        try:
-            # Check auto-update setting
-            auto_update_entity_id = get_entity_id_by_unique_id(self.hass, self._address, "auto_update", "switch")
-            auto_update_state = self.hass.states.get(auto_update_entity_id) if auto_update_entity_id else None
-
-            if auto_update_state and auto_update_state.state == "on":
-                # Use common update function directly
-                await update_ipixel_display(self.hass, self._name, self._api)
-                _LOGGER.debug("Auto-update triggered display refresh due to effect change")
-        except Exception as err:
-            _LOGGER.debug("Could not trigger auto-update: %s", err)
-
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        return True
-
-
-class iPIXELOrientationSelect(SelectEntity, RestoreEntity):
-    """Representation of an iPIXEL Color orientation selection."""
-
+    _attr_translation_key = "orientation"
     _attr_icon = "mdi:screen-rotation"
+    _attr_options = AVAILABLE_ORIENTATIONS
+    _attr_entity_category = EntityCategory.CONFIG
 
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        api: iPIXELAPI,
-        entry: ConfigEntry,
-        address: str,
-        name: str
-    ) -> None:
-        """Initialize the orientation select."""
-        self.hass = hass
-        self._api = api
-        self._entry = entry
-        self._address = address
-        self._name = name
-        self._attr_name = "Orientation"
-        self._attr_unique_id = f"{address}_orientation_select"
-        self._attr_entity_description = "Select display orientation (0°, 90°, 180°, 270°)"
-
-        # Set available orientation options
-        self._attr_options = AVAILABLE_ORIENTATIONS
-        self._attr_current_option = DEFAULT_ORIENTATION
-
-        # Device info for grouping in device registry
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, address)},
-            name=name,
-            manufacturer="iPIXEL",
-            model="LED Matrix Display",
-            sw_version="1.0",
-        )
+    def __init__(self, runtime: iPIXELRuntime) -> None:
+        """Initialise the select."""
+        super().__init__(runtime, key="orientation_select")
 
     async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
+        """Restore the last orientation (not sent on startup)."""
         await super().async_added_to_hass()
-
-        # Restore last state if available
         last_state = await self.async_get_last_state()
-        if last_state is not None and last_state.state in self._attr_options:
-            self._attr_current_option = last_state.state
-            _LOGGER.debug("Restored orientation selection: %s", self._attr_current_option)
+        if last_state is not None and last_state.state in AVAILABLE_ORIENTATIONS:
+            self.settings.orientation = last_state.state
 
     @property
     def current_option(self) -> str | None:
-        """Return the current selected orientation."""
-        return self._attr_current_option
+        """Return the orientation."""
+        return self.settings.orientation
 
     async def async_select_option(self, option: str) -> None:
-        """Select an orientation option."""
-        if option in self._attr_options:
-            self._attr_current_option = option
-            _LOGGER.info("Orientation changed to: %s°", option)
-
-            # Send orientation command to device
-            await self._apply_orientation()
-        else:
-            _LOGGER.error("Invalid orientation option: %s", option)
-
-    async def _apply_orientation(self) -> None:
-        """Apply orientation setting to device."""
-        try:
-            # Convert string to int (0, 90, 180, 270 -> 0, 1, 2, 3)
-            orientation_map = {"0": 0, "90": 1, "180": 2, "270": 3}
-            orientation = orientation_map.get(self._attr_current_option, 0)
-
-            # Connect if needed
-            if not self._api.is_connected:
-                await self._api.connect()
-
-            success = await self._api.set_orientation(orientation)
-            if success:
-                _LOGGER.debug("Orientation applied: %s°", self._attr_current_option)
-            else:
-                _LOGGER.error("Failed to apply orientation")
-        except Exception as err:
-            _LOGGER.error("Error applying orientation: %s", err)
-
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        return True
-
-
-class iPIXELRhythmStyleSelect(SelectEntity, RestoreEntity):
-    """Representation of an iPIXEL Color rhythm visualizer style selection."""
-
-    _attr_icon = "mdi:equalizer"
-
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        api: iPIXELAPI,
-        entry: ConfigEntry,
-        address: str,
-        name: str
-    ) -> None:
-        """Initialize the rhythm style select."""
-        self.hass = hass
-        self._api = api
-        self._entry = entry
-        self._address = address
-        self._name = name
-        self._attr_name = "Rhythm Style"
-        self._attr_unique_id = f"{address}_rhythm_style_select"
-        self._attr_entity_description = "Select rhythm visualizer style (0-4)"
-
-        # Set available rhythm style options
-        self._attr_options = AVAILABLE_RHYTHM_STYLES
-        self._attr_current_option = DEFAULT_RHYTHM_STYLE
-
-        # Device info for grouping in device registry
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, address)},
-            name=name,
-            manufacturer="iPIXEL",
-            model="LED Matrix Display",
-            sw_version="1.0",
-        )
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
-        await super().async_added_to_hass()
-
-        # Restore last state if available
-        last_state = await self.async_get_last_state()
-        if last_state is not None and last_state.state in self._attr_options:
-            self._attr_current_option = last_state.state
-            _LOGGER.debug("Restored rhythm style selection: %s", self._attr_current_option)
-
-    @property
-    def current_option(self) -> str | None:
-        """Return the current selected rhythm style."""
-        return self._attr_current_option
-
-    async def async_select_option(self, option: str) -> None:
-        """Select a rhythm style option."""
-        if option in self._attr_options:
-            self._attr_current_option = option
-            _LOGGER.info("Rhythm style changed to: %s", option)
-
-            # Trigger display update if in rhythm mode
-            await self._trigger_auto_update()
-        else:
-            _LOGGER.error("Invalid rhythm style option: %s", option)
-
-    async def _trigger_auto_update(self) -> None:
-        """Trigger display update if in rhythm mode and auto-update is enabled."""
-        try:
-            # Check if we're in rhythm mode
-            mode_entity_id = get_entity_id_by_unique_id(self.hass, self._address, "mode_select", "select")
-            mode_state = self.hass.states.get(mode_entity_id) if mode_entity_id else None
-
-            if mode_state and mode_state.state == MODE_RHYTHM:
-                # Check auto-update setting
-                auto_update_entity_id = get_entity_id_by_unique_id(self.hass, self._address, "auto_update", "switch")
-                auto_update_state = self.hass.states.get(auto_update_entity_id) if auto_update_entity_id else None
-
-                if auto_update_state and auto_update_state.state == "on":
-                    await update_ipixel_display(self.hass, self._name, self._api)
-                    _LOGGER.debug("Auto-update triggered display refresh due to rhythm style change")
-        except Exception as err:
-            _LOGGER.debug("Could not trigger auto-update: %s", err)
-
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        return True
+        """Send the orientation to the panels."""
+        await self._async_run(self.runtime.async_set_orientation(option))
+        self.async_write_ha_state()

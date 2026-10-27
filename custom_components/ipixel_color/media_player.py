@@ -1,4 +1,4 @@
-"""Media player entity for iPIXEL GIF playback control."""
+"""Media player entity for showing images/GIFs from a URL."""
 from __future__ import annotations
 
 import logging
@@ -12,202 +12,112 @@ from homeassistant.components.media_player import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import DOMAIN, CONF_ADDRESS, CONF_NAME
+from .const import DOMAIN
+from .entity import iPIXELDeviceEntity
+from .runtime import iPIXELRuntime
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up iPIXEL media player from a config entry."""
-    address = config_entry.data[CONF_ADDRESS]
-    name = config_entry.data.get(CONF_NAME, "iPIXEL Display")
-
-    api = hass.data[DOMAIN][config_entry.entry_id]
-
-    async_add_entities([
-        iPIXELMediaPlayer(api, address, name),
-    ])
+    """Set up the media player."""
+    runtime: iPIXELRuntime = hass.data[DOMAIN][entry.entry_id]
+    async_add_entities([iPIXELMediaPlayer(runtime)])
 
 
-class iPIXELMediaPlayer(MediaPlayerEntity, RestoreEntity):
-    """Media player for iPIXEL GIF animations.
+class iPIXELMediaPlayer(iPIXELDeviceEntity, MediaPlayerEntity, RestoreEntity):
+    """Play an image or GIF (from a URL) on the display."""
 
-    Provides playback control for GIF animations:
-    - Play: Start/resume GIF display
-    - Pause: Pause GIF (show static frame)
-    - Stop: Clear display
-    - Play Media: Load and display GIF from URL
-    """
-
-    _attr_has_entity_name = True
+    _attr_translation_key = "gif_player"
     _attr_supported_features = (
         MediaPlayerEntityFeature.PLAY
         | MediaPlayerEntityFeature.PAUSE
         | MediaPlayerEntityFeature.STOP
         | MediaPlayerEntityFeature.PLAY_MEDIA
+        | MediaPlayerEntityFeature.TURN_ON
+        | MediaPlayerEntityFeature.TURN_OFF
     )
 
-    def __init__(self, api, address: str, device_name: str) -> None:
-        """Initialize the media player.
-
-        Args:
-            api: iPIXEL API instance
-            address: Bluetooth address
-            device_name: Device name
-        """
-        self._api = api
-        self._address = address
-        self._device_name = device_name
-
-        # State
+    def __init__(self, runtime: iPIXELRuntime) -> None:
+        """Initialise the media player."""
+        super().__init__(runtime, key="media_player")
         self._state = MediaPlayerState.IDLE
-        self._current_gif_url: str | None = None
+        self._current_url: str | None = None
         self._media_title: str | None = None
 
-        # Entity attributes
-        self._attr_unique_id = f"{address}_media_player"
-        self._attr_name = "GIF Player"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, address)},
-            name=device_name,
-            manufacturer="iPIXEL",
-            model="LED Matrix Display",
-        )
-
     async def async_added_to_hass(self) -> None:
-        """Restore state when entity is added."""
+        """Restore the last URL."""
         await super().async_added_to_hass()
-
         if (last_state := await self.async_get_last_state()) is not None:
-            if last_state.state in (
-                MediaPlayerState.PLAYING,
-                MediaPlayerState.PAUSED,
-                MediaPlayerState.IDLE,
-            ):
-                self._state = MediaPlayerState(last_state.state)
-
-            # Restore attributes
             if last_state.attributes.get("media_content_id"):
-                self._current_gif_url = last_state.attributes["media_content_id"]
+                self._current_url = last_state.attributes["media_content_id"]
             if last_state.attributes.get("media_title"):
                 self._media_title = last_state.attributes["media_title"]
 
     @property
     def state(self) -> MediaPlayerState:
-        """Return the state of the player."""
+        """Return the player state."""
+        if not self.settings.power:
+            return MediaPlayerState.OFF
         return self._state
 
     @property
     def media_content_id(self) -> str | None:
-        """Return the content ID of current playing media."""
-        return self._current_gif_url
+        """Return the URL."""
+        return self._current_url
 
     @property
     def media_content_type(self) -> MediaType | None:
-        """Return the content type of current playing media."""
-        if self._current_gif_url:
-            return MediaType.IMAGE
-        return None
+        """Return the media type."""
+        return MediaType.IMAGE if self._current_url else None
 
     @property
     def media_title(self) -> str | None:
-        """Return the title of current playing media."""
+        """Return the title."""
         return self._media_title
 
-    async def async_play_media(
-        self,
-        media_type: MediaType | str,
-        media_id: str,
-        **kwargs: Any
-    ) -> None:
-        """Play a piece of media.
-
-        Args:
-            media_type: Type of media (image, gif)
-            media_id: URL or path to the media
-            **kwargs: Additional arguments
-        """
-        _LOGGER.debug("Play media: type=%s, id=%s", media_type, media_id)
-
-        # Store the URL
-        self._current_gif_url = media_id
-
-        # Extract title from URL
-        if "/" in media_id:
-            self._media_title = media_id.split("/")[-1]
-        else:
-            self._media_title = media_id
-
-        # Connect if needed
-        if not self._api.is_connected:
-            await self._api.connect()
-
-        # Display the GIF
-        success = await self._api.display_image_url(media_id)
-
-        if success:
-            self._state = MediaPlayerState.PLAYING
-            _LOGGER.info("Playing GIF: %s", media_id)
-        else:
-            self._state = MediaPlayerState.IDLE
-            _LOGGER.error("Failed to play GIF: %s", media_id)
-
+    async def async_play_media(self, media_type: MediaType | str, media_id: str, **kwargs: Any) -> None:
+        """Show an image/GIF from a URL."""
+        self._current_url = media_id
+        self._media_title = media_id.rsplit("/", 1)[-1] if "/" in media_id else media_id
+        await self._async_run(self._async_show(media_id))
+        self._state = MediaPlayerState.PLAYING
         self.async_write_ha_state()
 
-    async def async_media_play(self) -> None:
-        """Send play command.
+    async def _async_show(self, url: str) -> None:
+        data, extension = await self.runtime.async_fetch_image(url)
+        await self.runtime.async_show_image_bytes(data, extension)
 
-        If we have a stored GIF URL, replay it.
-        """
-        if self._current_gif_url:
-            await self.async_play_media(MediaType.IMAGE, self._current_gif_url)
-        else:
-            _LOGGER.warning("No GIF URL stored - nothing to play")
+    async def async_media_play(self) -> None:
+        """Replay the stored URL."""
+        if self._current_url:
+            await self.async_play_media(MediaType.IMAGE, self._current_url)
 
     async def async_media_pause(self) -> None:
-        """Send pause command.
-
-        For iPIXEL, pause means show a static frame.
-        We'll just update the state - the device doesn't have true pause.
-        """
+        """The device cannot pause; only the state is updated."""
         if self._state == MediaPlayerState.PLAYING:
             self._state = MediaPlayerState.PAUSED
-            _LOGGER.debug("GIF playback paused (state only)")
             self.async_write_ha_state()
 
     async def async_media_stop(self) -> None:
-        """Send stop command.
-
-        Clear the display and reset state.
-        """
-        try:
-            # Connect if needed
-            if not self._api.is_connected:
-                await self._api.connect()
-
-            # Turn off or clear the display
-            await self._api.set_power(False)
-
-            self._state = MediaPlayerState.IDLE
-            _LOGGER.info("GIF playback stopped")
-
-        except Exception as err:
-            _LOGGER.error("Error stopping playback: %s", err)
-
+        """Clear the display."""
+        await self._async_run(self.runtime.display.async_clear())
+        self._state = MediaPlayerState.IDLE
+        self.runtime.set_last_frame(None)
         self.async_write_ha_state()
 
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes."""
-        attrs = {}
-        if self._current_gif_url:
-            attrs["gif_url"] = self._current_gif_url
-        return attrs
+    async def async_turn_on(self) -> None:
+        """Power on."""
+        await self._async_run(self.runtime.async_set_power(True))
+
+    async def async_turn_off(self) -> None:
+        """Power off."""
+        await self._async_run(self.runtime.async_set_power(False))
+        self._state = MediaPlayerState.IDLE

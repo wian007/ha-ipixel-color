@@ -106,7 +106,7 @@ script:
     sequence:
       - service: ipixel_color.display_text
         target:
-          entity_id: light.ipixel_color  # Change to your entity
+          entity_id: text.ipixel_display_display  # Change to your entity
         data:
           text: "{{ message }}"
           text_color: "{{ color | default('ffff00') }}"
@@ -131,7 +131,7 @@ script:
           temp: "{{ state_attr('weather.home', 'temperature') | round(0) }}"
       - service: ipixel_color.display_text
         target:
-          entity_id: light.ipixel_color
+          entity_id: text.ipixel_display_display
         data:
           text: "{{ now().strftime('%H:%M') }} {{ icon }}{{ temp }}°"
           text_color: "00a0ff"
@@ -151,7 +151,7 @@ script:
     sequence:
       - service: ipixel_color.set_clock_mode
         target:
-          entity_id: light.ipixel_color
+          entity_id: text.ipixel_display_display
         data:
           style: "{{ style | default(1) }}"
           format_24: true
@@ -164,10 +164,10 @@ script:
     sequence:
       - service: ipixel_color.clear_display
         target:
-          entity_id: light.ipixel_color
-      - service: light.turn_off
+          entity_id: text.ipixel_display_display
+      - service: switch.turn_off
         target:
-          entity_id: light.ipixel_color
+          entity_id: switch.ipixel_display_power
 
 
 # =============================================================================
@@ -179,7 +179,7 @@ script:
 # type: vertical-stack
 # cards:
 #   - type: light
-#     entity: light.ipixel_color
+#     entity: text.ipixel_display_display
 #     name: iPIXEL Display
 #
 #   - type: entities
@@ -210,4 +210,4 @@ script:
 #           action: call-service
 #           service: ipixel_color.clear_display
 #           target:
-#             entity_id: light.ipixel_color
+#             entity_id: text.ipixel_display_display

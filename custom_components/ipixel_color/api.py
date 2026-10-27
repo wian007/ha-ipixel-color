@@ -1,834 +1,279 @@
-"""iPIXEL Color Bluetooth API client - Refactored version."""
+"""Per-panel API for iPIXEL Color devices.
+
+Every method raises an :class:`iPIXELError` subclass when the command cannot be
+delivered, so callers (entities, services) can surface the problem instead of
+silently ignoring it.
+"""
 from __future__ import annotations
 
-import asyncio
 import logging
-from typing import Any, TYPE_CHECKING
-from bleak.exc import BleakError
+from typing import TYPE_CHECKING, Any
+
+from PIL import Image
+from pypixelcolor.lib.device_info import DeviceInfo
+
+from .bluetooth.client import BluetoothClient
+from .const import DEFAULT_ACK_TIMEOUT
+from .device.clock import make_clock_mode_command, make_time_command
+from .device.commands import (
+    RAW_RGB_CHUNK_SIZE,
+    group_pixels_by_color,
+    make_batch_pixel_command,
+    make_brightness_command,
+    make_clear_command,
+    make_default_mode_command,
+    make_delete_slot_command,
+    make_diy_mode_command,
+    make_erase_data_command,
+    make_fun_mode_command,
+    make_mix_data_plan,
+    make_mix_data_raw_plan,
+    make_orientation_command,
+    make_pixel_command,
+    make_power_command,
+    make_program_mode_command,
+    make_raw_command,
+    make_raw_rgb_chunk_command,
+    make_rhythm_mode_advanced_command,
+    make_rhythm_mode_command,
+    make_screen_command,
+    make_set_password_command,
+    make_set_time_command,
+    make_show_slot_command,
+    make_upside_down_command,
+    make_verify_password_command,
+    split_rgb_into_chunks,
+)
+from .device.image import frames_to_gif_bytes, image_to_png_bytes, make_image_plan
+from .device.info import device_info_to_dict
+from .device.text import make_text_plan
+from .exceptions import iPIXELCommandError, iPIXELConnectionError, iPIXELError, iPIXELTimeoutError
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-from .const import NOTIFY_UUID, WRITE_UUID
-from .bluetooth.client import BluetoothClient
-from .device.commands import (
-    make_power_command,
-    make_brightness_command,
-    make_orientation_command,
-    make_rhythm_mode_command,
-    make_fun_mode_command,
-    make_pixel_command,
-    make_clear_command,
-    make_show_slot_command,
-    make_delete_slot_command,
-    make_set_time_command,
-    make_upside_down_command,
-    make_default_mode_command,
-    make_erase_data_command,
-    make_program_mode_command,
-    make_rhythm_mode_advanced_command,
-    make_screen_command,
-    make_diy_mode_command,
-    make_raw_command,
-    make_set_password_command,
-    make_verify_password_command,
-    make_mix_data_plan,
-    make_mix_data_raw_plan,
-    make_mix_block_header,
-    MIX_BLOCK_TYPE_TEXT,
-    MIX_BLOCK_TYPE_GIF,
-    MIX_BLOCK_TYPE_PNG,
-    # Batch pixel commands (from go-ipxl)
-    make_batch_pixel_command,
-    group_pixels_by_color,
-    # Raw RGB camera protocol (from go-ipxl)
-    make_raw_rgb_chunk_command,
-    split_rgb_into_chunks,
-    image_to_rgb_bytes,
-    RAW_RGB_CHUNK_SIZE,
-)
-from .device.clock import make_clock_mode_command, make_time_command
-from .device.text import make_text_plan
-from .device.image import make_image_plan
-from .device.info import device_info_to_dict
-from .display.text_renderer import render_text_to_png
-from .display.effects import apply_effect
-from .exceptions import iPIXELConnectionError
-
 _LOGGER = logging.getLogger(__name__)
 
+MAX_BATCH_POSITIONS = 118
+
+
 class iPIXELAPI:
-    """iPIXEL Color device API client - simplified facade."""
+    """High level command API for one physical iPIXEL panel."""
 
-    def __init__(self, hass: HomeAssistant, address: str) -> None:
-        """Initialize the API client.
-
-        Args:
-            hass: Home Assistant instance
-            address: Bluetooth MAC address
-        """
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        address: str,
+        *,
+        name: str | None = None,
+        ack_timeout: float = DEFAULT_ACK_TIMEOUT,
+        size_override: tuple[int, int] | None = None,
+    ) -> None:
+        """Initialise the API."""
         self._address = address
-        self._bluetooth = BluetoothClient(hass, address)
-        self._power_state = True  # Assume on until we check
-        self._device_info: DeviceInfo | None = None
-        # Frame diffing support for draw_visuals
-        self._last_frame_bytes: bytes | None = None
-        self._last_frame_png: bytes | None = None
-        
-    async def connect(self) -> None:
-        """Connect to the iPIXEL device."""
-        self._device_info = await self._bluetooth.connect()
+        self._name = name or address
+        self._bluetooth = BluetoothClient(
+            hass,
+            address,
+            name=self._name,
+            ack_timeout=ack_timeout,
+            size_override=size_override,
+        )
+        self._power_state: bool | None = None
+
+    # ------------------------------------------------------------------
+    # Connection / info
+    # ------------------------------------------------------------------
+    @property
+    def address(self) -> str:
+        """Return the Bluetooth address."""
+        return self._address
+
+    @property
+    def name(self) -> str:
+        """Return the configured device name."""
+        return self._name
+
+    @property
+    def is_connected(self) -> bool:
+        """Return True when the BLE link is up."""
+        return self._bluetooth.is_connected
+
+    @property
+    def power_state(self) -> bool | None:
+        """Return the last power state we sent (None if unknown)."""
+        return self._power_state
+
+    @property
+    def device_info(self) -> DeviceInfo | None:
+        """Return the cached device info."""
+        return self._bluetooth.device_info
+
+    @property
+    def width(self) -> int | None:
+        """Return the panel width in pixels, if known."""
+        info = self.device_info
+        return info.width if info else None
+
+    @property
+    def height(self) -> int | None:
+        """Return the panel height in pixels, if known."""
+        info = self.device_info
+        return info.height if info else None
+
+    def add_connection_listener(self, listener) -> Any:
+        """Register a callback for connection state changes."""
+        return self._bluetooth.async_add_listener(listener)
+
+    async def connect(self) -> DeviceInfo:
+        """Connect to the panel (no-op when already connected)."""
+        return await self._bluetooth.async_connect()
 
     async def disconnect(self) -> None:
-        """Disconnect from the device."""
-        await self._bluetooth.disconnect()
-    
-    async def set_power(self, on: bool) -> bool:
-        """Set device power state."""
+        """Disconnect from the panel."""
+        await self._bluetooth.async_disconnect()
+
+    async def get_device_info(self) -> dict[str, Any]:
+        """Return device information as a dictionary (connects if needed)."""
+        info = await self._require_device_info()
+        return device_info_to_dict(info)
+
+    async def _require_device_info(self) -> DeviceInfo:
+        info = self.device_info
+        if info is None:
+            info = await self.connect()
+        return info
+
+    async def _send(self, plan_id: str, payload: bytes, *, requires_ack: bool = False) -> None:
+        await self._bluetooth.async_send_command(plan_id, payload, requires_ack=requires_ack)
+
+    async def _send_plan(self, plan) -> None:
+        await self._bluetooth.async_send_plan(plan)
+
+    @staticmethod
+    def _build(builder, *args, **kwargs) -> bytes:
         try:
-            payload = make_power_command(on)
-            result = await self._bluetooth.send_command("set_power", payload)
-
-            if result.success:
-                _LOGGER.debug("Power set to %s", "ON" if on else "OFF")
-            else:
-                _LOGGER.error("Failed to set power state")
-            return result.success
-
-        except Exception as err:
-            _LOGGER.error("Error setting power: %s", err)
-            return False
-    
-    async def set_brightness(self, brightness: int) -> bool:
-        """Set device brightness level.
-        
-        Args:
-            brightness: Brightness level from 1 to 100
-            
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            payload = make_brightness_command(brightness)
-            result = await self._bluetooth.send_command("set_brightness", payload)
-
-            if result.success:
-                _LOGGER.debug("Brightness set to %d", brightness)
-            else:
-                _LOGGER.error("Failed to set brightness")
-            return result.success
-
+            return builder(*args, **kwargs)
         except ValueError as err:
-            _LOGGER.error("Invalid brightness value: %s", err)
-            return False
-        except Exception as err:
-            _LOGGER.error("Error setting brightness: %s", err)
-            return False
-
-    async def sync_time(self) -> bool:
-        """Sync current time to the device.
-
-        This is useful for keeping the clock display accurate,
-        especially after the device has been running for a while.
-
-        Returns:
-            True if time was synced successfully
-        """
-        try:
-            payload = make_time_command()
-            result = await self._bluetooth.send_command("set_time", payload)
-
-            if result.success:
-                _LOGGER.debug("Time synced to device")
-            else:
-                _LOGGER.error("Failed to sync time")
-            return result.success
-
-        except Exception as err:
-            _LOGGER.error("Error syncing time: %s", err)
-            return False
-
-    async def set_orientation(self, orientation: int) -> bool:
-        """Set display orientation.
-
-        Args:
-            orientation: 0=normal, 1=90°, 2=180°, 3=270°
-
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            payload = make_orientation_command(orientation)
-            result = await self._bluetooth.send_command("set_orientation", payload)
-
-            if result.success:
-                _LOGGER.debug("Orientation set to %d", orientation)
-            else:
-                _LOGGER.error("Failed to set orientation")
-            return result.success
-
-        except ValueError as err:
-            _LOGGER.error("Invalid orientation value: %s", err)
-            return False
-        except Exception as err:
-            _LOGGER.error("Error setting orientation: %s", err)
-            return False
-
-    async def set_rhythm_mode(self, style: int, speed: int = 4) -> bool:
-        """Set rhythm/music visualizer mode.
-
-        Args:
-            style: Rhythm style 0-4 (5 different visualizer styles)
-            speed: Animation speed 0-7 (8 speed levels)
-
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            payload = make_rhythm_mode_command(style, speed)
-            result = await self._bluetooth.send_command("set_rhythm_mode", payload, requires_ack=True)
-
-            if result.success:
-                _LOGGER.info("Rhythm mode set: style=%d, speed=%d", style, speed)
-            else:
-                _LOGGER.error("Failed to set rhythm mode")
-            return result.success
-
-        except ValueError as err:
-            _LOGGER.error("Invalid rhythm mode parameters: %s", err)
-            return False
-        except Exception as err:
-            _LOGGER.error("Error setting rhythm mode: %s", err)
-            return False
-
-    async def set_fun_mode(self, enable: bool) -> bool:
-        """Enable or disable fun mode (required for pixel control).
-
-        Args:
-            enable: True to enable fun mode, False to disable
-
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            payload = make_fun_mode_command(enable)
-            result = await self._bluetooth.send_command("set_fun_mode", payload)
-
-            if result.success:
-                _LOGGER.debug("Fun mode %s", "enabled" if enable else "disabled")
-            else:
-                _LOGGER.error("Failed to set fun mode")
-            return result.success
-
-        except Exception as err:
-            _LOGGER.error("Error setting fun mode: %s", err)
-            return False
-
-    async def set_pixel(self, x: int, y: int, color: str) -> bool:
-        """Set a single pixel color.
-
-        Note: Fun mode must be enabled first for this to work.
-
-        Args:
-            x: X coordinate (0 to width-1)
-            y: Y coordinate (0 to height-1)
-            color: Hex color string (e.g., 'ff0000' for red)
-
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            payload = make_pixel_command(x, y, color)
-            result = await self._bluetooth.send_command("set_pixel", payload)
-
-            if result.success:
-                _LOGGER.debug("Pixel set at (%d, %d) to #%s", x, y, color)
-            else:
-                _LOGGER.error("Failed to set pixel at (%d, %d)", x, y)
-            return result.success
-
-        except ValueError as err:
-            _LOGGER.error("Invalid pixel parameters: %s", err)
-            return False
-        except Exception as err:
-            _LOGGER.error("Error setting pixel: %s", err)
-            return False
-
-    async def set_pixels(self, pixels: list[dict]) -> bool:
-        """Set multiple pixels at once (sends one command per pixel).
-
-        Note: Fun mode must be enabled first for this to work.
-        For better performance with many pixels, use set_pixels_batched() instead.
-
-        Args:
-            pixels: List of dicts with 'x', 'y', and 'color' keys
-
-        Returns:
-            True if all commands were sent successfully
-        """
-        try:
-            all_success = True
-            for pixel in pixels:
-                x = pixel.get('x', 0)
-                y = pixel.get('y', 0)
-                color = pixel.get('color', 'ffffff')
-                success = await self.set_pixel(x, y, color)
-                if not success:
-                    all_success = False
-
-            if all_success:
-                _LOGGER.debug("Set %d pixels successfully", len(pixels))
-            else:
-                _LOGGER.warning("Some pixels failed to set")
-            return all_success
-
-        except Exception as err:
-            _LOGGER.error("Error setting pixels: %s", err)
-            return False
-
-    async def set_pixels_batched(self, pixels: list[dict]) -> bool:
-        """Set multiple pixels using batched commands grouped by color.
-
-        This is more efficient than set_pixels() when drawing shapes or patterns
-        because it groups pixels by color and sends them in batches, reducing
-        the number of BLE round-trips.
-
-        Based on go-ipxl's rawSendPixels implementation.
-
-        Note: Fun mode must be enabled first for this to work.
-
-        Args:
-            pixels: List of dicts with 'x', 'y', and 'color' keys
-                    color can be hex string ('ff0000') or RGB tuple (255, 0, 0)
-
-        Returns:
-            True if all commands were sent successfully
-        """
-        try:
-            # Group pixels by color
-            color_groups = group_pixels_by_color(pixels)
-
-            if not color_groups:
-                _LOGGER.warning("No valid pixels to set")
-                return False
-
-            all_success = True
-            total_pixels = 0
-
-            for (r, g, b), positions in color_groups.items():
-                # Skip black pixels (they're "off")
-                if r == 0 and g == 0 and b == 0:
-                    continue
-
-                # Split into chunks if too many positions (max ~118 per packet)
-                MAX_POSITIONS = 118
-                for i in range(0, len(positions), MAX_POSITIONS):
-                    chunk_positions = positions[i:i + MAX_POSITIONS]
-
-                    payload = make_batch_pixel_command(r, g, b, chunk_positions)
-                    result = await self._bluetooth.send_command("set_pixels_batch", payload)
-
-                    if not result.success:
-                        _LOGGER.error(
-                            "Failed to send batch pixel command for color #%02x%02x%02x",
-                            r, g, b
-                        )
-                        all_success = False
-                    else:
-                        total_pixels += len(chunk_positions)
-
-            if all_success:
-                _LOGGER.info(
-                    "Set %d pixels in %d color groups (batched)",
-                    total_pixels, len(color_groups)
-                )
-            else:
-                _LOGGER.warning("Some batched pixel commands failed")
-
-            return all_success
-
-        except Exception as err:
-            _LOGGER.error("Error setting batched pixels: %s", err)
-            return False
-
-    async def display_image_raw_rgb(
-        self,
-        image_bytes: bytes,
-        file_extension: str = ".png",
-        brightness: int = 100
-    ) -> bool:
-        """Display image using raw RGB protocol (camera mode).
-
-        This sends the image as raw RGB bytes in 12KB chunks, which can be
-        faster than PNG encoding for real-time applications like camera feeds
-        or live animations.
-
-        Based on go-ipxl's SendImage implementation.
-
-        Args:
-            image_bytes: Raw image file bytes (PNG, JPEG, etc.)
-            file_extension: Image format hint for decoding
-            brightness: Brightness level 1-100 (applied to RGB data)
-
-        Returns:
-            True if image was sent successfully
-        """
-        try:
-            # Get device dimensions
-            device_info = await self._get_device_info()
-            width = device_info.width
-            height = device_info.height
-
-            # Convert image to raw RGB bytes
-            rgb_data = image_to_rgb_bytes(image_bytes, width, height, file_extension)
-
-            expected_size = width * height * 3
-            if len(rgb_data) != expected_size:
-                _LOGGER.error(
-                    "RGB data size mismatch: expected %d, got %d",
-                    expected_size, len(rgb_data)
-                )
-                return False
-
-            # Split into chunks
-            chunks = split_rgb_into_chunks(rgb_data, RAW_RGB_CHUNK_SIZE)
-
-            _LOGGER.debug(
-                "Sending raw RGB image: %dx%d (%d bytes, %d chunks)",
-                width, height, len(rgb_data), len(chunks)
-            )
-
-            # Send each chunk
-            for i, chunk in enumerate(chunks):
-                payload = make_raw_rgb_chunk_command(
-                    chunk_data=chunk,
-                    total_rgb_data=rgb_data,
-                    chunk_index=i,
-                    brightness=brightness
-                )
-
-                result = await self._bluetooth.send_command("send_raw_rgb", payload)
-                if not result.success:
-                    _LOGGER.error("Failed to send RGB chunk %d/%d", i + 1, len(chunks))
-                    return False
-
-            _LOGGER.info(
-                "Raw RGB image sent: %dx%d, %d bytes, %d chunks",
-                width, height, len(rgb_data), len(chunks)
-            )
-            return True
-
-        except Exception as err:
-            _LOGGER.error("Error displaying raw RGB image: %s", err)
-            return False
-
-    async def display_image_raw_rgb_url(
-        self,
-        url: str,
-        brightness: int = 100
-    ) -> bool:
-        """Download and display image using raw RGB protocol.
-
-        Args:
-            url: URL to image file
-            brightness: Brightness level 1-100
-
-        Returns:
-            True if image was sent successfully
-        """
-        try:
-            import aiohttp
-
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
-                    if response.status != 200:
-                        _LOGGER.error("Failed to download image: HTTP %d", response.status)
-                        return False
-
-                    image_bytes = await response.read()
-                    content_type = response.headers.get('Content-Type', '')
-
-            # Determine file extension from content type or URL
-            if 'png' in content_type or url.lower().endswith('.png'):
-                file_ext = '.png'
-            elif 'jpeg' in content_type or 'jpg' in content_type or url.lower().endswith(('.jpg', '.jpeg')):
-                file_ext = '.jpg'
-            else:
-                file_ext = '.png'  # Default to PNG
-
-            _LOGGER.debug("Downloaded image from %s (%d bytes)", url, len(image_bytes))
-            return await self.display_image_raw_rgb(image_bytes, file_ext, brightness)
-
-        except Exception as err:
-            _LOGGER.error("Error downloading image from %s: %s", url, err)
-            return False
-
-    async def display_frame_with_diff(
-        self,
-        frame: "Image.Image",
-        brightness: int = 100
-    ) -> bool:
-        """Display frame only if different from last frame (frame diffing).
-
-        Compares the new frame with the previously sent frame to avoid
-        redundant BLE transmissions. Stores the frame for camera preview.
-
-        Args:
-            frame: PIL Image to display (RGB mode)
-            brightness: Brightness level 1-100
-
-        Returns:
-            True if frame was sent or skipped (unchanged), False on error
-        """
-        try:
-            from PIL import Image
-            import io
-
-            # Ensure RGB mode
-            if frame.mode != "RGB":
-                frame = frame.convert("RGB")
-
-            # Get frame bytes for comparison
-            frame_bytes = frame.tobytes()
-
-            # Check if frame has changed
-            if frame_bytes == self._last_frame_bytes:
-                _LOGGER.debug("Frame unchanged, skipping BLE send")
-                return True
-
-            # Convert to PNG for storage and sending
-            png_buffer = io.BytesIO()
-            frame.save(png_buffer, format="PNG")
-            png_bytes = png_buffer.getvalue()
-
-            # Store for frame diffing and camera preview
-            self._last_frame_bytes = frame_bytes
-            self._last_frame_png = png_bytes
-
-            # Send via raw RGB protocol (faster for animations)
-            return await self.display_image_raw_rgb(png_bytes, ".png", brightness)
-
-        except Exception as err:
-            _LOGGER.error("Error displaying frame with diff: %s", err)
-            return False
-
-    def get_last_frame_png(self) -> bytes | None:
-        """Get last rendered frame as PNG bytes for camera preview.
-
-        Returns:
-            PNG image bytes or None if no frame has been sent
-        """
-        return self._last_frame_png
-
-    def clear_frame_cache(self) -> None:
-        """Clear the frame diffing cache.
-
-        Call this when starting a new animation or clearing the display.
-        """
-        self._last_frame_bytes = None
-        self._last_frame_png = None
-
-    async def draw_solid_color(self, color: str) -> bool:
-        """Fill the entire display with a solid color using raw RGB protocol.
-
-        This is faster than setting each pixel individually.
-
-        Args:
-            color: Hex color string (e.g., 'ff0000' for red)
-
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            # Parse color
-            color = color.lstrip('#')
-            if len(color) != 6:
-                raise ValueError("Color must be 6 hex characters")
-            r = int(color[0:2], 16)
-            g = int(color[2:4], 16)
-            b = int(color[4:6], 16)
-
-            # Get device dimensions
-            device_info = await self._get_device_info()
-            width = device_info.width
-            height = device_info.height
-
-            # Create solid color RGB data
-            total_pixels = width * height
-            rgb_data = bytes([r, g, b] * total_pixels)
-
-            # Split into chunks and send
-            chunks = split_rgb_into_chunks(rgb_data, RAW_RGB_CHUNK_SIZE)
-
-            for i, chunk in enumerate(chunks):
-                payload = make_raw_rgb_chunk_command(
-                    chunk_data=chunk,
-                    total_rgb_data=rgb_data,
-                    chunk_index=i,
-                    brightness=100
-                )
-                result = await self._bluetooth.send_command("set_solid_color", payload)
-                if not result.success:
-                    _LOGGER.error("Failed to send solid color chunk %d/%d", i + 1, len(chunks))
-                    return False
-
-            _LOGGER.info("Filled display with color #%s", color)
-            return True
-
-        except ValueError as err:
-            _LOGGER.error("Invalid color: %s", err)
-            return False
-        except Exception as err:
-            _LOGGER.error("Error drawing solid color: %s", err)
-            return False
-
-    async def clear_display(self) -> bool:
-        """Clear the display (blank screen).
-
-        This blanks the screen without affecting power state.
-
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            payload = make_clear_command()
-            result = await self._bluetooth.send_command("clear_display",payload)
-
-            if result.success:
-                _LOGGER.debug("Display cleared")
-            else:
-                _LOGGER.error("Failed to clear display")
-            return result.success
-
-        except Exception as err:
-            _LOGGER.error("Error clearing display: %s", err)
-            return False
-
-    async def show_slot(self, slot: int) -> bool:
-        """Display content from a stored slot.
-
-        Args:
-            slot: Slot number to display (0-255)
-
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            payload = make_show_slot_command(slot)
-            result = await self._bluetooth.send_command("show_slot", payload)
-
-            if result.success:
-                _LOGGER.info("Showing slot %d", slot)
-            else:
-                _LOGGER.error("Failed to show slot %d", slot)
-            return result.success
-
-        except ValueError as err:
-            _LOGGER.error("Invalid slot number: %s", err)
-            return False
-        except Exception as err:
-            _LOGGER.error("Error showing slot: %s", err)
-            return False
-
-    async def delete_slot(self, slot: int) -> bool:
-        """Delete content from a stored slot.
-
-        Args:
-            slot: Slot index to delete (0-255)
-
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            payload = make_delete_slot_command(slot)
-            result = await self._bluetooth.send_command("delete_slot", payload)
-
-            if result.success:
-                _LOGGER.info("Deleted slot %d", slot)
-            else:
-                _LOGGER.error("Failed to delete slot %d", slot)
-            return result.success
-
-        except ValueError as err:
-            _LOGGER.error("Invalid slot number: %s", err)
-            return False
-        except Exception as err:
-            _LOGGER.error("Error deleting slot: %s", err)
-            return False
-
-    async def set_time(self, hour: int, minute: int, second: int) -> bool:
-        """Set specific time on device.
-
-        Args:
-            hour: Hour (0-23)
-            minute: Minute (0-59)
-            second: Second (0-59)
-
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            payload = make_set_time_command(hour, minute, second)
-            result = await self._bluetooth.send_command("set_time", payload)
-
-            if result.success:
-                _LOGGER.info("Time set to %02d:%02d:%02d", hour, minute, second)
-            else:
-                _LOGGER.error("Failed to set time")
-            return result.success
-
-        except ValueError as err:
-            _LOGGER.error("Invalid time value: %s", err)
-            return False
-        except Exception as err:
-            _LOGGER.error("Error setting time: %s", err)
-            return False
-
+            raise iPIXELCommandError(str(err)) from err
+
+    # ------------------------------------------------------------------
+    # Basic device control
+    # ------------------------------------------------------------------
+    async def set_power(self, on: bool) -> None:
+        """Turn the panel on or off."""
+        await self._send("set_power", make_power_command(on))
+        self._power_state = on
+
+    async def set_brightness(self, brightness: int) -> None:
+        """Set brightness (1-100)."""
+        await self._send("set_brightness", self._build(make_brightness_command, int(brightness)))
+
+    async def set_orientation(self, orientation: int) -> None:
+        """Set orientation (0=0deg, 1=90deg, 2=180deg, 3=270deg)."""
+        await self._send("set_orientation", self._build(make_orientation_command, int(orientation)))
+
+    async def set_upside_down(self, upside_down: bool) -> None:
+        """Flip the panel 180 degrees."""
+        await self._send("set_upside_down", make_upside_down_command(upside_down))
+
+    async def sync_time(self) -> None:
+        """Send the current time to the panel."""
+        await self._send("set_time", make_time_command())
+
+    async def set_time(self, hour: int, minute: int, second: int = 0) -> None:
+        """Set a specific time on the panel."""
+        await self._send("set_time", self._build(make_set_time_command, hour, minute, second))
+
+    async def clear_display(self) -> None:
+        """Clear the panel (keeps power state)."""
+        await self._send("clear_display", make_clear_command())
+
+    async def set_default_mode(self) -> None:
+        """Reset the panel to its factory default display mode."""
+        await self._send("set_default_mode", make_default_mode_command())
+
+    async def set_fun_mode(self, enable: bool) -> None:
+        """Enable/disable fun mode (required for pixel control)."""
+        await self._send("set_fun_mode", make_fun_mode_command(enable))
+
+    async def set_diy_mode(self, mode: int | bool) -> None:
+        """Set DIY mode (0-3)."""
+        await self._send("set_diy_mode", self._build(make_diy_mode_command, mode))
+
+    async def set_screen(self, screen: int) -> None:
+        """Select the visible screen buffer (1-9)."""
+        await self._send("set_screen", self._build(make_screen_command, int(screen)))
+
+    async def show_slot(self, slot: int) -> None:
+        """Show stored content from a slot (0-255)."""
+        await self._send("show_slot", self._build(make_show_slot_command, int(slot)))
+
+    async def delete_slot(self, slot: int) -> None:
+        """Delete stored content from a slot (0-255)."""
+        await self._send("delete_slot", self._build(make_delete_slot_command, int(slot)))
+
+    async def erase_data(self, buffers: list[int] | None = None, erase_all: bool = False) -> None:
+        """Erase stored buffers from the panel."""
+        await self._send("erase_data", self._build(make_erase_data_command, buffers, erase_all))
+
+    async def set_program_mode(self, buffers: list[int]) -> None:
+        """Cycle through stored screens."""
+        await self._send("set_program_mode", self._build(make_program_mode_command, buffers))
+
+    async def send_raw_command(self, hex_data: str) -> None:
+        """Send raw bytes (expert use)."""
+        await self._send("send_raw_command", self._build(make_raw_command, hex_data))
+
+    async def set_password(self, enabled: bool, password: str) -> None:
+        """Enable/disable password protection."""
+        await self._send("set_password", self._build(make_set_password_command, enabled, password))
+
+    async def verify_password(self, password: str) -> None:
+        """Verify the panel password."""
+        await self._send("verify_password", self._build(make_verify_password_command, password))
+
+    # ------------------------------------------------------------------
+    # Modes
+    # ------------------------------------------------------------------
     async def set_clock_mode(
         self,
         style: int = 1,
         date: str = "",
         show_date: bool = True,
-        format_24: bool = True
-    ) -> bool:
-        """Set device to clock display mode.
+        format_24: bool = True,
+    ) -> None:
+        """Switch the panel to clock mode and sync the time."""
+        payload = self._build(make_clock_mode_command, int(style), date, show_date, format_24)
+        await self._send("set_clock_mode", payload)
+        await self.sync_time()
 
-        Args:
-            style: Clock style (0-8)
-            date: Date in DD/MM/YYYY format (defaults to today)
-            show_date: Whether to show the date
-            format_24: Whether to use 24-hour format
+    async def set_rhythm_mode(self, style: int, speed: int = 4) -> None:
+        """Switch the panel to the music visualiser."""
+        payload = self._build(make_rhythm_mode_command, int(style), int(speed))
+        await self._send("set_rhythm_mode", payload, requires_ack=True)
 
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            # Set clock mode
-            payload = make_clock_mode_command(style, date, show_date, format_24)
-            result = await self._bluetooth.send_command("set_clock_mode", payload)
+    async def set_rhythm_mode_advanced(self, style: int, levels: list[int]) -> None:
+        """Rhythm mode with 11 explicit band levels."""
+        payload = self._build(make_rhythm_mode_advanced_command, int(style), levels)
+        await self._send("set_rhythm_mode", payload)
 
-            if not result.success:
-                _LOGGER.error("Failed to set clock mode")
-                return False
-
-            _LOGGER.info("Clock mode set: style=%d, 24h=%s, show_date=%s",
-                       style, format_24, show_date)
-
-            # Sync current time to the device
-            time_success = await self.sync_time()
-            if not time_success:
-                _LOGGER.warning("Clock mode set but time sync failed")
-
-            return result.success
-
-        except ValueError as err:
-            _LOGGER.error("Invalid clock mode parameters: %s", err)
-            return False
-        except Exception as err:
-            _LOGGER.error("Error setting clock mode: %s", err)
-            return False
-    
-    async def _get_device_info(self) -> DeviceInfo | None:
-        """Query device information and store it."""
-        if self._device_info is None:
-            raise RuntimeError("Device info not loaded yet")
-        return self._device_info
-    
-    async def get_device_info(self) -> dict[str, Any] | None:
-        """Get device information as a dictionary.
-
-        Returns:
-            Device information dict or None on error
-        """
-        try:
-            if self._device_info is None:
-                raise RuntimeError("Device info not loaded yet")
-            
-            return device_info_to_dict(self._device_info)
-            
-
-        except Exception as err:
-            _LOGGER.error("Error getting device info: %s", err)
-            return None
-    
-    
-    async def display_text(self, text: str, antialias: bool = True, font_size: float | None = None, font: str | None = None, line_spacing: int = 0, text_color: str = "ffffff", bg_color: str = "000000") -> bool:
-        """Display text as image using PIL and pypixelcolor with color gradient mapping.
-
-        Args:
-            text: Text to display (supports multiline with \n)
-            antialias: Enable text antialiasing for smoother rendering
-            font_size: Fixed font size in pixels (can be fractional), or None for auto-sizing
-            font: Font name from fonts/ folder, or None for default
-            line_spacing: Additional spacing between lines in pixels
-            text_color: Foreground/text color in hex format (e.g., 'ffffff')
-            bg_color: Background color in hex format (e.g., '000000')
-        """
-        try:
-            # Get device dimensions
-            device_info = await self._get_device_info()
-            width = device_info.width
-            height = device_info.height
-
-            # Render text to PNG with color gradient
-            png_data = render_text_to_png(text, width, height, antialias, font_size, font, line_spacing, text_color, bg_color)
-
-            # Generate image commands using pypixelcolor
-            plan = make_image_plan(
-                image_bytes=png_data,
-                file_extension=".png",
-                resize_method="crop",
-                device_info=device_info
-            )
-
-            # Send plan
-            await self._bluetooth.send_plan(plan)
-
-            _LOGGER.info(
-                "Text rendered as image: '%s' (%dx%d, %d bytes PNG, %d frames)",
-                text,
-                width,
-                height,
-                len(png_data),
-                len(plan)
-            )
-            return True
-
-        except Exception as err:
-            _LOGGER.error("Error displaying text: %s", err)
-            return False
-
-    async def display_text_pypixelcolor(
+    async def display_text_native(
         self,
         text: str,
+        *,
         color: str = "ffffff",
         bg_color: str | None = None,
-        font: str = "CUSONG",
+        font: str = "UNIFONT",
         animation: int = 0,
         speed: int = 80,
         rainbow_mode: int = 0,
-        matrix_height: int | None = None
-    ) -> bool:
-        """Display text using pypixelcolor.
-
-        Args:
-            text: Text to display (supports emojis)
-            color: Text color in hex format (e.g., 'ffffff')
-            bg_color: Background color in hex format (e.g., '000000'), or None for transparent
-            font: Font name ('CUSONG', 'SIMSUN', 'VCR_OSD_MONO') or file path
-            animation: Animation type (0-7)
-            speed: Animation speed (0-100)
-            rainbow_mode: Rainbow mode (0-9)
-            matrix_height: Override device height for text rendering (16, 20, 24, or 32)
-
-        Returns:
-            True if text was sent successfully
-        """
-        try:            
-            device_info = await self._get_device_info()
-            device_height = matrix_height if matrix_height else None
-
-            # Generate text commands using pypixelcolor
+        char_height: int | None = None,
+        save_slot: int = 0,
+    ) -> None:
+        """Send text that the panel renders itself (with scroll/blink effects)."""
+        info = await self._require_device_info()
+        try:
             plan = make_text_plan(
                 text=text,
                 color=color,
@@ -837,527 +282,141 @@ class iPIXELAPI:
                 animation=animation,
                 speed=speed,
                 rainbow_mode=rainbow_mode,
-                save_slot=0,
-                device_height=device_height,
-                device_info=device_info
+                save_slot=save_slot,
+                char_height=char_height,
+                device_info=info,
             )
+        except (ValueError, FileNotFoundError) as err:
+            raise iPIXELCommandError(f"Cannot build text command: {err}") from err
+        await self._send_plan(plan)
 
-            # Send all command frames
-            _LOGGER.debug("Sending pypixelcolor plan")
-            success = await self._bluetooth.send_plan(plan)
-            if not success:
-                _LOGGER.error("Failed to send plan")
-                return False
+    # ------------------------------------------------------------------
+    # Images
+    # ------------------------------------------------------------------
+    async def display_image(self, image: Image.Image, *, save_slot: int = 0) -> None:
+        """Show a still image (resized/cropped to the panel)."""
+        info = await self._require_device_info()
+        if image.size != (info.width, info.height):
+            image = _fit_image(image, info.width, info.height)
+        png = image_to_png_bytes(image)
+        plan = make_image_plan(png, ".png", "crop", info, save_slot)
+        await self._send_plan(plan)
 
-            _LOGGER.info(
-                "Pypixelcolor text sent: '%s' (color=%s, bg=%s, font=%s, anim=%d, speed=%d, windows=%d)",
-                text,
-                color,
-                bg_color or "none",
-                font,
-                animation,
-                speed,
-                len(plan.windows)
-            )
-            return True
+    async def display_gif_frames(
+        self,
+        frames: list[Image.Image],
+        durations: list[int],
+        *,
+        loop: int = 0,
+        save_slot: int = 0,
+    ) -> None:
+        """Show an animation from decoded frames (resized to the panel)."""
+        info = await self._require_device_info()
+        sized = [
+            frame if frame.size == (info.width, info.height) else _fit_image(frame, info.width, info.height)
+            for frame in frames
+        ]
+        gif = frames_to_gif_bytes(sized, durations, loop)
+        plan = make_image_plan(gif, ".gif", "crop", info, save_slot)
+        await self._send_plan(plan)
 
-        except Exception as err:
-            _LOGGER.error("Error displaying pypixelcolor text: %s", err)
-            return False
-
-    async def display_image_with_effect(
+    async def display_image_bytes(
         self,
         image_bytes: bytes,
-        effect: str = "none",
-        file_extension: str = ".png"
-    ) -> bool:
-        """Display image with optional visual effect.
-
-        Args:
-            image_bytes: Raw image data bytes
-            effect: Effect name to apply (e.g., 'blur', 'sharpen')
-            file_extension: File extension for image type
-
-        Returns:
-            True if image was sent successfully
-        """
+        file_extension: str = ".png",
+        *,
+        resize_method: str = "crop",
+        save_slot: int = 0,
+    ) -> None:
+        """Upload an encoded image/GIF file as-is (pypixelcolor resizes it)."""
+        info = await self._require_device_info()
         try:
-            from PIL import Image
-            import io
+            plan = make_image_plan(image_bytes, file_extension, resize_method, info, save_slot)
+        except Exception as err:  # PIL / pypixelcolor decoding errors
+            raise iPIXELCommandError(f"Cannot process image: {err}") from err
+        await self._send_plan(plan)
 
-            # Get device dimensions
-            device_info = await self._get_device_info()
+    async def display_frame(self, image: Image.Image, brightness: int = 100) -> None:
+        """Stream a frame using the raw RGB (camera) protocol - fast, not stored."""
+        info = await self._require_device_info()
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+        if image.size != (info.width, info.height):
+            image = image.resize((info.width, info.height), Image.Resampling.NEAREST)
+        await self._send_rgb(image.tobytes(), brightness)
 
-            # Load and apply effect
-            img = Image.open(io.BytesIO(image_bytes))
+    async def draw_solid_color(self, color: str) -> None:
+        """Fill the panel with a single colour."""
+        info = await self._require_device_info()
+        color = color.lstrip("#")
+        if len(color) != 6:
+            raise iPIXELCommandError("Color must be 6 hex characters")
+        try:
+            rgb = bytes.fromhex(color)
+        except ValueError as err:
+            raise iPIXELCommandError(f"Invalid color {color}") from err
+        await self._send_rgb(rgb * (info.width * info.height), 100)
 
-            if effect and effect != "none":
-                img = apply_effect(img, effect)
-                _LOGGER.debug("Applied effect: %s", effect)
-
-            # Convert back to bytes
-            output = io.BytesIO()
-            img.save(output, format=file_extension.lstrip('.').upper())
-            processed_bytes = output.getvalue()
-
-            # Generate image commands
-            plan = make_image_plan(
-                image_bytes=processed_bytes,
-                file_extension=file_extension,
-                resize_method="crop",
-                device_info=device_info
+    async def _send_rgb(self, rgb_data: bytes, brightness: int) -> None:
+        chunks = split_rgb_into_chunks(rgb_data, RAW_RGB_CHUNK_SIZE)
+        for index, chunk in enumerate(chunks):
+            payload = make_raw_rgb_chunk_command(
+                chunk_data=chunk,
+                total_rgb_data=rgb_data,
+                chunk_index=index,
+                brightness=brightness,
             )
+            await self._send("send_raw_rgb", payload)
 
-            # Send plan
-            await self._bluetooth.send_plan(plan)
-            return True
+    # ------------------------------------------------------------------
+    # Pixels
+    # ------------------------------------------------------------------
+    async def set_pixel(self, x: int, y: int, color: str) -> None:
+        """Set one pixel (fun mode must be enabled)."""
+        await self._send("set_pixel", self._build(make_pixel_command, int(x), int(y), color))
 
-        except Exception as err:
-            _LOGGER.error("Error displaying image with effect: %s", err)
-            return False
+    async def set_pixels(self, pixels: list[dict]) -> None:
+        """Set several pixels, batched per colour."""
+        groups = group_pixels_by_color(pixels)
+        if not groups:
+            raise iPIXELCommandError("No valid pixels supplied")
+        for (r, g, b), positions in groups.items():
+            for start in range(0, len(positions), MAX_BATCH_POSITIONS):
+                chunk = positions[start : start + MAX_BATCH_POSITIONS]
+                await self._send("set_pixels_batch", make_batch_pixel_command(r, g, b, chunk))
 
-    async def set_upside_down(self, upside_down: bool) -> bool:
-        """Set display upside down (flip 180°).
+    # ------------------------------------------------------------------
+    # Mixed data
+    # ------------------------------------------------------------------
+    async def send_mix_data(self, blocks: list[tuple[bytes, bytes]], screen_slot: int = 1) -> None:
+        """Send combined PNG/GIF/TEXT blocks."""
+        await self._send_plan(self._build(make_mix_data_plan, blocks, screen_slot))
 
-        Args:
-            upside_down: True to flip display 180°, False for normal
-
-        Returns:
-            True if command was sent successfully
-        """
+    async def send_mix_data_raw(self, raw_hex_data: str, screen_slot: int = 1) -> None:
+        """Send pre-built mixed data from a hex string."""
         try:
-            payload = make_upside_down_command(upside_down)
-            result = await self._bluetooth.send_command("set_upside_down", payload)
-
-            if result.success:
-                _LOGGER.info("Upside down mode %s", "enabled" if upside_down else "disabled")
-            else:
-                _LOGGER.error("Failed to set upside down mode")
-            return result.success
-
-        except Exception as err:
-            _LOGGER.error("Error setting upside down mode: %s", err)
-            return False
-
-    async def set_default_mode(self) -> bool:
-        """Reset device to factory default display mode.
-
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            payload = make_default_mode_command()
-            result = await self._bluetooth.send_command("set_default_mode", payload)
-
-            if result.success:
-                _LOGGER.info("Device reset to default mode")
-            else:
-                _LOGGER.error("Failed to reset to default mode")
-            return result.success
-
-        except Exception as err:
-            _LOGGER.error("Error resetting to default mode: %s", err)
-            return False
-
-    async def erase_data(
-        self,
-        buffers: list[int] | None = None,
-        erase_all: bool = False
-    ) -> bool:
-        """Erase stored data from device EEPROM.
-
-        Args:
-            buffers: List of buffer numbers to erase (1-255), or None with erase_all=True
-            erase_all: True to erase all stored data
-
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            payload = make_erase_data_command(buffers, erase_all)
-            result = await self._bluetooth.send_command("erase_data", payload)
-
-            if result.success:
-                if erase_all:
-                    _LOGGER.info("Erased all stored data from device")
-                else:
-                    _LOGGER.info("Erased buffers %s from device", buffers)
-            else:
-                _LOGGER.error("Failed to erase data")
-            return result.success
-
+            raw = bytes.fromhex(raw_hex_data.replace(" ", ""))
         except ValueError as err:
-            _LOGGER.error("Invalid erase parameters: %s", err)
-            return False
-        except Exception as err:
-            _LOGGER.error("Error erasing data: %s", err)
-            return False
-
-    async def set_program_mode(self, buffers: list[int]) -> bool:
-        """Set program mode to auto-cycle through stored screens.
-
-        Args:
-            buffers: List of buffer numbers to cycle through (1-9)
-
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            payload = make_program_mode_command(buffers)
-            result = await self._bluetooth.send_command("set_program_mode", payload)
-
-            if result.success:
-                _LOGGER.info("Program mode set with buffers: %s", buffers)
-            else:
-                _LOGGER.error("Failed to set program mode")
-            return result.success
-
-        except ValueError as err:
-            _LOGGER.error("Invalid program mode parameters: %s", err)
-            return False
-        except Exception as err:
-            _LOGGER.error("Error setting program mode: %s", err)
-            return False
-
-    async def set_rhythm_mode_advanced(
-        self,
-        style: int,
-        levels: list[int]
-    ) -> bool:
-        """Set advanced rhythm mode with 11 frequency band levels.
-
-        Args:
-            style: Rhythm style 0-4 (5 different visualizer styles)
-            levels: List of 11 integers (0-15) for each frequency band level
-
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            payload = make_rhythm_mode_advanced_command(style, levels)
-            result = await self._bluetooth.send_command("set_rhythm_mode", payload)
-
-            if result.success:
-                _LOGGER.info("Advanced rhythm mode set: style=%d, levels=%s", style, levels)
-            else:
-                _LOGGER.error("Failed to set advanced rhythm mode")
-            return result.success
-
-        except ValueError as err:
-            _LOGGER.error("Invalid rhythm mode parameters: %s", err)
-            return False
-        except Exception as err:
-            _LOGGER.error("Error setting advanced rhythm mode: %s", err)
-            return False
-
-    async def set_screen(self, screen: int) -> bool:
-        """Select visible screen buffer.
-
-        Args:
-            screen: Screen number to display (1-9)
-
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            payload = make_screen_command(screen)
-            result = await self._bluetooth.send_command("set_screen", payload)
-
-            if result.success:
-                _LOGGER.info("Screen set to %d", screen)
-            else:
-                _LOGGER.error("Failed to set screen to %d", screen)
-            return result.success
-
-        except ValueError as err:
-            _LOGGER.error("Invalid screen value: %s", err)
-            return False
-        except Exception as err:
-            _LOGGER.error("Error setting screen: %s", err)
-            return False
-
-    async def set_diy_mode(self, mode: int | bool) -> bool:
-        """Set DIY mode with extended options.
-
-        DIY mode allows custom pixel manipulation and content creation.
-
-        DIY Mode options:
-            0: QUIT_NOSAVE_KEEP_PREV  - Exit DIY mode, don't save, keep previous display
-            1: ENTER_CLEAR_CUR_SHOW   - Enter DIY mode, clear display
-            2: QUIT_STILL_CUR_SHOW    - Exit DIY mode, keep current display
-            3: ENTER_NO_CLEAR_CUR_SHOW - Enter DIY mode, preserve current content
-
-        Args:
-            mode: DIY mode option (0-3), or bool for backwards compatibility
-                  True = mode 1 (enter + clear), False = mode 0 (exit + keep prev)
-
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            payload = make_diy_mode_command(mode)
-            result = await self._bluetooth.send_command("set_diy_mode", payload)
-
-            mode_names = {
-                0: "exit (keep previous)",
-                1: "enter (clear display)",
-                2: "exit (keep current)",
-                3: "enter (preserve content)"
-            }
-            # Handle bool for logging
-            if isinstance(mode, bool):
-                mode = 1 if mode else 0
-
-            if result.success:
-                _LOGGER.info("DIY mode set to: %s", mode_names.get(mode, str(mode)))
-            else:
-                _LOGGER.error("Failed to set DIY mode")
-            return result.success
-
-        except ValueError as err:
-            _LOGGER.error("Invalid DIY mode: %s", err)
-            return False
-        except Exception as err:
-            _LOGGER.error("Error setting DIY mode: %s", err)
-            return False
-
-    async def send_raw_command(self, hex_data: str) -> bool:
-        """Send raw hex command to device for expert/debugging use.
-
-        This allows sending arbitrary commands to the device for testing
-        or accessing undocumented features. Use with caution.
-
-        Args:
-            hex_data: Hex string (e.g., 'AABBCC' or 'AA BB CC')
-
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            payload = make_raw_command(hex_data)
-            result = await self._bluetooth.send_command("send_raw_command", payload)
-
-            if result.success:
-                _LOGGER.info("Raw command sent: %s (%d bytes)", hex_data, len(payload))
-            else:
-                _LOGGER.error("Failed to send raw command: %s", hex_data)
-            return result.success
-
-        except ValueError as err:
-            _LOGGER.error("Invalid raw command: %s", err)
-            return False
-        except Exception as err:
-            _LOGGER.error("Error sending raw command: %s", err)
-            return False
-
-    async def display_image_url(
-        self,
-        url: str,
-        buffer_slot: int = 0
-    ) -> bool:
-        """Download and display image from URL (PNG, JPG, BMP).
-
-        Args:
-            url: URL to image file
-            buffer_slot: Storage slot on device (1-255)
-
-        Returns:
-            True if image was sent successfully
-        """
-        try:
-            import aiohttp
-
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
-                    if response.status != 200:
-                        _LOGGER.error("Failed to download image: HTTP %d", response.status)
-                        return False
-
-                    image_bytes = await response.read()
-                    content_type = response.headers.get('Content-Type', '')
-
-            # Determine file extension from content type or URL
-            if 'png' in content_type or url.lower().endswith('.png'):
-                file_ext = '.png'
-            elif 'jpeg' in content_type or 'jpg' in content_type or url.lower().endswith(('.jpg', '.jpeg')):
-                file_ext = '.jpg'
-            elif 'bmp' in content_type or url.lower().endswith('.bmp'):
-                file_ext = '.bmp'
-            elif 'gif' in content_type or url.lower().endswith('.gif'):
-                file_ext = '.gif'
-            else:
-                file_ext = '.png'  # Default to PNG
-
-            _LOGGER.debug("Downloaded image from %s (%d bytes, type=%s)", url, len(image_bytes), file_ext)
-
-            # Get device info for dimensions
-            device_info = await self._get_device_info()
-
-            # Generate image commands
-            plan = make_image_plan(
-                image_bytes=image_bytes,
-                file_extension=file_ext,
-                resize_method="crop",
-                device_info=device_info,
-                save_slot=buffer_slot
-            )
-
-            # Send plan
-            await self._bluetooth.send_plan(plan)
-
-            _LOGGER.info("Image from URL displayed successfully: %s", url)
-            return True
-
-        except Exception as err:
-            _LOGGER.error("Error displaying image from URL %s: %s", url, err)
-            return False
-
-    async def set_password(self, enabled: bool, password: str) -> bool:
-        """Set device password protection.
-
-        Args:
-            enabled: True to enable password protection, False to disable
-            password: 6-digit password string (e.g., '123456')
-
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            payload = make_set_password_command(enabled, password)
-            result = await self._bluetooth.send_command("set_password", payload)
-
-            if result.success:
-                _LOGGER.info("Password protection %s", "enabled" if enabled else "disabled")
-            else:
-                _LOGGER.error("Failed to set password")
-            return result.success
-
-        except ValueError as err:
-            _LOGGER.error("Invalid password: %s", err)
-            return False
-        except Exception as err:
-            _LOGGER.error("Error setting password: %s", err)
-            return False
-
-    async def verify_password(self, password: str) -> bool:
-        """Verify device password.
-
-        This must be called after connecting to a password-protected device
-        before other commands will work.
-
-        Args:
-            password: 6-digit password string (e.g., '123456')
-
-        Returns:
-            True if password was verified successfully
-        """
-        try:
-            payload = make_verify_password_command(password)
-            result = await self._bluetooth.send_command("verify_password", payload)
-
-            if result.success:
-                _LOGGER.info("Password verified successfully")
-            else:
-                _LOGGER.error("Password verification failed")
-            return result.success
-
-        except ValueError as err:
-            _LOGGER.error("Invalid password format: %s", err)
-            return False
-        except Exception as err:
-            _LOGGER.error("Error verifying password: %s", err)
-            return False
-
-    async def send_mix_data(
-        self,
-        blocks: list[tuple[bytes, bytes]],
-        screen_slot: int = 1
-    ) -> bool:
-        """Send mixed data (PNG + GIF + TEXT combined) to device.
-
-        This allows combining multiple content types into a single display,
-        each positioned at different areas of the screen.
-
-        Args:
-            blocks: List of (header, data) tuples. Each tuple contains:
-                    - header: 16-byte block header
-                    - data: Raw content data (PNG, GIF, or text bytes)
-            screen_slot: Storage slot on device (1-255)
-
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            plan = make_mix_data_plan(blocks, screen_slot)
-            result = await self._bluetooth.send_plan(plan)
-
-            if result.success:
-                _LOGGER.info("Mixed data sent: %d blocks to slot %d", len(blocks), screen_slot)
-            else:
-                _LOGGER.error("Failed to send mixed data")
-            return result.success
-
-        except ValueError as err:
-            _LOGGER.error("Invalid mixed data parameters: %s", err)
-            return False
-        except Exception as err:
-            _LOGGER.error("Error sending mixed data: %s", err)
-            return False
-
-    async def send_mix_data_raw(
-        self,
-        raw_hex_data: str,
-        screen_slot: int = 1
-    ) -> bool:
-        """Send pre-built mixed data from hex string.
-
-        This is for advanced users who want to send raw mixed data blocks
-        built manually or captured from other tools.
-
-        Args:
-            raw_hex_data: Hex string of mixed data (e.g., '8000 0000 0300...')
-            screen_slot: Storage slot on device (1-255)
-
-        Returns:
-            True if command was sent successfully
-        """
-        try:
-            # Parse hex string to bytes
-            hex_clean = raw_hex_data.replace(" ", "")
-            raw_data = bytes.fromhex(hex_clean)
-
-            plan = make_mix_data_raw_plan(raw_data, screen_slot)
-            result = await self._bluetooth.send_plan(plan)
-
-            if result.success:
-                _LOGGER.info("Raw mixed data sent: %d bytes to slot %d", len(raw_data), screen_slot)
-            else:
-                _LOGGER.error("Failed to send raw mixed data")
-            return result.success
-
-        except ValueError as err:
-            _LOGGER.error("Invalid hex data: %s", err)
-            return False
-        except Exception as err:
-            _LOGGER.error("Error sending raw mixed data: %s", err)
-            return False
-    
-    @property
-    def is_connected(self) -> bool:
-        """Return True if connected to device."""
-        return self._bluetooth.is_connected
-    
-    @property
-    def power_state(self) -> bool:
-        """Return current power state."""
-        return self._power_state
-    
-    @property
-    def address(self) -> str:
-        """Return device address."""
-        return self._address
-
-
-# Export at module level for convenience
-__all__ = ["iPIXELAPI", "iPIXELError", "iPIXELConnectionError", "iPIXELTimeoutError"]
-from .exceptions import iPIXELError, iPIXELConnectionError, iPIXELTimeoutError
+            raise iPIXELCommandError(f"Invalid hex data: {err}") from err
+        await self._send_plan(self._build(make_mix_data_raw_plan, raw, screen_slot))
+
+
+def _fit_image(image: Image.Image, width: int, height: int) -> Image.Image:
+    """Resize with nearest-neighbour sampling (pixel art friendly) and crop to size."""
+    if image.mode != "RGB":
+        image = image.convert("RGB")
+    scale = max(width / image.width, height / image.height)
+    new_size = (max(1, round(image.width * scale)), max(1, round(image.height * scale)))
+    resized = image.resize(new_size, Image.Resampling.NEAREST)
+    left = (resized.width - width) // 2
+    top = (resized.height - height) // 2
+    return resized.crop((left, top, left + width, top + height))
+
+
+__all__ = [
+    "iPIXELAPI",
+    "iPIXELError",
+    "iPIXELConnectionError",
+    "iPIXELTimeoutError",
+    "iPIXELCommandError",
+]

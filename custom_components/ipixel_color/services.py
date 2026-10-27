@@ -1,911 +1,742 @@
-"""Support for services."""
+"""Services of the iPIXEL Color integration.
 
-from . import DOMAIN
-from .api import iPIXELAPI
-from .schedule import iPIXELScheduleManager, ScheduleItem
-from homeassistant.const import ATTR_DEVICE_ID
-from homeassistant.core import HomeAssistant, ServiceCall, callback
-from homeassistant.exceptions import ServiceValidationError
-from homeassistant.config_entries import ConfigEntry, ConfigEntryState
-from homeassistant.helpers import device_registry as dr
+Every service takes a standard Home Assistant ``target`` (device, entity or
+area of a panel or combined display). When only one display is configured the
+target may be omitted.
+"""
+from __future__ import annotations
+
+import json
 import logging
+import uuid
+from collections.abc import Awaitable, Callable
+from typing import Any
+
+import voluptuous as vol
+from homeassistant.const import ATTR_AREA_ID, ATTR_DEVICE_ID, ATTR_ENTITY_ID
+from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
+
+from .color import hex_to_rgb, parse_color
+from .const import (
+    DOMAIN,
+    FPS_DEFAULT,
+    FPS_MAX,
+    FPS_MIN,
+    MODE_CLOCK,
+    MODE_RHYTHM,
+    MODE_TEXT,
+    MODE_TEXT_IMAGE,
+)
+from .exceptions import iPIXELError
+from .runtime import iPIXELRuntime
+from .schedule import ScheduleItem
 
 _LOGGER = logging.getLogger(__name__)
 
-# Service names
+ServiceHandler = Callable[[iPIXELRuntime, ServiceCall], Awaitable[None]]
+
+# --- canonical service names -------------------------------------------------
 SERVICE_DISPLAY_TEXT = "display_text"
-SERVICE_UPLOAD_GIF = "upload_gif"
+SERVICE_UPDATE_DISPLAY = "update_display"
+SERVICE_DISPLAY_IMAGE = "display_image"
+SERVICE_DRAW_SOLID_COLOR = "draw_solid_color"
+SERVICE_DRAW_VISUALS = "draw_visuals"
+SERVICE_STOP_VISUALS = "stop_visuals"
+SERVICE_SET_POWER = "set_power"
+SERVICE_SET_BRIGHTNESS = "set_brightness"
+SERVICE_SET_ORIENTATION = "set_orientation"
+SERVICE_SET_UPSIDE_DOWN = "set_upside_down"
+SERVICE_SET_CLOCK_MODE = "set_clock_mode"
+SERVICE_SET_RHYTHM_MODE = "set_rhythm_mode"
+SERVICE_SYNC_TIME = "sync_time"
+SERVICE_SET_TIME = "set_time"
+SERVICE_SET_PIXEL = "set_pixel"
+SERVICE_SET_PIXELS = "set_pixels"
+SERVICE_CLEAR_DISPLAY = "clear_display"
+SERVICE_SHOW_SLOT = "show_slot"
+SERVICE_DELETE_SLOT = "delete_slot"
+SERVICE_ERASE_DATA = "erase_data"
+SERVICE_SET_PROGRAM_MODE = "set_program_mode"
+SERVICE_SET_SCREEN = "set_screen"
+SERVICE_SET_DIY_MODE = "set_diy_mode"
+SERVICE_SET_DEFAULT_MODE = "set_default_mode"
 SERVICE_ADD_SCHEDULE = "add_schedule"
 SERVICE_REMOVE_SCHEDULE = "remove_schedule"
 SERVICE_TRIGGER_SCHEDULE = "trigger_schedule"
 SERVICE_SET_PLAYLIST = "set_playlist"
-SERVICE_SYNC_TIME = "sync_time"
-SERVICE_SET_PIXEL = "set_pixel"
-SERVICE_SET_PIXELS = "set_pixels"
-SERVICE_CLEAR_PIXELS = "clear_pixels"
-SERVICE_SHOW_SLOT = "show_slot"
-SERVICE_DELETE_SLOT = "delete_slot"
-SERVICE_SET_BRIGHTNESS = "set_brightness"
-SERVICE_SET_CLOCK_MODE = "set_clock_mode"
-SERVICE_SET_TIME = "set_time"
-# Enhanced scheduling services
 SERVICE_CREATE_PLAYLIST = "create_playlist"
 SERVICE_START_PLAYLIST = "start_playlist"
 SERVICE_STOP_PLAYLIST = "stop_playlist"
 SERVICE_SET_POWER_SCHEDULE = "set_power_schedule"
 SERVICE_ADD_TIME_SLOT = "add_time_slot"
-# New features from related projects
-SERVICE_SET_UPSIDE_DOWN = "set_upside_down"
-SERVICE_SET_DEFAULT_MODE = "set_default_mode"
-SERVICE_ERASE_DATA = "erase_data"
-SERVICE_SET_PROGRAM_MODE = "set_program_mode"
-SERVICE_SET_RHYTHM_MODE_ADVANCED = "set_rhythm_mode_advanced"
-SERVICE_DISPLAY_IMAGE_URL = "display_image_url"
-# Screen and mode control (from ipixel-ctrl reference)
-SERVICE_SET_SCREEN = "set_screen"
-SERVICE_SET_DIY_MODE = "set_diy_mode"
 SERVICE_SEND_RAW_COMMAND = "send_raw_command"
-# Password management (from ipixel-ctrl protocol)
+SERVICE_SEND_MIX_DATA = "send_mix_data"
 SERVICE_SET_PASSWORD = "set_password"
 SERVICE_VERIFY_PASSWORD = "verify_password"
-# Mixed data command (from ipixel-ctrl protocol)
-SERVICE_SEND_MIX_DATA = "send_mix_data"
-# Optimized pixel and image services (from go-ipxl)
-SERVICE_SET_PIXELS_BATCHED = "set_pixels_batched"
-SERVICE_DISPLAY_IMAGE_RAW_RGB = "display_image_raw_rgb"
-SERVICE_DISPLAY_IMAGE_RAW_RGB_URL = "display_image_raw_rgb_url"
-SERVICE_DRAW_SOLID_COLOR = "draw_solid_color"
-# Visual rendering service (from UnexpectedMatrixPixels)
-SERVICE_DRAW_VISUALS = "draw_visuals"
 
-def rgb_to_hex(rgb) -> str:
-    """Convert RGB array [r, g, b] to hex string 'rrggbb'."""
-    if isinstance(rgb, (list, tuple)) and len(rgb) >= 3:
-        return f"{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
-    return "ffffff"  # Default white
+# Old names kept working (not shown in the UI); a deprecation warning is logged once.
+DEPRECATED_ALIASES: dict[str, tuple[str, dict[str, Any]]] = {
+    "clear_pixels": (SERVICE_CLEAR_DISPLAY, {}),
+    "display_image_url": (SERVICE_DISPLAY_IMAGE, {}),
+    "upload_gif": (SERVICE_DISPLAY_IMAGE, {}),
+    "display_gif": (SERVICE_DISPLAY_IMAGE, {}),
+    "display_image_raw_rgb": (SERVICE_DISPLAY_IMAGE, {"method": "stream"}),
+    "display_image_raw_rgb_url": (SERVICE_DISPLAY_IMAGE, {"method": "stream"}),
+    "set_pixels_batched": (SERVICE_SET_PIXELS, {}),
+    "set_rhythm_mode_advanced": (SERVICE_SET_RHYTHM_MODE, {}),
+}
 
-def async_get_entry_for_service_call(
-    call: ServiceCall,
-) -> tuple[dr.DeviceEntry, ConfigEntry]:
-    """Get the entry ID related to a service call (by device ID)."""
-    device_registry = dr.async_get(call.hass)
-    device_id = call.data[ATTR_DEVICE_ID][0] if isinstance(call.data[ATTR_DEVICE_ID], list) else call.data[ATTR_DEVICE_ID]
+TARGET_SCHEMA = {
+    vol.Optional(ATTR_DEVICE_ID): vol.All(cv.ensure_list, [cv.string]),
+    vol.Optional(ATTR_ENTITY_ID): vol.All(cv.ensure_list, [cv.string]),
+    vol.Optional(ATTR_AREA_ID): vol.All(cv.ensure_list, [cv.string]),
+    vol.Optional("label_id"): vol.All(cv.ensure_list, [cv.string]),
+}
 
-    _LOGGER.debug("Looking up device_id %r for service call %r", device_id, call)
 
-    if (device_entry := device_registry.async_get(device_id)) is None:
-        raise ServiceValidationError(
-            translation_domain=DOMAIN,
-            translation_key="invalid_device_id",
-            translation_placeholders={"device_id": device_id},
-        )
+def _schema(fields: dict | None = None) -> vol.Schema:
+    return vol.Schema({**TARGET_SCHEMA, **(fields or {})}, extra=vol.ALLOW_EXTRA)
 
-    for entry_id in device_entry.config_entries:
-        if (entry := call.hass.config_entries.async_get_entry(entry_id)) is None:
-            continue
-        if entry.domain == DOMAIN:
-            if entry.state is not ConfigEntryState.LOADED:
-                raise ServiceValidationError(
-                    translation_domain=DOMAIN,
-                    translation_key="entry_not_loaded",
-                    translation_placeholders={"entry": entry.title},
-                )
-            return (device_entry, entry)
 
-    raise ServiceValidationError(
-        translation_domain=DOMAIN,
-        translation_key="config_entry_not_found",
-        translation_placeholders={"device_id": device_id},
-    )
+def _first(data: dict, *keys: str, default: Any = None) -> Any:
+    """Return the first present key (canonical name first, then aliases)."""
+    for key in keys:
+        if key in data and data[key] not in (None, ""):
+            return data[key]
+    return default
 
-def get_schedule_manager(call: ServiceCall) -> iPIXELScheduleManager:
-    """Helper to get schedule manager from hass.data."""
-    entry_id = async_get_entry_for_service_call(call)[1].entry_id
-    return call.hass.data[DOMAIN].get(f"{entry_id}_schedule")
 
-def get_api(call: ServiceCall) -> iPIXELAPI:
-    """Helper to get API instance from hass.data."""
-    entry_id = async_get_entry_for_service_call(call)[1].entry_id
-    return call.hass.data[DOMAIN][entry_id]
+def _color_hex(value: Any, default: str) -> str:
+    """Accept ``[r, g, b]`` or hex and return ``rrggbb``."""
+    if value is None or value == "":
+        return default
+    r, g, b = parse_color(value, hex_to_rgb(default))
+    return f"{r:02x}{g:02x}{b:02x}"
 
-async def handle_display_text(call: ServiceCall) -> None:
-    """Handle display_text service call."""
-    api = get_api(call)
 
-    text = call.data.get("text", "")
-    effect = call.data.get("effect", 0)
-    speed = call.data.get("speed", 50)
-    color_fg = call.data.get("color_fg", [255, 255, 255])
-    color_bg = call.data.get("color_bg", [0, 0, 0])
-    font = call.data.get("font", "CUSONG")
-    matrix_height_str = call.data.get("matrix_height", None)
+def _int_list(value: Any) -> list[int]:
+    if isinstance(value, str):
+        return [int(v.strip()) for v in value.split(",") if v.strip()]
+    if isinstance(value, (list, tuple)):
+        return [int(v) for v in value]
+    if value is None:
+        return []
+    return [int(value)]
 
-    _LOGGER.debug("Received display_text service call: text=%r, effect=%r, speed=%d, color_fg=%r, color_bg=%r, font=%r, matrix_height=%r",
-                  text, effect, speed, color_fg, color_bg, font, matrix_height_str)
 
+def _bool(value: Any, default: bool) -> bool:
+    if value is None or value == "":
+        return default
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return bool(value)
+
+
+# ----------------------------------------------------------------------
+# Target resolution
+# ----------------------------------------------------------------------
+@callback
+def async_resolve_runtimes(hass: HomeAssistant, call: ServiceCall) -> list[iPIXELRuntime]:
+    """Return the runtimes targeted by a service call (device, entity or area)."""
+    runtimes: dict[str, iPIXELRuntime] = hass.data.get(DOMAIN, {})
+    entry_ids: list[str] = []
+    device_registry = dr.async_get(hass)
+    entity_registry = er.async_get(hass)
+
+    device_ids = list(call.data.get(ATTR_DEVICE_ID) or [])
+    for area_id in call.data.get(ATTR_AREA_ID) or []:
+        device_ids += [
+            device.id
+            for device in dr.async_entries_for_area(device_registry, area_id)
+            if any(entry_id in runtimes for entry_id in device.config_entries)
+        ]
+        device_ids += [
+            entity.device_id
+            for entity in er.async_entries_for_area(entity_registry, area_id)
+            if entity.platform == DOMAIN and entity.device_id
+        ]
+
+    for device_id in device_ids:
+        device = device_registry.async_get(device_id)
+        if device is None:
+            raise ServiceValidationError(f"Unknown device id {device_id}")
+        found = [entry_id for entry_id in device.config_entries if entry_id in runtimes]
+        if not found:
+            raise ServiceValidationError(
+                f"Device {device.name or device_id} is not a loaded iPIXEL display"
+            )
+        entry_ids.extend(found)
+
+    for entity_id in call.data.get(ATTR_ENTITY_ID) or []:
+        entity = entity_registry.async_get(entity_id)
+        if entity is None or entity.platform != DOMAIN or entity.config_entry_id not in runtimes:
+            raise ServiceValidationError(f"{entity_id} is not an entity of a loaded iPIXEL display")
+        entry_ids.append(entity.config_entry_id)
+
+    if not entry_ids and not (call.data.get(ATTR_AREA_ID) or call.data.get("label_id")):
+        if len(runtimes) == 1:
+            entry_ids = list(runtimes)
+        elif not runtimes:
+            raise ServiceValidationError("No iPIXEL display is configured")
+        else:
+            raise ServiceValidationError(
+                "Select a target (device, entity or area); more than one iPIXEL display is configured"
+            )
+    if not entry_ids:
+        raise ServiceValidationError("The selected target contains no iPIXEL display")
+
+    seen: list[str] = []
+    for entry_id in entry_ids:
+        if entry_id not in seen:
+            seen.append(entry_id)
+    return [runtimes[entry_id] for entry_id in seen]
+
+
+def _wrap(hass: HomeAssistant, handler: ServiceHandler) -> Callable[[ServiceCall], Awaitable[None]]:
+    """Run a handler for every targeted display and surface errors."""
+
+    async def _service(call: ServiceCall) -> None:
+        errors: list[str] = []
+        for runtime in async_resolve_runtimes(hass, call):
+            try:
+                await handler(runtime, call)
+            except ServiceValidationError:
+                raise
+            except (iPIXELError, HomeAssistantError) as err:
+                errors.append(f"{runtime.name}: {err}")
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.exception("Unexpected error in service %s", call.service)
+                errors.append(f"{runtime.name}: {err}")
+        if errors:
+            raise HomeAssistantError("; ".join(errors))
+
+    return _service
+
+
+# ----------------------------------------------------------------------
+# Content
+# ----------------------------------------------------------------------
+async def handle_display_text(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Show text (native device text by default, or rendered as an image)."""
+    data = call.data
+    text = data.get("text", "")
     if not text:
-        _LOGGER.warning("No text provided for display_text service")
+        raise ServiceValidationError("No text provided")
+    mode = data.get("mode", MODE_TEXT)
+    if mode not in (MODE_TEXT, MODE_TEXT_IMAGE):
+        raise ServiceValidationError(f"mode must be {MODE_TEXT} or {MODE_TEXT_IMAGE}")
+    overrides: dict[str, Any] = {
+        "text_color": _color_hex(_first(data, "color_fg", "text_color"), "ffffff"),
+        "bg_color": _color_hex(_first(data, "color_bg", "bg_color"), "000000"),
+    }
+    if data.get("font"):
+        overrides["font"] = data["font"]
+    animation = _first(data, "animation", "effect")
+    if animation is not None:
+        overrides["animation"] = int(animation)
+    if data.get("speed") is not None:
+        overrides["speed"] = int(data["speed"])
+    if data.get("rainbow_mode") is not None:
+        overrides["rainbow_mode"] = int(data["rainbow_mode"])
+    font_size = _first(data, "font_size", "matrix_height")
+    if font_size:
+        overrides["font_size"] = float(font_size)
+    await runtime.async_update_display(text, mode=mode, overrides=overrides)
+
+
+async def handle_update_display(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Re-render the current entity settings."""
+    await runtime.async_update_display()
+
+
+async def handle_display_image(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Show an image or GIF from a URL or a local file.
+
+    ``method``: ``upload`` (default) uses the panel's image/GIF upload (animated,
+    can be stored in a slot); ``stream`` sends raw pixels (fast, still image, not stored).
+    """
+    data = call.data
+    url = _first(data, "url", "gif_url")
+    path = _first(data, "path", "image_path")
+    if not url and not path:
+        raise ServiceValidationError("Provide url or path")
+    method = data.get("method", "upload")
+    if method not in ("upload", "stream"):
+        raise ServiceValidationError("method must be upload or stream")
+
+    if url:
+        image_bytes, extension = await runtime.async_fetch_image(url)
+    else:
+        if not runtime.hass.config.is_allowed_path(path):
+            raise ServiceValidationError(f"Path {path} is not in allowlist_external_dirs")
+
+        def _read() -> bytes:
+            with open(path, "rb") as handle:
+                return handle.read()
+
+        try:
+            image_bytes = await runtime.hass.async_add_executor_job(_read)
+        except FileNotFoundError as err:
+            raise ServiceValidationError(f"Image not found: {path}") from err
+        extension = "." + path.rsplit(".", 1)[-1].lower() if "." in path else ".png"
+
+    if method == "stream":
+        import io
+
+        from PIL import Image
+
+        image = await runtime.hass.async_add_executor_job(
+            lambda: Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        )
+        await _show_frame(runtime, image, int(data.get("brightness", 100)))
         return
 
-    try:
-        # Convert effect name to animation number
-        animation = int(effect)
+    slot = int(_first(data, "slot", "buffer_slot", default=0) or 0)
+    await runtime.async_show_image_bytes(image_bytes, extension, effect=data.get("effect"), save_slot=slot)
 
-        # Convert RGB arrays to hex strings
-        fg_hex = rgb_to_hex(color_fg)
-        bg_hex = rgb_to_hex(color_bg)
 
-        # Parse matrix height (empty string means auto)
-        matrix_height = int(matrix_height_str) if matrix_height_str else None
+async def _show_frame(runtime: iPIXELRuntime, image, brightness: int) -> None:
+    from .display.base import fit_to_canvas
 
-        success = await api.display_text_pypixelcolor(
-            text=text,
-            color=fg_hex,
-            bg_color=bg_hex,
-            font=font,
-            animation=animation,
-            speed=speed,
-            matrix_height=matrix_height
+    width, height = runtime.display.width, runtime.display.height
+    if not width or not height:
+        raise HomeAssistantError(f"{runtime.name} is not available")
+    canvas = fit_to_canvas(image, width, height)
+    await runtime.display.async_show_frame(canvas, brightness)
+    runtime.set_last_frame(canvas)
+
+
+async def handle_draw_solid_color(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Fill the display with one colour."""
+    from PIL import Image
+
+    color = _color_hex(call.data.get("color"), "000000")
+    await runtime.display.async_fill(color)
+    if runtime.display.width and runtime.display.height:
+        runtime.set_last_frame(
+            Image.new("RGB", (runtime.display.width, runtime.display.height), hex_to_rgb(color))
         )
 
-        if success:
-            _LOGGER.info("Text displayed: '%s' (effect=%d, speed=%d, font=%s)", text, effect, speed, font)
-        else:
-            _LOGGER.error("Failed to display text: '%s'", text)
-    except Exception as err:
-        _LOGGER.error("Error displaying text: %s", err)
 
-async def handle_upload_gif(call: ServiceCall) -> None:
-    """Handle upload_gif service call."""
-    api = get_api(call)
-    gif_url = call.data.get("gif_url")
-    buffer_slot = call.data.get("buffer_slot", 1)
+async def handle_draw_visuals(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Render multiple elements (text, scrolling text, images, pixels) with animation."""
+    from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-    if not gif_url:
-        _LOGGER.error("No GIF URL provided")
+    from .display.font_cache import get_font_cache
+    from .display.visual_renderer import VisualRenderer
+
+    elements = call.data.get("elements") or []
+    if isinstance(elements, dict):
+        elements = elements.get("elements") or [elements]
+    if isinstance(elements, str):
+        try:
+            elements = json.loads(elements)
+        except ValueError as err:
+            raise ServiceValidationError(f"elements is not valid JSON: {err}") from err
+    if not elements:
+        raise ServiceValidationError("No elements provided")
+    width, height = runtime.display.width, runtime.display.height
+    if not width or not height:
+        raise HomeAssistantError(f"{runtime.name} is not available")
+
+    bg_color = parse_color(call.data.get("background", [0, 0, 0]), (0, 0, 0))
+    fps = max(FPS_MIN, min(int(call.data.get("fps", FPS_DEFAULT)), FPS_MAX))
+    brightness = int(call.data.get("brightness", 100))
+
+    session = async_get_clientsession(runtime.hass)
+    renderer = VisualRenderer(width, height, get_font_cache(), session)
+    prepared = await renderer.prepare_elements(elements, session)
+    controller = runtime.get_animation_controller()
+    await controller.start(renderer, prepared, bg_color, fps, brightness)
+
+
+async def handle_stop_visuals(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Stop a running draw_visuals animation."""
+    if runtime.animation_controller is not None:
+        await runtime.animation_controller.stop()
+
+
+# ----------------------------------------------------------------------
+# Device control
+# ----------------------------------------------------------------------
+async def handle_set_power(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Power on/off."""
+    await runtime.async_set_power(_bool(call.data.get("on"), True))
+
+
+async def handle_set_brightness(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Set brightness."""
+    level = _first(call.data, "level", "brightness", default=50)
+    await runtime.async_set_brightness(int(level))
+
+
+async def handle_set_orientation(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Set orientation (0/90/180/270 degrees or 0-3)."""
+    value = call.data.get("orientation", 0)
+    if isinstance(value, str) and value in ("0", "90", "180", "270"):
+        await runtime.async_set_orientation(value)
         return
+    number = int(value)
+    await runtime.async_set_orientation({0: "0", 90: "90", 180: "180", 270: "270"}.get(number, number))
 
-    try:
-        success = await api.display_image_url(gif_url, buffer_slot)
-        if success:
-            _LOGGER.info("GIF uploaded successfully from %s", gif_url)
-        else:
-            _LOGGER.error("Failed to upload GIF from %s", gif_url)
-    except Exception as err:
-        _LOGGER.error("Error uploading GIF: %s", err)
 
-async def handle_add_schedule(call: ServiceCall) -> None:
-    """Handle add_schedule service call."""
-    import uuid
-    schedule_manager = get_schedule_manager(call)
-
-    schedule_id = str(uuid.uuid4())[:8]
-    item = ScheduleItem(
-        id=schedule_id,
-        name=call.data.get("name", "Unnamed"),
-        text=call.data.get("text", ""),
-        mode=call.data.get("mode", "textimage"),
-        duration_ms=call.data.get("duration_ms", 5000),
-        slot=len(schedule_manager._schedules) + 1,
-        time_trigger=None,
-        enabled=True
+async def handle_set_upside_down(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Flip 180 degrees."""
+    await runtime.display.async_call(
+        "set_upside_down", _bool(_first(call.data, "upside_down", "enabled"), False)
     )
 
-    await schedule_manager.add_schedule(item)
-    _LOGGER.info("Added schedule: %s (%s)", item.name, item.id)
 
-async def handle_remove_schedule(call: ServiceCall) -> None:
-    """Handle remove_schedule service call."""
-    schedule_manager = get_schedule_manager(call)
-    schedule_id = call.data.get("schedule_id")
-    if schedule_id:
-        await schedule_manager.remove_schedule(schedule_id)
-        _LOGGER.info("Removed schedule: %s", schedule_id)
-
-async def handle_trigger_schedule(call: ServiceCall) -> None:
-    """Handle trigger_schedule service call."""
-    schedule_manager = get_schedule_manager(call)
-    schedule_id = call.data.get("schedule_id")
-    if schedule_id:
-        success = await schedule_manager.trigger_schedule(schedule_id)
-        if success:
-            _LOGGER.info("Triggered schedule: %s", schedule_id)
-        else:
-            _LOGGER.error("Failed to trigger schedule: %s", schedule_id)
-
-async def handle_set_playlist(call: ServiceCall) -> None:
-    """Handle set_playlist service call."""
-    schedule_manager = get_schedule_manager(call)
-    schedule_ids_str = call.data.get("schedule_ids", "")
-    schedule_ids = [s.strip() for s in schedule_ids_str.split(",") if s.strip()]
-
-    if schedule_ids:
-        await schedule_manager.set_playlist(schedule_ids)
-        _LOGGER.info("Set playlist: %s", schedule_ids)
-
-async def handle_sync_time(call: ServiceCall) -> None:
-    """Handle sync_time service call."""
-    api = get_api(call)
-    try:
-        success = await api.sync_time()
-        if success:
-            _LOGGER.info("Time synced to device")
-        else:
-            _LOGGER.error("Failed to sync time")
-    except Exception as err:
-        _LOGGER.error("Error syncing time: %s", err)
-
-async def handle_set_pixel(call: ServiceCall) -> None:
-    """Handle set_pixel service call."""
-    api = get_api(call)
-    x = call.data.get("x", 0)
-    y = call.data.get("y", 0)
-    color = call.data.get("color", "ffffff")
-
-    try:
-        # Ensure fun mode is enabled
-        await api.set_fun_mode(True)
-
-        success = await api.set_pixel(x, y, color)
-        if success:
-            _LOGGER.info("Pixel set at (%d, %d) to #%s", x, y, color)
-        else:
-            _LOGGER.error("Failed to set pixel at (%d, %d)", x, y)
-    except Exception as err:
-        _LOGGER.error("Error setting pixel: %s", err)
-
-async def handle_set_pixels(call: ServiceCall) -> None:
-    """Handle set_pixels service call."""
-    api = get_api(call)
-    pixels = call.data.get("pixels", [])
-
-    if not pixels:
-        _LOGGER.warning("No pixels provided")
-        return
-
-    try:
-        # Ensure fun mode is enabled
-        await api.set_fun_mode(True)
-
-        success = await api.set_pixels(pixels)
-        if success:
-            _LOGGER.info("Set %d pixels successfully", len(pixels))
-        else:
-            _LOGGER.warning("Some pixels failed to set")
-    except Exception as err:
-        _LOGGER.error("Error setting pixels: %s", err)
-
-async def handle_set_pixels_batched(call: ServiceCall) -> None:
-    """Handle set_pixels_batched service call (optimized batch sending)."""
-    api = get_api(call)
-    pixels = call.data.get("pixels", [])
-
-    if not pixels:
-        _LOGGER.warning("No pixels provided")
-        return
-
-    try:
-        # Ensure fun mode is enabled
-        await api.set_fun_mode(True)
-
-        success = await api.set_pixels_batched(pixels)
-        if success:
-            _LOGGER.info("Set %d pixels successfully (batched)", len(pixels))
-        else:
-            _LOGGER.warning("Some batched pixels failed to set")
-    except Exception as err:
-        _LOGGER.error("Error setting batched pixels: %s", err)
-
-async def handle_display_image_raw_rgb(call: ServiceCall) -> None:
-    """Handle display_image_raw_rgb service call (raw RGB protocol)."""
-    api = get_api(call)
-    image_path = call.data.get("image_path")
-    brightness = call.data.get("brightness", 100)
-
-    if not image_path:
-        _LOGGER.error("No image_path provided")
-        return
-
-    try:
-        import aiofiles
-        async with aiofiles.open(image_path, 'rb') as f:
-            image_bytes = await f.read()
-
-        # Determine file extension
-        file_ext = "." + image_path.split(".")[-1].lower() if "." in image_path else ".png"
-
-        success = await api.display_image_raw_rgb(image_bytes, file_ext, brightness)
-        if success:
-            _LOGGER.info("Displayed raw RGB image: %s", image_path)
-        else:
-            _LOGGER.error("Failed to display raw RGB image")
-    except FileNotFoundError:
-        _LOGGER.error("Image file not found: %s", image_path)
-    except Exception as err:
-        _LOGGER.error("Error displaying raw RGB image: %s", err)
-
-async def handle_display_image_raw_rgb_url(call: ServiceCall) -> None:
-    """Handle display_image_raw_rgb_url service call (raw RGB from URL)."""
-    api = get_api(call)
-    url = call.data.get("url")
-    brightness = call.data.get("brightness", 100)
-
-    if not url:
-        _LOGGER.error("No URL provided")
-        return
-
-    try:
-        success = await api.display_image_raw_rgb_url(url, brightness)
-        if success:
-            _LOGGER.info("Displayed raw RGB image from URL: %s", url)
-        else:
-            _LOGGER.error("Failed to display raw RGB image from URL")
-    except Exception as err:
-        _LOGGER.error("Error displaying raw RGB image from URL: %s", err)
-
-async def handle_draw_solid_color(call: ServiceCall) -> None:
-    """Handle draw_solid_color service call (fill display with color)."""
-    api = get_api(call)
-    color = call.data.get("color", "000000")
-
-    try:
-        success = await api.draw_solid_color(color)
-        if success:
-            _LOGGER.info("Filled display with color #%s", color)
-        else:
-            _LOGGER.error("Failed to fill display with color")
-    except Exception as err:
-        _LOGGER.error("Error filling display with color: %s", err)
-
-async def handle_draw_visuals(call: ServiceCall) -> None:
-    """Handle draw_visuals service call (multi-element rendering with animation)."""
-    from homeassistant.helpers.aiohttp_client import async_get_clientsession
-    from .display.visual_renderer import VisualRenderer
-    from .display.animation_controller import AnimationController
-    from .display.font_cache import get_font_cache
-    from .const import FPS_DEFAULT
-    api = get_api(call)
-    hass = call.hass
-    entry = async_get_entry_for_service_call(call)[1] 
-
-    elements = call.data.get("elements", [])
-    background = call.data.get("background", [0, 0, 0])
-    fps = call.data.get("fps", FPS_DEFAULT)
-
-    if not elements:
-        _LOGGER.warning("No elements provided for draw_visuals service")
-        return
-
-    try:
-        # Parse background color
-        if isinstance(background, list) and len(background) >= 3:
-            bg_color = (int(background[0]), int(background[1]), int(background[2]))
-        elif isinstance(background, str):
-            from .color import hex_to_rgb
-            bg_color = hex_to_rgb(background)
-        else:
-            bg_color = (0, 0, 0)
-
-        # Get device info for dimensions
-        device_info = await api.get_device_info()
-        width = device_info.get("width" or 64)
-        height = device_info.get("height" or 16)
-
-        # Get HTTP session for image loading
-        session = async_get_clientsession(hass)
-
-        # Create renderer
-        renderer = VisualRenderer(width, height, get_font_cache(), session)
-
-        # Get or create animation controller
-        controller_key = f"{entry.entry_id}_animation"
-        if controller_key not in hass.data[DOMAIN]:
-            hass.data[DOMAIN][controller_key] = AnimationController(hass, api, renderer)
-        else:
-            # Update renderer in existing controller
-            controller = hass.data[DOMAIN][controller_key]
-            controller._renderer = renderer
-
-        controller = hass.data[DOMAIN][controller_key]
-
-        # Prepare elements (async for image loading)
-        prepared = await renderer.prepare_elements(elements, session)
-
-        # Start rendering
-        await controller.start(prepared, bg_color, fps)
-
-        _LOGGER.info(
-            "draw_visuals started: %d elements, fps=%d, animated=%s",
-            len(elements), fps, renderer.detect_animation(prepared)
-        )
-
-    except Exception as err:
-        _LOGGER.error("Error in draw_visuals: %s", err)
-
-async def handle_clear_pixels(call: ServiceCall) -> None:
-    """Handle clear_pixels service call."""
-    api = get_api(call)
-    try:
-        success = await api.clear_display()
-        if success:
-            _LOGGER.info("Display cleared")
-        else:
-            _LOGGER.error("Failed to clear display")
-    except Exception as err:
-        _LOGGER.error("Error clearing display: %s", err)
-
-async def handle_show_slot(call: ServiceCall) -> None:
-    """Handle show_slot service call."""
-    api = get_api(call)
-    slot = call.data.get("slot", 0)
-
-    try:
-        success = await api.show_slot(slot)
-        if success:
-            _LOGGER.info("Showing slot %d", slot)
-        else:
-            _LOGGER.error("Failed to show slot %d", slot)
-    except Exception as err:
-        _LOGGER.error("Error showing slot: %s", err)
-
-async def handle_delete_slot(call: ServiceCall) -> None:
-    """Handle delete_slot service call."""
-    api = get_api(call)
-    slot = call.data.get("slot", 0)
-
-    try:
-        success = await api.delete_slot(slot)
-        if success:
-            _LOGGER.info("Deleted slot %d", slot)
-        else:
-            _LOGGER.error("Failed to delete slot %d", slot)
-    except Exception as err:
-        _LOGGER.error("Error deleting slot: %s", err)
-
-async def handle_set_brightness(call: ServiceCall) -> None:
-    """Handle set_brightness service call."""
-    api = get_api(call)
-    level = call.data.get("level", 50)
-
-    try:
-        success = await api.set_brightness(level)
-        if success:
-            _LOGGER.info("Brightness set to %d%%", level)
-        else:
-            _LOGGER.error("Failed to set brightness to %d%%", level)
-    except Exception as err:
-        _LOGGER.error("Error setting brightness: %s", err)
-
-async def handle_set_clock_mode(call: ServiceCall) -> None:
-    """Handle set_clock_mode service call."""
-    api = get_api(call)
-    style = call.data.get("style", 1)
-    show_date = call.data.get("show_date", True)
-    format_24 = call.data.get("format_24", True)
-    date = call.data.get("date", "")
-
-    try:
-        success = await api.set_clock_mode(style, date, show_date, format_24)
-        if success:
-            _LOGGER.info("Clock mode set: style=%d, show_date=%s, 24h=%s", style, show_date, format_24)
-        else:
-            _LOGGER.error("Failed to set clock mode")
-    except Exception as err:
-        _LOGGER.error("Error setting clock mode: %s", err)
-
-async def handle_set_time(call: ServiceCall) -> None:
-    """Handle set_time service call."""
-    api = get_api(call)
-    hour = call.data.get("hour", 0)
-    minute = call.data.get("minute", 0)
-    second = call.data.get("second", 0)
-
-    try:
-        success = await api.set_time(hour, minute, second)
-        if success:
-            _LOGGER.info("Time set to %02d:%02d:%02d", hour, minute, second)
-        else:
-            _LOGGER.error("Failed to set time")
-    except Exception as err:
-        _LOGGER.error("Error setting time: %s", err)
-
-async def handle_create_playlist(call: ServiceCall) -> None:
-    """Handle create_playlist service call."""
-    schedule_manager = get_schedule_manager(call)
-    name = call.data.get("name", "New Playlist")
-    loop = call.data.get("loop", True)
-    shuffle = call.data.get("shuffle", False)
-
-    try:
-        playlist_id = await schedule_manager.create_playlist(name, loop=loop, shuffle=shuffle)
-        _LOGGER.info("Created playlist '%s' (id=%s)", name, playlist_id)
-    except Exception as err:
-        _LOGGER.error("Error creating playlist: %s", err)
-
-async def handle_start_playlist(call: ServiceCall) -> None:
-    """Handle start_playlist service call."""
-    schedule_manager = get_schedule_manager(call)
-    playlist_id = call.data.get("playlist_id")
-
-    try:
-        success = await schedule_manager.start_playlist(playlist_id)
-        if success:
-            _LOGGER.info("Started playlist %s", playlist_id or "(active)")
-        else:
-            _LOGGER.error("Failed to start playlist")
-    except Exception as err:
-        _LOGGER.error("Error starting playlist: %s", err)
-
-async def handle_stop_playlist(call: ServiceCall) -> None:
-    """Handle stop_playlist service call."""
-    schedule_manager = get_schedule_manager(call)
-    try:
-        await schedule_manager.stop_playlist_loop()
-        _LOGGER.info("Playlist stopped")
-    except Exception as err:
-        _LOGGER.error("Error stopping playlist: %s", err)
-
-async def handle_set_power_schedule(call: ServiceCall) -> None:
-    """Handle set_power_schedule service call."""
-    schedule_manager = get_schedule_manager(call)
-    enabled = call.data.get("enabled", True)
-    on_time = call.data.get("on_time", "07:00")
-    off_time = call.data.get("off_time", "22:00")
-    days = call.data.get("days")
-
-    try:
-        await schedule_manager.set_power_schedule(enabled, on_time, off_time, days)
-        if enabled:
-            await schedule_manager.start_power_schedule_monitoring()
-        else:
-            schedule_manager.stop_power_schedule_monitoring()
-        _LOGGER.info("Power schedule configured: on=%s, off=%s", on_time, off_time)
-    except Exception as err:
-        _LOGGER.error("Error setting power schedule: %s", err)
-
-async def handle_add_time_slot(call: ServiceCall) -> None:
-    """Handle add_time_slot service call."""
-    schedule_manager = get_schedule_manager(call)
-    name = call.data.get("name", "Time Slot")
-    playlist_id = call.data.get("playlist_id", "")
-    start_time = call.data.get("start_time", "00:00")
-    end_time = call.data.get("end_time", "23:59")
-    days = call.data.get("days")
-    priority = call.data.get("priority", 0)
-
-    try:
-        slot_id = await schedule_manager.add_time_slot(
-            name, playlist_id, start_time, end_time, days, priority
-        )
-        await schedule_manager.start_time_slot_monitoring()
-        _LOGGER.info("Added time slot '%s' (id=%s)", name, slot_id)
-    except Exception as err:
-        _LOGGER.error("Error adding time slot: %s", err)
-
-# New feature handlers
-
-async def handle_set_upside_down(call: ServiceCall) -> None:
-    """Handle set_upside_down service call."""
-    api = get_api(call)
-    upside_down = call.data.get("upside_down", False)
-
-    try:
-        success = await api.set_upside_down(upside_down)
-        if success:
-            _LOGGER.info("Upside down mode %s", "enabled" if upside_down else "disabled")
-        else:
-            _LOGGER.error("Failed to set upside down mode")
-    except Exception as err:
-        _LOGGER.error("Error setting upside down mode: %s", err)
-
-async def handle_set_default_mode(call: ServiceCall) -> None:
-    """Handle set_default_mode service call."""
-    api = get_api(call)
-    try:
-        success = await api.set_default_mode()
-        if success:
-            _LOGGER.info("Device reset to default mode")
-        else:
-            _LOGGER.error("Failed to reset to default mode")
-    except Exception as err:
-        _LOGGER.error("Error resetting to default mode: %s", err)
-
-async def handle_erase_data(call: ServiceCall) -> None:
-    """Handle erase_data service call."""
-    api = get_api(call)
-    erase_all = call.data.get("erase_all", False)
-    buffers_str = call.data.get("buffers", "")
-
-    try:
-        # Parse buffers from comma-separated string
-        buffers = None
-        if buffers_str and not erase_all:
-            buffers = [int(b.strip()) for b in buffers_str.split(",") if b.strip()]
-
-        success = await api.erase_data(buffers=buffers, erase_all=erase_all)
-        if success:
-            if erase_all:
-                _LOGGER.info("All data erased from device")
-            else:
-                _LOGGER.info("Buffers %s erased from device", buffers)
-        else:
-            _LOGGER.error("Failed to erase data")
-    except Exception as err:
-        _LOGGER.error("Error erasing data: %s", err)
-
-async def handle_set_program_mode(call: ServiceCall) -> None:
-    """Handle set_program_mode service call."""
-    api = get_api(call)
-    buffers_str = call.data.get("buffers", "")
-
-    if not buffers_str:
-        _LOGGER.error("No buffers specified for program mode")
-        return
-
-    try:
-        # Parse buffers from comma-separated string
-        buffers = [int(b.strip()) for b in buffers_str.split(",") if b.strip()]
-
-        success = await api.set_program_mode(buffers)
-        if success:
-            _LOGGER.info("Program mode set with buffers: %s", buffers)
-        else:
-            _LOGGER.error("Failed to set program mode")
-    except Exception as err:
-        _LOGGER.error("Error setting program mode: %s", err)
-
-async def handle_set_rhythm_mode_advanced(call: ServiceCall) -> None:
-    """Handle set_rhythm_mode_advanced service call."""
-    api = get_api(call)
-    style = call.data.get("style", 0)
-    levels_str = call.data.get("levels", "")
-
-    if not levels_str:
-        _LOGGER.error("No frequency levels specified")
-        return
-
-    try:
-        # Parse levels from comma-separated string
-        levels = [int(l.strip()) for l in levels_str.split(",") if l.strip()]
-
+async def handle_set_clock_mode(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Clock mode."""
+    data = call.data
+    await runtime.async_update_display(
+        mode=MODE_CLOCK,
+        overrides={
+            "clock_style": int(data.get("style", 1)),
+            "show_date": _bool(data.get("show_date"), True),
+            "format_24": _bool(_first(data, "format_24", "format_24h"), True),
+            "date": data.get("date", "") or "",
+        },
+    )
+
+
+async def handle_set_rhythm_mode(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Rhythm (music visualiser) mode; with ``levels`` the 11 band levels are set explicitly."""
+    style = int(call.data.get("style", 0))
+    levels = _int_list(call.data.get("levels"))
+    if levels:
         if len(levels) != 11:
-            _LOGGER.error("Must provide exactly 11 frequency levels, got %d", len(levels))
-            return
-
-        success = await api.set_rhythm_mode_advanced(style, levels)
-        if success:
-            _LOGGER.info("Advanced rhythm mode set: style=%d", style)
-        else:
-            _LOGGER.error("Failed to set advanced rhythm mode")
-    except Exception as err:
-        _LOGGER.error("Error setting advanced rhythm mode: %s", err)
-
-async def handle_display_image_url(call: ServiceCall) -> None:
-    """Handle display_image_url service call."""
-    api = get_api(call)
-    url = call.data.get("url")
-    buffer_slot = call.data.get("buffer_slot", 1)
-
-    if not url:
-        _LOGGER.error("No URL provided for display_image_url")
+            raise ServiceValidationError("Exactly 11 frequency levels are required")
+        await runtime.display.async_call("set_rhythm_mode_advanced", style, levels)
+        runtime.set_last_frame(None)
         return
+    await runtime.async_update_display(
+        mode=MODE_RHYTHM,
+        overrides={"rhythm_style": style, "rhythm_speed": int(call.data.get("speed", 4))},
+    )
 
-    try:
-        success = await api.display_image_url(url, buffer_slot)
-        if success:
-            _LOGGER.info("Image from URL displayed: %s", url)
-        else:
-            _LOGGER.error("Failed to display image from URL: %s", url)
-    except Exception as err:
-        _LOGGER.error("Error displaying image from URL: %s", err)
 
-# Screen and mode control handlers (from ipixel-ctrl reference)
+async def handle_sync_time(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Sync time."""
+    await runtime.display.async_sync_time()
 
-async def handle_set_screen(call: ServiceCall) -> None:
-    """Handle set_screen service call."""
-    api = get_api(call)
-    screen = call.data.get("screen", 1)
 
-    try:
-        success = await api.set_screen(screen)
-        if success:
-            _LOGGER.info("Screen set to %d", screen)
-        else:
-            _LOGGER.error("Failed to set screen to %d", screen)
-    except Exception as err:
-        _LOGGER.error("Error setting screen: %s", err)
+async def handle_set_time(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Set a specific time."""
+    await runtime.display.async_call(
+        "set_time",
+        int(call.data.get("hour", 0)),
+        int(call.data.get("minute", 0)),
+        int(call.data.get("second", 0)),
+    )
 
-async def handle_set_diy_mode(call: ServiceCall) -> None:
-    """Handle set_diy_mode service call."""
-    api = get_api(call)
-    # Support both old 'enable' bool and new 'mode' int parameter
-    mode_str = call.data.get("mode")
-    enable = call.data.get("enable")
 
-    if mode_str is not None:
-        mode = int(mode_str)
-    elif enable is not None:
-        # Backwards compatibility with bool
-        mode = 1 if enable else 0
-    else:
-        mode = 1  # Default to enter + clear
-
-    mode_names = {
-        0: "exit (keep previous)",
-        1: "enter (clear display)",
-        2: "exit (keep current)",
-        3: "enter (preserve content)"
+# ----------------------------------------------------------------------
+# Pixels / storage
+# ----------------------------------------------------------------------
+async def handle_set_pixel(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Set one pixel (canvas coordinates)."""
+    pixel = {
+        "x": int(call.data.get("x", 0)),
+        "y": int(call.data.get("y", 0)),
+        "color": _color_hex(call.data.get("color"), "ffffff"),
     }
+    await runtime.display.async_set_fun_mode(True)
+    runtime.settings.fun_mode = True
+    await runtime.display.async_set_pixels([pixel])
 
-    try:
-        success = await api.set_diy_mode(mode)
-        if success:
-            _LOGGER.info("DIY mode set to: %s", mode_names.get(mode, str(mode)))
-        else:
-            _LOGGER.error("Failed to set DIY mode")
-    except Exception as err:
-        _LOGGER.error("Error setting DIY mode: %s", err)
 
-async def handle_send_raw_command(call: ServiceCall) -> None:
-    """Handle send_raw_command service call."""
-    api = get_api(call)
+async def handle_set_pixels(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Set several pixels (canvas coordinates), batched per colour."""
+    pixels = call.data.get("pixels") or []
+    if isinstance(pixels, str):
+        try:
+            pixels = json.loads(pixels)
+        except ValueError as err:
+            raise ServiceValidationError(f"pixels is not valid JSON: {err}") from err
+    if not pixels:
+        raise ServiceValidationError("No pixels provided")
+    normalised = [
+        {"x": int(p.get("x", 0)), "y": int(p.get("y", 0)), "color": _color_hex(p.get("color"), "ffffff")}
+        for p in pixels
+    ]
+    await runtime.display.async_set_fun_mode(True)
+    runtime.settings.fun_mode = True
+    await runtime.display.async_set_pixels(normalised)
+
+
+async def handle_clear_display(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Clear the display."""
+    await runtime.display.async_clear()
+    runtime.set_last_frame(None)
+
+
+async def handle_show_slot(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Show a stored slot."""
+    await runtime.display.async_call("show_slot", int(call.data.get("slot", 0)))
+
+
+async def handle_delete_slot(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Delete a stored slot."""
+    await runtime.display.async_call("delete_slot", int(call.data.get("slot", 0)))
+
+
+async def handle_erase_data(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Erase stored buffers."""
+    erase_all = _bool(call.data.get("erase_all"), False)
+    buffers = None if erase_all else _int_list(call.data.get("buffers"))
+    if not erase_all and not buffers:
+        raise ServiceValidationError("Specify buffers or erase_all")
+    await runtime.display.async_call("erase_data", buffers, erase_all)
+
+
+async def handle_set_program_mode(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Cycle stored screens."""
+    buffers = _int_list(call.data.get("buffers"))
+    if not buffers:
+        raise ServiceValidationError("No buffers specified")
+    await runtime.display.async_call("set_program_mode", buffers)
+
+
+async def handle_set_screen(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Select a screen buffer."""
+    await runtime.display.async_call("set_screen", int(call.data.get("screen", 1)))
+
+
+async def handle_set_diy_mode(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """DIY mode."""
+    if call.data.get("mode") not in (None, ""):
+        mode = int(call.data["mode"])
+    elif call.data.get("enable") is not None:
+        mode = 1 if _bool(call.data["enable"], True) else 0
+    else:
+        mode = 1
+    await runtime.display.async_call("set_diy_mode", mode)
+
+
+async def handle_set_default_mode(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Factory default mode."""
+    await runtime.display.async_call("set_default_mode")
+
+
+# ----------------------------------------------------------------------
+# Expert
+# ----------------------------------------------------------------------
+async def handle_send_raw_command(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Send raw bytes."""
     hex_data = call.data.get("hex_data", "")
-
     if not hex_data:
-        _LOGGER.error("No hex data provided for send_raw_command")
-        return
+        raise ServiceValidationError("No hex_data provided")
+    await runtime.display.async_call("send_raw_command", hex_data)
 
-    try:
-        success = await api.send_raw_command(hex_data)
-        if success:
-            _LOGGER.info("Raw command sent: %s", hex_data)
-        else:
-            _LOGGER.error("Failed to send raw command: %s", hex_data)
-    except Exception as err:
-        _LOGGER.error("Error sending raw command: %s", err)
 
-# Password management handlers
-
-async def handle_set_password(call: ServiceCall) -> None:
-    """Handle set_password service call."""
-    api = get_api(call)
-    enabled = call.data.get("enabled", True)
-    password = call.data.get("password", "")
-
-    if not password:
-        _LOGGER.error("No password provided for set_password")
-        return
-
-    try:
-        success = await api.set_password(enabled, password)
-        if success:
-            _LOGGER.info("Password protection %s", "enabled" if enabled else "disabled")
-        else:
-            _LOGGER.error("Failed to set password")
-    except Exception as err:
-        _LOGGER.error("Error setting password: %s", err)
-
-async def handle_verify_password(call: ServiceCall) -> None:
-    """Handle verify_password service call."""
-    api = get_api(call)
-    password = call.data.get("password", "")
-
-    if not password:
-        _LOGGER.error("No password provided for verify_password")
-        return
-
-    try:
-        success = await api.verify_password(password)
-        if success:
-            _LOGGER.info("Password verified successfully")
-        else:
-            _LOGGER.error("Password verification failed")
-    except Exception as err:
-        _LOGGER.error("Error verifying password: %s", err)
-
-async def handle_send_mix_data(call: ServiceCall) -> None:
-    """Handle send_mix_data service call."""
-    api = get_api(call)
+async def handle_send_mix_data(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Send raw mixed data."""
     hex_data = call.data.get("hex_data", "")
-    screen_slot = call.data.get("screen_slot", 1)
-
     if not hex_data:
-        _LOGGER.error("No hex data provided for send_mix_data")
-        return
+        raise ServiceValidationError("No hex_data provided")
+    await runtime.display.async_call("send_mix_data_raw", hex_data, int(call.data.get("screen_slot", 1)))
 
-    try:
-        success = await api.send_mix_data_raw(hex_data, screen_slot)
-        if success:
-            _LOGGER.info("Mixed data sent to slot %d", screen_slot)
-        else:
-            _LOGGER.error("Failed to send mixed data")
-    except Exception as err:
-        _LOGGER.error("Error sending mixed data: %s", err)
+
+async def handle_set_password(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Password protection."""
+    await runtime.display.async_call(
+        "set_password", _bool(call.data.get("enabled"), True), str(call.data.get("password", ""))
+    )
+
+
+async def handle_verify_password(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Verify password."""
+    await runtime.display.async_call("verify_password", str(call.data.get("password", "")))
+
+
+# ----------------------------------------------------------------------
+# Schedules / playlists
+# ----------------------------------------------------------------------
+def _manager(runtime: iPIXELRuntime):
+    if runtime.schedule_manager is None:
+        raise HomeAssistantError(f"{runtime.name} has no schedule manager")
+    return runtime.schedule_manager
+
+
+async def handle_add_schedule(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Add a content item to the schedule library."""
+    data = call.data
+    manager = _manager(runtime)
+    item = ScheduleItem(
+        id=data.get("schedule_id") or str(uuid.uuid4())[:8],
+        name=data.get("name", "Unnamed"),
+        text=data.get("text", ""),
+        mode=data.get("mode", MODE_TEXT_IMAGE),
+        duration_ms=int(data.get("duration_ms", 5000)),
+        gif_url=_first(data, "url", "gif_url"),
+        color=_color_hex(_first(data, "color_fg", "text_color"), "ffffff"),
+        bg_color=_color_hex(_first(data, "color_bg", "bg_color"), "000000"),
+        slot=int(data["slot"]) if data.get("slot") not in (None, "") else None,
+    )
+    await manager.add_schedule(item)
+
+
+async def handle_remove_schedule(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Remove a schedule item."""
+    schedule_id = call.data.get("schedule_id")
+    if not schedule_id:
+        raise ServiceValidationError("schedule_id is required")
+    if not await _manager(runtime).remove_schedule(schedule_id):
+        raise ServiceValidationError(f"Unknown schedule {schedule_id}")
+
+
+async def handle_trigger_schedule(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Show a schedule item now."""
+    schedule_id = call.data.get("schedule_id")
+    if not schedule_id:
+        raise ServiceValidationError("schedule_id is required")
+    if not await _manager(runtime).trigger_schedule(schedule_id):
+        raise ServiceValidationError(f"Unknown schedule {schedule_id}")
+
+
+async def handle_set_playlist(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Set the order of the default playlist."""
+    ids = call.data.get("schedule_ids", "")
+    schedule_ids = [s.strip() for s in ids.split(",")] if isinstance(ids, str) else list(ids)
+    schedule_ids = [s for s in schedule_ids if s]
+    if not schedule_ids:
+        raise ServiceValidationError("schedule_ids is required")
+    await _manager(runtime).set_playlist(schedule_ids)
+
+
+async def handle_create_playlist(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Create a playlist."""
+    ids = call.data.get("schedule_ids") or []
+    if isinstance(ids, str):
+        ids = [s.strip() for s in ids.split(",") if s.strip()]
+    await _manager(runtime).create_playlist(
+        call.data.get("name", "New Playlist"),
+        item_ids=list(ids) or None,
+        loop=_bool(call.data.get("loop"), True),
+        shuffle=_bool(call.data.get("shuffle"), False),
+    )
+
+
+async def handle_start_playlist(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Start a playlist."""
+    if not await _manager(runtime).start_playlist(call.data.get("playlist_id") or None):
+        raise HomeAssistantError("No valid playlist to start")
+
+
+async def handle_stop_playlist(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Stop the playlist."""
+    await _manager(runtime).stop_playlist_loop()
+
+
+async def handle_set_power_schedule(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Configure automatic power on/off."""
+    manager = _manager(runtime)
+    enabled = _bool(call.data.get("enabled"), True)
+    await manager.set_power_schedule(
+        enabled,
+        str(call.data.get("on_time", "07:00"))[:5],
+        str(call.data.get("off_time", "22:00"))[:5],
+        call.data.get("days"),
+    )
+    if enabled:
+        await manager.start_power_schedule_monitoring()
+    else:
+        manager.stop_power_schedule_monitoring()
+
+
+async def handle_add_time_slot(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Play a playlist during a time window."""
+    manager = _manager(runtime)
+    await manager.add_time_slot(
+        call.data.get("name", "Time Slot"),
+        call.data.get("playlist_id", ""),
+        str(call.data.get("start_time", "00:00"))[:5],
+        str(call.data.get("end_time", "23:59"))[:5],
+        call.data.get("days"),
+        int(call.data.get("priority", 0)),
+    )
+    await manager.start_time_slot_monitoring()
+
+
+SERVICES: dict[str, tuple[ServiceHandler, vol.Schema]] = {
+    SERVICE_DISPLAY_TEXT: (handle_display_text, _schema({vol.Required("text"): cv.string})),
+    SERVICE_UPDATE_DISPLAY: (handle_update_display, _schema()),
+    SERVICE_DISPLAY_IMAGE: (handle_display_image, _schema()),
+    SERVICE_DRAW_SOLID_COLOR: (handle_draw_solid_color, _schema()),
+    SERVICE_DRAW_VISUALS: (handle_draw_visuals, _schema()),
+    SERVICE_STOP_VISUALS: (handle_stop_visuals, _schema()),
+    SERVICE_SET_POWER: (handle_set_power, _schema()),
+    SERVICE_SET_BRIGHTNESS: (
+        handle_set_brightness,
+        _schema(
+            {
+                vol.Optional("level"): vol.All(vol.Coerce(int), vol.Range(min=1, max=100)),
+                vol.Optional("brightness"): vol.All(vol.Coerce(int), vol.Range(min=1, max=100)),
+            }
+        ),
+    ),
+    SERVICE_SET_ORIENTATION: (handle_set_orientation, _schema()),
+    SERVICE_SET_UPSIDE_DOWN: (handle_set_upside_down, _schema()),
+    SERVICE_SET_CLOCK_MODE: (handle_set_clock_mode, _schema()),
+    SERVICE_SET_RHYTHM_MODE: (handle_set_rhythm_mode, _schema()),
+    SERVICE_SYNC_TIME: (handle_sync_time, _schema()),
+    SERVICE_SET_TIME: (handle_set_time, _schema()),
+    SERVICE_SET_PIXEL: (handle_set_pixel, _schema()),
+    SERVICE_SET_PIXELS: (handle_set_pixels, _schema()),
+    SERVICE_CLEAR_DISPLAY: (handle_clear_display, _schema()),
+    SERVICE_SHOW_SLOT: (handle_show_slot, _schema()),
+    SERVICE_DELETE_SLOT: (handle_delete_slot, _schema()),
+    SERVICE_ERASE_DATA: (handle_erase_data, _schema()),
+    SERVICE_SET_PROGRAM_MODE: (handle_set_program_mode, _schema()),
+    SERVICE_SET_SCREEN: (handle_set_screen, _schema()),
+    SERVICE_SET_DIY_MODE: (handle_set_diy_mode, _schema()),
+    SERVICE_SET_DEFAULT_MODE: (handle_set_default_mode, _schema()),
+    SERVICE_ADD_SCHEDULE: (handle_add_schedule, _schema()),
+    SERVICE_REMOVE_SCHEDULE: (handle_remove_schedule, _schema()),
+    SERVICE_TRIGGER_SCHEDULE: (handle_trigger_schedule, _schema()),
+    SERVICE_SET_PLAYLIST: (handle_set_playlist, _schema()),
+    SERVICE_CREATE_PLAYLIST: (handle_create_playlist, _schema()),
+    SERVICE_START_PLAYLIST: (handle_start_playlist, _schema()),
+    SERVICE_STOP_PLAYLIST: (handle_stop_playlist, _schema()),
+    SERVICE_SET_POWER_SCHEDULE: (handle_set_power_schedule, _schema()),
+    SERVICE_ADD_TIME_SLOT: (handle_add_time_slot, _schema()),
+    SERVICE_SEND_RAW_COMMAND: (handle_send_raw_command, _schema()),
+    SERVICE_SEND_MIX_DATA: (handle_send_mix_data, _schema()),
+    SERVICE_SET_PASSWORD: (handle_set_password, _schema()),
+    SERVICE_VERIFY_PASSWORD: (handle_verify_password, _schema()),
+}
+
+
+def _alias(hass: HomeAssistant, old: str, new: str, extra: dict[str, Any]) -> Callable[[ServiceCall], Awaitable[None]]:
+    """Forward a deprecated service name to its replacement."""
+    warned = False
+
+    async def _service(call: ServiceCall) -> None:
+        nonlocal warned
+        if not warned:
+            warned = True
+            _LOGGER.warning(
+                "Service %s.%s is deprecated, use %s.%s instead", DOMAIN, old, DOMAIN, new
+            )
+        await hass.services.async_call(
+            DOMAIN, new, {**extra, **dict(call.data)}, blocking=True, context=call.context
+        )
+
+    return _service
 
 
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
-    """Register iPIXEL services."""
-
-    # Register all services if not already registered
-    if not hass.services.has_service(DOMAIN, SERVICE_DISPLAY_TEXT):
-        hass.services.async_register(DOMAIN, SERVICE_DISPLAY_TEXT, handle_display_text)
-    if not hass.services.has_service(DOMAIN, SERVICE_UPLOAD_GIF):
-        hass.services.async_register(DOMAIN, SERVICE_UPLOAD_GIF, handle_upload_gif)
-    if not hass.services.has_service(DOMAIN, SERVICE_ADD_SCHEDULE):
-        hass.services.async_register(DOMAIN, SERVICE_ADD_SCHEDULE, handle_add_schedule)
-    if not hass.services.has_service(DOMAIN, SERVICE_REMOVE_SCHEDULE):
-        hass.services.async_register(DOMAIN, SERVICE_REMOVE_SCHEDULE, handle_remove_schedule)
-    if not hass.services.has_service(DOMAIN, SERVICE_TRIGGER_SCHEDULE):
-        hass.services.async_register(DOMAIN, SERVICE_TRIGGER_SCHEDULE, handle_trigger_schedule)
-    if not hass.services.has_service(DOMAIN, SERVICE_SET_PLAYLIST):
-        hass.services.async_register(DOMAIN, SERVICE_SET_PLAYLIST, handle_set_playlist)
-    if not hass.services.has_service(DOMAIN, SERVICE_SYNC_TIME):
-        hass.services.async_register(DOMAIN, SERVICE_SYNC_TIME, handle_sync_time)
-    if not hass.services.has_service(DOMAIN, SERVICE_SET_PIXEL):
-        hass.services.async_register(DOMAIN, SERVICE_SET_PIXEL, handle_set_pixel)
-    if not hass.services.has_service(DOMAIN, SERVICE_SET_PIXELS):
-        hass.services.async_register(DOMAIN, SERVICE_SET_PIXELS, handle_set_pixels)
-    if not hass.services.has_service(DOMAIN, SERVICE_CLEAR_PIXELS):
-        hass.services.async_register(DOMAIN, SERVICE_CLEAR_PIXELS, handle_clear_pixels)
-    if not hass.services.has_service(DOMAIN, SERVICE_SHOW_SLOT):
-        hass.services.async_register(DOMAIN, SERVICE_SHOW_SLOT, handle_show_slot)
-    if not hass.services.has_service(DOMAIN, SERVICE_DELETE_SLOT):
-        hass.services.async_register(DOMAIN, SERVICE_DELETE_SLOT, handle_delete_slot)
-    if not hass.services.has_service(DOMAIN, SERVICE_SET_BRIGHTNESS):
-        hass.services.async_register(DOMAIN, SERVICE_SET_BRIGHTNESS, handle_set_brightness)
-    if not hass.services.has_service(DOMAIN, SERVICE_SET_CLOCK_MODE):
-        hass.services.async_register(DOMAIN, SERVICE_SET_CLOCK_MODE, handle_set_clock_mode)
-    if not hass.services.has_service(DOMAIN, SERVICE_SET_TIME):
-        hass.services.async_register(DOMAIN, SERVICE_SET_TIME, handle_set_time)
-    if not hass.services.has_service(DOMAIN, SERVICE_CREATE_PLAYLIST):
-        hass.services.async_register(DOMAIN, SERVICE_CREATE_PLAYLIST, handle_create_playlist)
-    if not hass.services.has_service(DOMAIN, SERVICE_START_PLAYLIST):
-        hass.services.async_register(DOMAIN, SERVICE_START_PLAYLIST, handle_start_playlist)
-    if not hass.services.has_service(DOMAIN, SERVICE_STOP_PLAYLIST):
-        hass.services.async_register(DOMAIN, SERVICE_STOP_PLAYLIST, handle_stop_playlist)
-    if not hass.services.has_service(DOMAIN, SERVICE_SET_POWER_SCHEDULE):
-        hass.services.async_register(DOMAIN, SERVICE_SET_POWER_SCHEDULE, handle_set_power_schedule)
-    if not hass.services.has_service(DOMAIN, SERVICE_ADD_TIME_SLOT):
-        hass.services.async_register(DOMAIN, SERVICE_ADD_TIME_SLOT, handle_add_time_slot)
-    # New feature services
-    if not hass.services.has_service(DOMAIN, SERVICE_SET_UPSIDE_DOWN):
-        hass.services.async_register(DOMAIN, SERVICE_SET_UPSIDE_DOWN, handle_set_upside_down)
-    if not hass.services.has_service(DOMAIN, SERVICE_SET_DEFAULT_MODE):
-        hass.services.async_register(DOMAIN, SERVICE_SET_DEFAULT_MODE, handle_set_default_mode)
-    if not hass.services.has_service(DOMAIN, SERVICE_ERASE_DATA):
-        hass.services.async_register(DOMAIN, SERVICE_ERASE_DATA, handle_erase_data)
-    if not hass.services.has_service(DOMAIN, SERVICE_SET_PROGRAM_MODE):
-        hass.services.async_register(DOMAIN, SERVICE_SET_PROGRAM_MODE, handle_set_program_mode)
-    if not hass.services.has_service(DOMAIN, SERVICE_SET_RHYTHM_MODE_ADVANCED):
-        hass.services.async_register(DOMAIN, SERVICE_SET_RHYTHM_MODE_ADVANCED, handle_set_rhythm_mode_advanced)
-    if not hass.services.has_service(DOMAIN, SERVICE_DISPLAY_IMAGE_URL):
-        hass.services.async_register(DOMAIN, SERVICE_DISPLAY_IMAGE_URL, handle_display_image_url)
-    # Screen and mode control services (from ipixel-ctrl reference)
-    if not hass.services.has_service(DOMAIN, SERVICE_SET_SCREEN):
-        hass.services.async_register(DOMAIN, SERVICE_SET_SCREEN, handle_set_screen)
-    if not hass.services.has_service(DOMAIN, SERVICE_SET_DIY_MODE):
-        hass.services.async_register(DOMAIN, SERVICE_SET_DIY_MODE, handle_set_diy_mode)
-    if not hass.services.has_service(DOMAIN, SERVICE_SEND_RAW_COMMAND):
-        hass.services.async_register(DOMAIN, SERVICE_SEND_RAW_COMMAND, handle_send_raw_command)
-    # Password management services (from ipixel-ctrl protocol)
-    if not hass.services.has_service(DOMAIN, SERVICE_SET_PASSWORD):
-        hass.services.async_register(DOMAIN, SERVICE_SET_PASSWORD, handle_set_password)
-    if not hass.services.has_service(DOMAIN, SERVICE_VERIFY_PASSWORD):
-        hass.services.async_register(DOMAIN, SERVICE_VERIFY_PASSWORD, handle_verify_password)
-    # Mixed data service (from ipixel-ctrl protocol)
-    if not hass.services.has_service(DOMAIN, SERVICE_SEND_MIX_DATA):
-        hass.services.async_register(DOMAIN, SERVICE_SEND_MIX_DATA, handle_send_mix_data)
-    # Optimized pixel and image services (from go-ipxl)
-    if not hass.services.has_service(DOMAIN, SERVICE_SET_PIXELS_BATCHED):
-        hass.services.async_register(DOMAIN, SERVICE_SET_PIXELS_BATCHED, handle_set_pixels_batched)
-    if not hass.services.has_service(DOMAIN, SERVICE_DISPLAY_IMAGE_RAW_RGB):
-        hass.services.async_register(DOMAIN, SERVICE_DISPLAY_IMAGE_RAW_RGB, handle_display_image_raw_rgb)
-    if not hass.services.has_service(DOMAIN, SERVICE_DISPLAY_IMAGE_RAW_RGB_URL):
-        hass.services.async_register(DOMAIN, SERVICE_DISPLAY_IMAGE_RAW_RGB_URL, handle_display_image_raw_rgb_url)
-    if not hass.services.has_service(DOMAIN, SERVICE_DRAW_SOLID_COLOR):
-        hass.services.async_register(DOMAIN, SERVICE_DRAW_SOLID_COLOR, handle_draw_solid_color)
-    # Visual rendering service (from UnexpectedMatrixPixels)
-    if not hass.services.has_service(DOMAIN, SERVICE_DRAW_VISUALS):
-        hass.services.async_register(DOMAIN, SERVICE_DRAW_VISUALS, handle_draw_visuals)
-
+    """Register all services once."""
+    for name, (handler, schema) in SERVICES.items():
+        if not hass.services.has_service(DOMAIN, name):
+            hass.services.async_register(DOMAIN, name, _wrap(hass, handler), schema=schema)
+    for old, (new, extra) in DEPRECATED_ALIASES.items():
+        if not hass.services.has_service(DOMAIN, old):
+            hass.services.async_register(DOMAIN, old, _alias(hass, old, new, extra), schema=_schema())

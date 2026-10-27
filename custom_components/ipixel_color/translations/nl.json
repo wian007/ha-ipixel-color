@@ -1,0 +1,237 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "iPIXEL Color",
+        "menu_options": {
+          "panel": "Paneel toevoegen (Bluetooth-apparaat)",
+          "group": "Panelen combineren tot één scherm"
+        }
+      },
+      "panel": {
+        "title": "Paneel kiezen",
+        "description": "Kies je iPIXEL-paneel uit de apparaten die de Home Assistant Bluetooth-stack ziet ({device_count} gevonden, ★ = herkend iPIXEL-paneel), of voer het adres handmatig in.",
+        "data": {
+          "device": "Apparaat"
+        }
+      },
+      "manual": {
+        "title": "Handmatig instellen",
+        "description": "Voer het Bluetooth-adres van het paneel in.",
+        "data": {
+          "address": "Bluetooth-adres",
+          "name": "Naam"
+        }
+      },
+      "bluetooth_confirm": {
+        "title": "iPIXEL-paneel bevestigen",
+        "description": "iPIXEL-paneel {name} ({address}) toevoegen?",
+        "data": {
+          "name": "Naam"
+        }
+      },
+      "group": {
+        "title": "Gecombineerd scherm",
+        "description": "Selecteer de panelen die samen één groot scherm vormen. In de volgende stappen plaats je elk paneel in een raster (rij/kolom). GIF's worden eerst in het opgegeven slot op elk paneel opgeslagen en daarna tegelijk gestart, zodat de animatie op alle panelen synchroon loopt. Panelen met \"new\" zijn nog niet geconfigureerd en worden automatisch toegevoegd.",
+        "data": {
+          "name": "Naam",
+          "members": "Panelen",
+          "sync_slot": "Slot voor synchrone animatiestart (0 = uit)"
+        }
+      },
+      "group_position": {
+        "title": "Positie van {panel} ({index}/{total})",
+        "description": "Rij 0 is de bovenste rij, kolom 0 het meest linkse paneel. Panelen in dezelfde rij komen naast elkaar op volgorde van kolom.",
+        "data": {
+          "row": "Rij",
+          "col": "Kolom"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbinden mislukt. Controleer of het paneel aan staat, binnen bereik van een Bluetooth-adapter of -proxy is en niet verbonden is met de telefoon-app.",
+      "invalid_address": "Ongeldig Bluetooth-adres.",
+      "device_not_found": "Gekozen apparaat niet gevonden.",
+      "need_two_panels": "Selecteer minimaal twee panelen.",
+      "unknown": "Onverwachte fout.",
+      "panel_cannot_connect": "Paneel {panel} is niet bereikbaar; controleer of het aan staat en niet verbonden is met de telefoon-app."
+    },
+    "abort": {
+      "already_configured": "Dit paneel is al geconfigureerd.",
+      "not_enough_panels": "Minimaal twee panelen nodig (geconfigureerd of zichtbaar via Bluetooth) om een gecombineerd scherm te maken.",
+      "cannot_connect": "Verbinden met het paneel mislukt.",
+      "unknown": "Onverwachte fout."
+    }
+  },
+  "options": {
+    "step": {
+      "panel": {
+        "title": "Paneelopties",
+        "description": "Overschrijf de gedetecteerde afmeting als die niet klopt (0 = automatisch).",
+        "data": {
+          "width": "Breedte (px)",
+          "height": "Hoogte (px)",
+          "ack_timeout": "Commando-timeout (s)"
+        }
+      },
+      "group": {
+        "title": "Gecombineerd scherm",
+        "description": "Wijzig de panelen van dit gecombineerde scherm. In de volgende stappen plaats je elk paneel in het raster. GIF's worden eerst in het opgegeven slot op elk paneel opgeslagen en daarna tegelijk gestart, zodat de animatie op alle panelen synchroon loopt.",
+        "data": {
+          "name": "Naam",
+          "members": "Panelen",
+          "sync_slot": "Slot voor synchrone animatiestart (0 = uit)"
+        }
+      },
+      "group_position": {
+        "title": "Positie van {panel} ({index}/{total})",
+        "description": "Rij 0 is de bovenste rij, kolom 0 het meest linkse paneel.",
+        "data": {
+          "row": "Rij",
+          "col": "Kolom"
+        }
+      }
+    },
+    "error": {
+      "need_two_panels": "Selecteer minimaal twee panelen."
+    }
+  },
+  "entity": {
+    "switch": {
+      "power": {
+        "name": "Aan/uit"
+      },
+      "antialiasing": {
+        "name": "Antialiasing"
+      },
+      "auto_update": {
+        "name": "Automatisch bijwerken"
+      },
+      "clock_24h": {
+        "name": "Klok 24u"
+      },
+      "clock_show_date": {
+        "name": "Klok toon datum"
+      },
+      "program_list": {
+        "name": "Afspeellijst"
+      },
+      "fun_mode": {
+        "name": "Fun-modus"
+      },
+      "screen_visible": {
+        "name": "Scherm zichtbaar"
+      }
+    },
+    "text": {
+      "display": {
+        "name": "Tekst"
+      },
+      "gif_url": {
+        "name": "Afbeelding-URL"
+      }
+    },
+    "select": {
+      "mode": {
+        "name": "Modus",
+        "state": {
+          "textimage": "Tekst (gerenderd)",
+          "text": "Tekst (native)",
+          "clock": "Klok",
+          "gif": "Afbeelding / GIF",
+          "rhythm": "Ritme"
+        }
+      },
+      "font": {
+        "name": "Lettertype"
+      },
+      "clock_style": {
+        "name": "Klokstijl"
+      },
+      "effect": {
+        "name": "Effect"
+      },
+      "orientation": {
+        "name": "Oriëntatie"
+      },
+      "rhythm_style": {
+        "name": "Ritmestijl"
+      }
+    },
+    "number": {
+      "font_size": {
+        "name": "Lettergrootte"
+      },
+      "line_spacing": {
+        "name": "Regelafstand"
+      },
+      "brightness": {
+        "name": "Helderheid"
+      },
+      "text_animation": {
+        "name": "Tekstanimatie"
+      },
+      "text_speed": {
+        "name": "Tekstsnelheid"
+      },
+      "text_rainbow": {
+        "name": "Tekst regenboog"
+      },
+      "schedule_interval": {
+        "name": "Schema-interval"
+      },
+      "rhythm_speed": {
+        "name": "Ritmesnelheid"
+      }
+    },
+    "light": {
+      "text_color": {
+        "name": "Tekstkleur"
+      },
+      "background_color": {
+        "name": "Achtergrondkleur"
+      }
+    },
+    "button": {
+      "update_display": {
+        "name": "Scherm bijwerken"
+      },
+      "sync_time": {
+        "name": "Tijd synchroniseren"
+      },
+      "clear_display": {
+        "name": "Scherm wissen"
+      }
+    },
+    "sensor": {
+      "width": {
+        "name": "Breedte"
+      },
+      "height": {
+        "name": "Hoogte"
+      },
+      "device_type": {
+        "name": "Apparaattype"
+      },
+      "mcu_version": {
+        "name": "MCU-versie"
+      },
+      "wifi_version": {
+        "name": "WiFi-versie"
+      },
+      "panel_count": {
+        "name": "Panelen geladen"
+      }
+    },
+    "camera": {
+      "preview": {
+        "name": "Voorbeeld"
+      }
+    },
+    "media_player": {
+      "gif_player": {
+        "name": "Afbeeldingsspeler"
+      }
+    }
+  }
+}

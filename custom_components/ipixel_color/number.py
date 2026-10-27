@@ -1,21 +1,105 @@
-"""Number entity for iPIXEL Color numeric settings."""
+"""Number platform for iPIXEL Color."""
 from __future__ import annotations
 
 import logging
-from typing import Any
+from dataclasses import dataclass
 
-from homeassistant.components.number import NumberEntity, NumberMode
+from homeassistant.components.number import NumberEntity, NumberEntityDescription, NumberMode
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, State
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .api import iPIXELAPI
-from .const import DOMAIN, CONF_ADDRESS, CONF_NAME, MODE_RHYTHM
-from .common import get_entity_id_by_unique_id
+from .const import DOMAIN, MAX_SCHEDULE_INTERVAL_MS, MIN_SCHEDULE_INTERVAL_MS
+from .entity import iPIXELDeviceEntity, iPIXELSettingEntity
+from .runtime import iPIXELRuntime
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, kw_only=True)
+class iPIXELSettingNumberDescription(NumberEntityDescription):
+    """Describes a numeric setting."""
+
+    setting: str
+    value_type: type = int
+    default: float = 0
+
+
+SETTING_NUMBERS: tuple[iPIXELSettingNumberDescription, ...] = (
+    iPIXELSettingNumberDescription(
+        key="font_size",
+        translation_key="font_size",
+        icon="mdi:format-size",
+        setting="font_size",
+        value_type=float,
+        native_min_value=0,
+        native_max_value=128,
+        native_step=0.5,
+        mode=NumberMode.BOX,
+        native_unit_of_measurement="px",
+        entity_category=EntityCategory.CONFIG,
+    ),
+    iPIXELSettingNumberDescription(
+        key="line_spacing",
+        translation_key="line_spacing",
+        icon="mdi:format-line-spacing",
+        setting="line_spacing",
+        native_min_value=0,
+        native_max_value=20,
+        native_step=1,
+        mode=NumberMode.BOX,
+        native_unit_of_measurement="px",
+        entity_category=EntityCategory.CONFIG,
+    ),
+    iPIXELSettingNumberDescription(
+        key="text_animation",
+        translation_key="text_animation",
+        icon="mdi:animation",
+        setting="text_animation",
+        native_min_value=0,
+        native_max_value=7,
+        native_step=1,
+        mode=NumberMode.BOX,
+        entity_category=EntityCategory.CONFIG,
+    ),
+    iPIXELSettingNumberDescription(
+        key="text_speed",
+        translation_key="text_speed",
+        icon="mdi:speedometer",
+        setting="text_speed",
+        default=80,
+        native_min_value=0,
+        native_max_value=100,
+        native_step=5,
+        mode=NumberMode.SLIDER,
+        entity_category=EntityCategory.CONFIG,
+    ),
+    iPIXELSettingNumberDescription(
+        key="text_rainbow",
+        translation_key="text_rainbow",
+        icon="mdi:palette",
+        setting="text_rainbow",
+        native_min_value=0,
+        native_max_value=9,
+        native_step=1,
+        mode=NumberMode.BOX,
+        entity_category=EntityCategory.CONFIG,
+    ),
+    iPIXELSettingNumberDescription(
+        key="rhythm_speed",
+        translation_key="rhythm_speed",
+        icon="mdi:speedometer",
+        setting="rhythm_speed",
+        default=4,
+        native_min_value=0,
+        native_max_value=7,
+        native_step=1,
+        mode=NumberMode.SLIDER,
+        entity_category=EntityCategory.CONFIG,
+    ),
+)
 
 
 async def async_setup_entry(
@@ -23,661 +107,111 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the iPIXEL Color number entities."""
-    address = entry.data[CONF_ADDRESS]
-    name = entry.data[CONF_NAME]
-    
-    api = hass.data[DOMAIN][entry.entry_id]
-    
-    async_add_entities([
-        iPIXELFontSize(api, entry, address, name),
-        iPIXELLineSpacing(api, entry, address, name),
-        iPIXELBrightness(api, entry, address, name),
-        iPIXELTextAnimation(hass, api, entry, address, name),
-        iPIXELTextSpeed(hass, api, entry, address, name),
-        iPIXELTextRainbow(hass, api, entry, address, name),
-        iPIXELScheduleInterval(hass, api, entry, address, name),
-        iPIXELRhythmSpeed(hass, api, entry, address, name),
-    ])
+    """Set up number entities."""
+    runtime: iPIXELRuntime = hass.data[DOMAIN][entry.entry_id]
+    entities: list[NumberEntity] = [
+        iPIXELSettingNumber(runtime, description) for description in SETTING_NUMBERS
+    ]
+    entities += [iPIXELBrightnessNumber(runtime), iPIXELScheduleIntervalNumber(runtime)]
+    async_add_entities(entities)
 
 
-class iPIXELFontSize(NumberEntity, RestoreEntity):
-    """Representation of an iPIXEL Color font size setting."""
+class iPIXELSettingNumber(iPIXELSettingEntity, NumberEntity):
+    """A numeric setting used when rendering content."""
 
-    _attr_mode = NumberMode.BOX
-    _attr_native_min_value = 0.0  # 0 = auto-sizing
-    _attr_native_max_value = 64.0  # Maximum font size for 32x32 display
-    _attr_native_step = 0.5  # Allow half-pixel increments
-    _attr_icon = "mdi:format-size"
-    _attr_entity_category = None
+    entity_description: iPIXELSettingNumberDescription
 
-    def __init__(
-        self, 
-        api: iPIXELAPI, 
-        entry: ConfigEntry, 
-        address: str, 
-        name: str
-    ) -> None:
-        """Initialize the font size number."""
-        self._api = api
-        self._entry = entry
-        self._address = address
-        self._name = name
-        self._attr_name = "Font Size"
-        self._attr_unique_id = f"{address}_font_size"
-        self._attr_native_value = 0.0  # 0 means auto-sizing
-        self._attr_entity_description = "Font size in pixels (0 = auto-sizing, supports decimals)"
-        
-        # Device info for grouping in device registry
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, address)},
-            name=name,
-            manufacturer="iPIXEL",
-            model="LED Matrix Display",
-            sw_version="1.0",
-        )
+    def __init__(self, runtime: iPIXELRuntime, description: iPIXELSettingNumberDescription) -> None:
+        """Initialise the number."""
+        super().__init__(runtime, description=description)
+        self.setting = description.setting
+        setattr(self.settings, self.setting, description.value_type(description.default))
 
-    async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
-        await super().async_added_to_hass()
-        
-        # Restore last state if available
-        last_state = await self.async_get_last_state()
-        if last_state is not None and last_state.state not in ("unknown", "unavailable"):
-            try:
-                self._attr_native_value = float(last_state.state)
-                _LOGGER.debug("Restored font size: %.1f", self._attr_native_value)
-            except (ValueError, TypeError):
-                _LOGGER.warning("Could not restore font size from: %s", last_state.state)
+    def _restore_from_state(self, state: State) -> None:
+        value = self.entity_description.value_type(float(state.state))
+        if self.native_min_value <= value <= self.native_max_value:
+            setattr(self.settings, self.setting, value)
 
     @property
-    def native_value(self) -> float | None:
-        """Return the current font size value."""
-        return self._attr_native_value
+    def native_value(self) -> float:
+        """Return the setting value."""
+        return getattr(self.settings, self.setting)
 
     async def async_set_native_value(self, value: float) -> None:
-        """Set the font size."""
-        if self._attr_native_min_value <= value <= self._attr_native_max_value:
-            self._attr_native_value = value
-            if value == 0:
-                _LOGGER.debug("Font size changed to: auto-sizing")
-            else:
-                _LOGGER.debug("Font size changed to: %.1f pixels", value)
-            # Note: The actual font size will be used when text is displayed
-        else:
-            _LOGGER.error("Invalid font size: %f (min: %f, max: %f)", 
-                         value, self._attr_native_min_value, self._attr_native_max_value)
-
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        return True
+        """Store the value."""
+        self._set_setting(self.entity_description.value_type(value))
 
 
-class iPIXELLineSpacing(NumberEntity, RestoreEntity):
-    """Representation of an iPIXEL Color line spacing setting."""
+class iPIXELBrightnessNumber(iPIXELDeviceEntity, NumberEntity, RestoreEntity):
+    """Display brightness (sent to the panels immediately)."""
 
-    _attr_mode = NumberMode.BOX
-    _attr_native_min_value = 0  # No extra spacing
-    _attr_native_max_value = 20  # Maximum 20 pixels of spacing
-    _attr_native_step = 1
-    _attr_icon = "mdi:format-line-spacing"
-    _attr_entity_category = None
-
-    def __init__(
-        self, 
-        api: iPIXELAPI, 
-        entry: ConfigEntry, 
-        address: str, 
-        name: str
-    ) -> None:
-        """Initialize the line spacing number."""
-        self._api = api
-        self._entry = entry
-        self._address = address
-        self._name = name
-        self._attr_name = "Line Spacing"
-        self._attr_unique_id = f"{address}_line_spacing"
-        self._attr_native_value = 0  # Default to no extra spacing
-        self._attr_entity_description = "Extra spacing between lines in pixels (for multiline text)"
-        
-        # Device info for grouping in device registry
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, address)},
-            name=name,
-            manufacturer="iPIXEL",
-            model="LED Matrix Display",
-            sw_version="1.0",
-        )
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
-        await super().async_added_to_hass()
-        
-        # Restore last state if available
-        last_state = await self.async_get_last_state()
-        if last_state is not None and last_state.state not in ("unknown", "unavailable"):
-            try:
-                self._attr_native_value = int(float(last_state.state))
-                _LOGGER.debug("Restored line spacing: %d", self._attr_native_value)
-            except (ValueError, TypeError):
-                _LOGGER.warning("Could not restore line spacing from: %s", last_state.state)
-
-    @property
-    def native_value(self) -> float | None:
-        """Return the current line spacing value."""
-        return self._attr_native_value
-
-    async def async_set_native_value(self, value: float) -> None:
-        """Set the line spacing."""
-        if self._attr_native_min_value <= value <= self._attr_native_max_value:
-            self._attr_native_value = int(value)
-            _LOGGER.debug("Line spacing changed to: %d pixels", int(value))
-            # Note: The actual line spacing will be used when text is displayed
-        else:
-            _LOGGER.error("Invalid line spacing: %f (min: %f, max: %f)", 
-                         value, self._attr_native_min_value, self._attr_native_max_value)
-
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        return True
-
-
-class iPIXELBrightness(NumberEntity, RestoreEntity):
-    """Representation of an iPIXEL Color brightness setting."""
-
-    _attr_mode = NumberMode.SLIDER
-    _attr_native_min_value = 1  # Minimum brightness (0 is invalid)
-    _attr_native_max_value = 100  # Maximum brightness
-    _attr_native_step = 1
+    _attr_translation_key = "brightness"
     _attr_icon = "mdi:brightness-6"
-    _attr_entity_category = None
-
-    def __init__(
-        self, 
-        api: iPIXELAPI, 
-        entry: ConfigEntry, 
-        address: str, 
-        name: str
-    ) -> None:
-        """Initialize the brightness number."""
-        self._api = api
-        self._entry = entry
-        self._address = address
-        self._name = name
-        self._attr_name = "Brightness"
-        self._attr_unique_id = f"{address}_brightness"
-        self._attr_native_value = 50  # Default brightness is 50%
-        self._attr_entity_description = "Display brightness level (1-100)"
-        
-        # Device info for grouping in device registry
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, address)},
-            name=name,
-            manufacturer="iPIXEL",
-            model="LED Matrix Display",
-            sw_version="1.0",
-        )
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
-        await super().async_added_to_hass()
-        
-        # Restore last state if available
-        last_state = await self.async_get_last_state()
-        if last_state is not None and last_state.state not in ("unknown", "unavailable"):
-            try:
-                value = int(float(last_state.state))
-                if 1 <= value <= 100:
-                    self._attr_native_value = value
-                    _LOGGER.debug("Restored brightness: %d", self._attr_native_value)
-                else:
-                    _LOGGER.warning("Invalid brightness value %d, using default 50", value)
-                    self._attr_native_value = 50
-            except (ValueError, TypeError):
-                _LOGGER.warning("Could not restore brightness from: %s", last_state.state)
-                self._attr_native_value = 50
-
-    @property
-    def native_value(self) -> float | None:
-        """Return the current brightness value."""
-        return self._attr_native_value
-
-    async def async_set_native_value(self, value: float) -> None:
-        """Set the brightness."""
-        brightness = int(value)
-        if 1 <= brightness <= 100:
-            try:
-                # Send brightness command to device
-                success = await self._api.set_brightness(brightness)
-                if success:
-                    self._attr_native_value = brightness
-                    _LOGGER.info("Brightness set to %d%%", brightness)
-                else:
-                    _LOGGER.error("Failed to set brightness to %d%%", brightness)
-            except Exception as err:
-                _LOGGER.error("Error setting brightness: %s", err)
-        else:
-            _LOGGER.error("Invalid brightness: %d (must be 1-100)", brightness)
-
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        return True
-
-
-class iPIXELTextAnimation(NumberEntity, RestoreEntity):
-    """Representation of an iPIXEL Color text animation setting."""
-
-    _attr_mode = NumberMode.BOX
-    _attr_native_min_value = 0
-    _attr_native_max_value = 7
-    _attr_native_step = 1
-    _attr_icon = "mdi:animation"
-
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        api: iPIXELAPI,
-        entry: ConfigEntry,
-        address: str,
-        name: str
-    ) -> None:
-        """Initialize the text animation number."""
-        self.hass = hass
-        self._api = api
-        self._entry = entry
-        self._address = address
-        self._name = name
-        self._attr_name = "Text Animation"
-        self._attr_unique_id = f"{address}_text_animation"
-        self._attr_native_value = 0  # Default to no animation
-
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, address)},
-            name=name,
-            manufacturer="iPIXEL",
-            model="LED Matrix Display",
-            sw_version="1.0",
-        )
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
-        await super().async_added_to_hass()
-
-        last_state = await self.async_get_last_state()
-        if last_state is not None and last_state.state:
-            try:
-                value = int(float(last_state.state))
-                if 0 <= value <= 7:
-                    self._attr_native_value = value
-            except (ValueError, TypeError):
-                pass
-
-    @property
-    def native_value(self) -> float | None:
-        """Return the current animation value."""
-        return self._attr_native_value
-
-    async def async_set_native_value(self, value: float) -> None:
-        """Set the animation."""
-        self._attr_native_value = int(value)
-        await self._trigger_auto_update()
-
-    async def _trigger_auto_update(self) -> None:
-        """Trigger display update if auto-update is enabled and in text mode."""
-        try:
-            from .common import update_ipixel_display
-
-            mode_entity_id = f"select.{self._name.lower().replace(' ', '_')}_mode"
-            mode_state = self.hass.states.get(mode_entity_id) if mode_entity_id else None
-
-            if mode_state and mode_state.state == "text":
-                auto_update_entity_id = f"switch.{self._name.lower().replace(' ', '_')}_auto_update"
-                auto_update_state = self.hass.states.get(auto_update_entity_id) if auto_update_entity_id else None
-
-                if auto_update_state and auto_update_state.state == "on":
-                    await update_ipixel_display(self.hass, self._name, self._api)
-        except Exception as err:
-            _LOGGER.debug("Could not trigger auto-update: %s", err)
-
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        return True
-
-
-class iPIXELTextSpeed(NumberEntity, RestoreEntity):
-    """Representation of an iPIXEL Color text speed setting."""
-
     _attr_mode = NumberMode.SLIDER
-    _attr_native_min_value = 0
+    _attr_native_min_value = 1
     _attr_native_max_value = 100
-    _attr_native_step = 5
-    _attr_icon = "mdi:speedometer"
-
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        api: iPIXELAPI,
-        entry: ConfigEntry,
-        address: str,
-        name: str
-    ) -> None:
-        """Initialize the text speed number."""
-        self.hass = hass
-        self._api = api
-        self._entry = entry
-        self._address = address
-        self._name = name
-        self._attr_name = "Text Speed"
-        self._attr_unique_id = f"{address}_text_speed"
-        self._attr_native_value = 80  # Default speed
-
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, address)},
-            name=name,
-            manufacturer="iPIXEL",
-            model="LED Matrix Display",
-            sw_version="1.0",
-        )
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
-        await super().async_added_to_hass()
-
-        last_state = await self.async_get_last_state()
-        if last_state is not None and last_state.state:
-            try:
-                value = int(float(last_state.state))
-                if 0 <= value <= 100:
-                    self._attr_native_value = value
-            except (ValueError, TypeError):
-                pass
-
-    @property
-    def native_value(self) -> float | None:
-        """Return the current speed value."""
-        return self._attr_native_value
-
-    async def async_set_native_value(self, value: float) -> None:
-        """Set the speed."""
-        self._attr_native_value = int(value)
-        await self._trigger_auto_update()
-
-    async def _trigger_auto_update(self) -> None:
-        """Trigger display update if auto-update is enabled and in text mode."""
-        try:
-            from .common import update_ipixel_display
-
-            mode_entity_id = f"select.{self._name.lower().replace(' ', '_')}_mode"
-            mode_state = self.hass.states.get(mode_entity_id) if mode_entity_id else None
-
-            if mode_state and mode_state.state == "text":
-                auto_update_entity_id = f"switch.{self._name.lower().replace(' ', '_')}_auto_update"
-                auto_update_state = self.hass.states.get(auto_update_entity_id) if auto_update_entity_id else None
-
-                if auto_update_state and auto_update_state.state == "on":
-                    await update_ipixel_display(self.hass, self._name, self._api)
-        except Exception as err:
-            _LOGGER.debug("Could not trigger auto-update: %s", err)
-
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        return True
-
-
-class iPIXELTextRainbow(NumberEntity, RestoreEntity):
-    """Representation of an iPIXEL Color text rainbow mode setting."""
-
-    _attr_mode = NumberMode.BOX
-    _attr_native_min_value = 0
-    _attr_native_max_value = 9
     _attr_native_step = 1
-    _attr_icon = "mdi:palette"
+    _attr_native_unit_of_measurement = "%"
 
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        api: iPIXELAPI,
-        entry: ConfigEntry,
-        address: str,
-        name: str
-    ) -> None:
-        """Initialize the text rainbow number."""
-        self.hass = hass
-        self._api = api
-        self._entry = entry
-        self._address = address
-        self._name = name
-        self._attr_name = "Text Rainbow"
-        self._attr_unique_id = f"{address}_text_rainbow"
-        self._attr_native_value = 0  # Default to no rainbow
-
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, address)},
-            name=name,
-            manufacturer="iPIXEL",
-            model="LED Matrix Display",
-            sw_version="1.0",
-        )
+    def __init__(self, runtime: iPIXELRuntime) -> None:
+        """Initialise the number."""
+        super().__init__(runtime, key="brightness")
 
     async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
+        """Restore the last brightness (not sent to the device on startup)."""
         await super().async_added_to_hass()
-
-        last_state = await self.async_get_last_state()
-        if last_state is not None and last_state.state:
-            try:
-                value = int(float(last_state.state))
-                if 0 <= value <= 9:
-                    self._attr_native_value = value
-            except (ValueError, TypeError):
-                pass
-
-    @property
-    def native_value(self) -> float | None:
-        """Return the current rainbow value."""
-        return self._attr_native_value
-
-    async def async_set_native_value(self, value: float) -> None:
-        """Set the rainbow mode."""
-        self._attr_native_value = int(value)
-        await self._trigger_auto_update()
-
-    async def _trigger_auto_update(self) -> None:
-        """Trigger display update if auto-update is enabled and in text mode."""
-        try:
-            from .common import update_ipixel_display
-
-            mode_entity_id = f"select.{self._name.lower().replace(' ', '_')}_mode"
-            mode_state = self.hass.states.get(mode_entity_id) if mode_entity_id else None
-
-            if mode_state and mode_state.state == "text":
-                auto_update_entity_id = f"switch.{self._name.lower().replace(' ', '_')}_auto_update"
-                auto_update_state = self.hass.states.get(auto_update_entity_id) if auto_update_entity_id else None
-
-                if auto_update_state and auto_update_state.state == "on":
-                    await update_ipixel_display(self.hass, self._name, self._api)
-        except Exception as err:
-            _LOGGER.debug("Could not trigger auto-update: %s", err)
-
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        return True
-
-
-class iPIXELScheduleInterval(NumberEntity, RestoreEntity):
-    """Representation of an iPIXEL Color schedule interval setting."""
-
-    _attr_mode = NumberMode.BOX
-    _attr_native_min_value = 1000  # 1 second minimum
-    _attr_native_max_value = 3600000  # 1 hour maximum
-    _attr_native_step = 1000  # 1 second increments
-    _attr_icon = "mdi:timer-outline"
-    _attr_native_unit_of_measurement = "ms"
-
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        api: iPIXELAPI,
-        entry: ConfigEntry,
-        address: str,
-        name: str
-    ) -> None:
-        """Initialize the schedule interval number."""
-        self.hass = hass
-        self._api = api
-        self._entry = entry
-        self._address = address
-        self._name = name
-        self._attr_name = "Schedule Interval"
-        self._attr_unique_id = f"{address}_schedule_interval"
-        self._attr_native_value = 5000  # Default 5 seconds
-        self._attr_entity_description = "Time between scheduled items in milliseconds"
-
-        # Device info for grouping in device registry
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, address)},
-            name=name,
-            manufacturer="iPIXEL",
-            model="LED Matrix Display",
-            sw_version="1.0",
-        )
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
-        await super().async_added_to_hass()
-
-        # Restore last state if available
         last_state = await self.async_get_last_state()
         if last_state is not None and last_state.state not in ("unknown", "unavailable"):
             try:
                 value = int(float(last_state.state))
-                if 1000 <= value <= 3600000:
-                    self._attr_native_value = value
-                    _LOGGER.debug("Restored schedule interval: %d ms", value)
-            except (ValueError, TypeError):
-                _LOGGER.warning("Could not restore schedule interval from: %s", last_state.state)
+            except (TypeError, ValueError):
+                return
+            if 1 <= value <= 100:
+                self.settings.brightness = value
 
     @property
-    def native_value(self) -> float | None:
-        """Return the current schedule interval value."""
-        return self._attr_native_value
+    def native_value(self) -> float:
+        """Return the brightness."""
+        return self.settings.brightness
 
     async def async_set_native_value(self, value: float) -> None:
-        """Set the schedule interval."""
-        interval = int(value)
-        if 1000 <= interval <= 3600000:
-            self._attr_native_value = interval
-            _LOGGER.info("Schedule interval set to %d ms (%.1f seconds)", interval, interval / 1000)
-
-            # Update running playlist loop if active
-            try:
-                schedule_manager = self.hass.data.get(DOMAIN, {}).get(f"{self._entry.entry_id}_schedule")
-                if schedule_manager and schedule_manager._loop_task:
-                    # Restart the loop with new interval
-                    await schedule_manager.stop_playlist_loop()
-                    await schedule_manager.start_playlist_loop(interval)
-                    _LOGGER.debug("Restarted playlist loop with new interval")
-            except Exception as err:
-                _LOGGER.debug("Could not update playlist loop interval: %s", err)
-        else:
-            _LOGGER.error("Invalid schedule interval: %d (must be 1000-3600000 ms)", interval)
-
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        return True
+        """Send the brightness to the panels."""
+        await self._async_run(self.runtime.async_set_brightness(int(value)))
+        self.async_write_ha_state()
 
 
-class iPIXELRhythmSpeed(NumberEntity, RestoreEntity):
-    """Representation of an iPIXEL Color rhythm animation speed setting."""
+class iPIXELScheduleIntervalNumber(iPIXELSettingEntity, NumberEntity):
+    """Fallback interval between playlist items."""
 
-    _attr_mode = NumberMode.SLIDER
-    _attr_native_min_value = 0
-    _attr_native_max_value = 7
-    _attr_native_step = 1
-    _attr_icon = "mdi:speedometer"
+    _attr_translation_key = "schedule_interval"
+    _attr_icon = "mdi:timer-outline"
+    _attr_mode = NumberMode.BOX
+    _attr_native_min_value = MIN_SCHEDULE_INTERVAL_MS
+    _attr_native_max_value = MAX_SCHEDULE_INTERVAL_MS
+    _attr_native_step = 1000
+    _attr_native_unit_of_measurement = "ms"
+    _attr_entity_category = EntityCategory.CONFIG
+    setting = "schedule_interval_ms"
 
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        api: iPIXELAPI,
-        entry: ConfigEntry,
-        address: str,
-        name: str
-    ) -> None:
-        """Initialize the rhythm speed number."""
-        self.hass = hass
-        self._api = api
-        self._entry = entry
-        self._address = address
-        self._name = name
-        self._attr_name = "Rhythm Speed"
-        self._attr_unique_id = f"{address}_rhythm_speed"
-        self._attr_native_value = 4  # Default speed (middle)
-        self._attr_entity_description = "Rhythm visualizer animation speed (0-7)"
+    def __init__(self, runtime: iPIXELRuntime) -> None:
+        """Initialise the number."""
+        super().__init__(runtime, key="schedule_interval")
 
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, address)},
-            name=name,
-            manufacturer="iPIXEL",
-            model="LED Matrix Display",
-            sw_version="1.0",
-        )
-
-    async def async_added_to_hass(self) -> None:
-        """Run when entity about to be added to hass."""
-        await super().async_added_to_hass()
-
-        last_state = await self.async_get_last_state()
-        if last_state is not None and last_state.state:
-            try:
-                value = int(float(last_state.state))
-                if 0 <= value <= 7:
-                    self._attr_native_value = value
-                    _LOGGER.debug("Restored rhythm speed: %d", value)
-            except (ValueError, TypeError):
-                pass
+    def _restore_from_state(self, state: State) -> None:
+        value = int(float(state.state))
+        if MIN_SCHEDULE_INTERVAL_MS <= value <= MAX_SCHEDULE_INTERVAL_MS:
+            self.settings.schedule_interval_ms = value
 
     @property
-    def native_value(self) -> float | None:
-        """Return the current rhythm speed value."""
-        return self._attr_native_value
+    def native_value(self) -> float:
+        """Return the interval."""
+        return self.settings.schedule_interval_ms
 
     async def async_set_native_value(self, value: float) -> None:
-        """Set the rhythm speed."""
-        speed = int(value)
-        if 0 <= speed <= 7:
-            self._attr_native_value = speed
-            _LOGGER.debug("Rhythm speed changed to: %d", speed)
-            await self._trigger_auto_update()
-        else:
-            _LOGGER.error("Invalid rhythm speed: %d (must be 0-7)", speed)
-
-    async def _trigger_auto_update(self) -> None:
-        """Trigger display update if in rhythm mode and auto-update is enabled."""
-        try:
-            from .common import update_ipixel_display
-
-            mode_entity_id = get_entity_id_by_unique_id(self.hass, self._address, "mode_select", "select")
-            mode_state = self.hass.states.get(mode_entity_id) if mode_entity_id else None
-
-            if mode_state and mode_state.state == MODE_RHYTHM:
-                auto_update_entity_id = get_entity_id_by_unique_id(self.hass, self._address, "auto_update", "switch")
-                auto_update_state = self.hass.states.get(auto_update_entity_id) if auto_update_entity_id else None
-
-                if auto_update_state and auto_update_state.state == "on":
-                    await update_ipixel_display(self.hass, self._name, self._api)
-                    _LOGGER.debug("Auto-update triggered due to rhythm speed change")
-        except Exception as err:
-            _LOGGER.debug("Could not trigger auto-update: %s", err)
-
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        return True
+        """Store the interval and restart a running playlist with it."""
+        self.settings.schedule_interval_ms = int(value)
+        manager = self.runtime.schedule_manager
+        if manager is not None and manager.is_running:
+            await manager.stop_playlist_loop()
+            await manager.start_playlist_loop(int(value))
+        self.async_write_ha_state()

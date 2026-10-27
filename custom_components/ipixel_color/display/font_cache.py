@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -19,8 +20,8 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-# Default cache directory (relative to integration)
-DEFAULT_CACHE_DIR = Path(__file__).parent.parent / "font_cache"
+# Default cache directory (system temp dir; the integration folder is replaced on updates)
+DEFAULT_CACHE_DIR = Path(tempfile.gettempdir()) / "ipixel_color_font_cache"
 
 
 class FontCache:
