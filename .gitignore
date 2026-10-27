@@ -168,8 +168,6 @@ custom_components/*/*/__pycache__/
 !custom_components/ipixel_color/www/lib/
 
 # Testing files
-test_*.py
-*_test.py
 test_output/
 .pytest_cache/
 test_venv/

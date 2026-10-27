@@ -70,6 +70,21 @@ Two 64×16 panels on row 0, columns 0 and 1, become a 128×16 display; a 64×16 
 above another one becomes 64×32. Mixed sizes work too (each grid row is as high as
 its tallest panel).
 
+Example with four 64×16 panels:
+
+| Wanted | Positions (row, column) | Result |
+|--------|-------------------------|--------|
+| One long strip | (0,0) (0,1) (0,2) (0,3) | 256×16 |
+| 2×2 wall | (0,0) (0,1) (1,0) (1,1) | 128×32 |
+| Stacked | (0,0) (1,0) (2,0) (3,0) | 64×64 |
+
+The flow pre-fills row 0 and the next free column, so for a strip you can simply
+confirm each step.
+
+**Bluetooth capacity:** every panel keeps its own BLE connection. An ESPHome
+Bluetooth proxy handles 3 connections at a time, so for four panels use two
+proxies (or a local adapter) with every panel in range of a free slot.
+
 The combined display gets its own device with the same entities as a panel.
 Everything Home Assistant renders itself is sliced over the panels and uploaded to
 all of them in parallel:
