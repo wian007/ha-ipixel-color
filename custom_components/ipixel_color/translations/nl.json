@@ -32,10 +32,11 @@
       },
       "group": {
         "title": "Gecombineerd scherm",
-        "description": "Selecteer de panelen die samen één groot scherm vormen. In de volgende stappen plaats je elk paneel in een raster (rij/kolom).",
+        "description": "Selecteer de panelen die samen één groot scherm vormen. In de volgende stappen plaats je elk paneel in een raster (rij/kolom). GIF's worden eerst in het opgegeven slot op elk paneel opgeslagen en daarna tegelijk gestart, zodat de animatie op alle panelen synchroon loopt.",
         "data": {
           "name": "Naam",
-          "members": "Panelen"
+          "members": "Panelen",
+          "sync_slot": "Slot voor synchrone animatiestart (0 = uit)"
         }
       },
       "group_position": {
@@ -74,10 +75,11 @@
       },
       "group": {
         "title": "Gecombineerd scherm",
-        "description": "Wijzig de panelen van dit gecombineerde scherm. In de volgende stappen plaats je elk paneel in het raster.",
+        "description": "Wijzig de panelen van dit gecombineerde scherm. In de volgende stappen plaats je elk paneel in het raster. GIF's worden eerst in het opgegeven slot op elk paneel opgeslagen en daarna tegelijk gestart, zodat de animatie op alle panelen synchroon loopt.",
         "data": {
           "name": "Naam",
-          "members": "Panelen"
+          "members": "Panelen",
+          "sync_slot": "Slot voor synchrone animatiestart (0 = uit)"
         }
       },
       "group_position": {

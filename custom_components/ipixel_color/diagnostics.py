@@ -40,6 +40,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
     elif isinstance(display, CompositeDisplay):
         info["members"] = [{"key": m.key, "row": m.row, "col": m.col} for m in display.members]
         info["missing_members"] = display.missing_members
+        info["sync_slot"] = display.sync_slot
         info["tiles"] = [
             {"panel": t.key, "x": t.x, "y": t.y, "width": t.width, "height": t.height}
             for t in display.layout.tiles

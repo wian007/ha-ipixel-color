@@ -21,6 +21,7 @@ CONF_MEMBERS = "members"
 CONF_MEMBER_ENTRY_ID = "entry_id"
 CONF_ROW = "row"
 CONF_COL = "col"
+CONF_SYNC_SLOT = "sync_slot"
 
 # Options keys
 CONF_WIDTH = "width"
@@ -29,6 +30,9 @@ CONF_ACK_TIMEOUT = "ack_timeout"
 
 ENTRY_TYPE_PANEL = "panel"
 ENTRY_TYPE_GROUP = "group"
+
+# Slot used to start animations on all panels of a combined display at once (0 = off)
+DEFAULT_SYNC_SLOT = 1
 
 # Connection settings
 CONNECTION_TIMEOUT = 20.0

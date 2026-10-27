@@ -43,6 +43,7 @@ class StubPanel(Display):
 
     async def async_show_gif(self, frames, durations, *, loop=0, save_slot=0):
         self.gifs.append(frames)
+        self.calls.append(("gif", save_slot))
 
     async def async_show_frame(self, image, brightness=100):
         self.frames.append(image)
@@ -84,8 +85,10 @@ class StubPanel(Display):
         self.calls.append((method, args))
 
 
-def make_composite(panels: dict[str, StubPanel], members):
-    return CompositeDisplay(name="combo", members=members, resolver=lambda key: panels.get(key))
+def make_composite(panels: dict[str, StubPanel], members, sync_slot=None):
+    return CompositeDisplay(
+        name="combo", members=members, resolver=lambda key: panels.get(key), sync_slot=sync_slot
+    )
 
 
 @pytest.fixture
@@ -182,3 +185,24 @@ async def test_missing_member_is_skipped():
     assert not empty.available
     with pytest.raises(iPIXELNotAvailableError):
         await empty.async_show_image(Image.new("RGB", (8, 8)))
+
+
+async def test_gif_synchronised_start_via_slot():
+    panels = {"left": StubPanel("left", 32, 32), "right": StubPanel("right", 32, 32)}
+    composite = make_composite(panels, [MemberSpec("left", 0, 0), MemberSpec("right", 0, 1)], sync_slot=3)
+    frames = [Image.new("RGB", (64, 32), (1, 1, 1)), Image.new("RGB", (64, 32), (2, 2, 2))]
+    await composite.async_show_gif(frames, [50, 50])
+    for panel in panels.values():
+        # uploaded into slot 3, then started with one show_slot on every panel
+        assert panel.calls == [("gif", 3), ("show_slot", (3,))]
+
+    # An explicit slot bypasses the synchronised start.
+    for panel in panels.values():
+        panel.calls.clear()
+    await composite.async_show_gif(frames, [50, 50], save_slot=7)
+    assert panels["left"].calls == [("gif", 7)]
+
+    # Still images never use the slot.
+    panels["left"].calls.clear()
+    await composite.async_show_image(Image.new("RGB", (64, 32)))
+    assert panels["left"].calls == []

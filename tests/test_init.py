@@ -370,3 +370,62 @@ async def test_four_panels_as_one_display(hass: HomeAssistant, fake_bluetooth):
     assert runtime.last_frame.size == (256, 16)
     for address in addresses:
         assert fake_bluetooth.panels[address].last_image().size == (64, 16)
+
+
+async def _gif_bytes(size=(100, 100)) -> bytes:
+    import io
+
+    from PIL import Image
+
+    frames = [Image.new("RGB", size, (255, 0, 0)), Image.new("RGB", size, (0, 0, 255))]
+    buffer = io.BytesIO()
+    frames[0].save(buffer, format="GIF", save_all=True, append_images=frames[1:], duration=80, loop=0)
+    return buffer.getvalue()
+
+
+async def test_combined_gif_starts_synchronised_from_slot(hass: HomeAssistant, fake_bluetooth):
+    """Default: GIFs are stored in slot 1 on every panel, then shown with one command."""
+    await _setup_panel(hass, fake_bluetooth, LEFT, "Left", "left", DEVICE_TYPE_32X32)
+    await _setup_panel(hass, fake_bluetooth, RIGHT, "Right", "right", DEVICE_TYPE_32X32)
+    group = make_group_entry("Wall", [("left", 0, 0), ("right", 0, 1)], entry_id="wall")
+    group.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(group.entry_id)
+    await hass.async_block_till_done()
+
+    runtime = hass.data[DOMAIN]["wall"]
+    gif = await _gif_bytes()
+
+    async def _fake_fetch(url):
+        return gif, ".gif"
+
+    runtime.async_fetch_image = _fake_fetch
+    for panel in fake_bluetooth.panels.values():
+        panel.clear()
+    await hass.services.async_call(
+        DOMAIN, "display_image_url", {"entity_id": _entity(hass, "switch", "group_wall_power"), "url": "http://x/a.gif"}, blocking=True
+    )
+    for panel in fake_bluetooth.panels.values():
+        gif_frames = panel.frames_for((0x03, 0x00))
+        assert gif_frames, "GIF upload expected"
+        assert all(f.data[14] == 1 for f in gif_frames), "GIF must be stored in slot 1"
+        assert len(panel.last_gif_frames()) == 2 and panel.last_gif_frames()[0].size == (32, 32)
+        # the show_slot command comes after the upload
+        assert panel.frames[-1].data == bytes([7, 0, 8, 0x80, 1, 0, 1])
+
+
+async def test_combined_gif_without_sync_slot(hass: HomeAssistant, fake_bluetooth):
+    """sync_slot 0 disables the slot mechanism: GIFs are shown directly."""
+    await _setup_panel(hass, fake_bluetooth, LEFT, "Left", "left", DEVICE_TYPE_32X32)
+    await _setup_panel(hass, fake_bluetooth, RIGHT, "Right", "right", DEVICE_TYPE_32X32)
+    group = make_group_entry("Wall", [("left", 0, 0), ("right", 0, 1)], entry_id="wall", sync_slot=0)
+    group.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(group.entry_id)
+    await hass.async_block_till_done()
+
+    runtime = hass.data[DOMAIN]["wall"]
+    gif = await _gif_bytes()
+    await runtime.async_show_image_bytes(gif, ".gif")
+    for panel in fake_bluetooth.panels.values():
+        gif_frames = panel.frames_for((0x03, 0x00))
+        assert gif_frames and all(f.data[14] == 0 for f in gif_frames)
+        assert not panel.frames_for((8, 0x80))

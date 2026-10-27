@@ -26,8 +26,10 @@ from .const import (
     CONF_MEMBERS,
     CONF_NAME,
     CONF_ROW,
+    CONF_SYNC_SLOT,
     CONF_WIDTH,
     DEFAULT_ACK_TIMEOUT,
+    DEFAULT_SYNC_SLOT,
     DEFAULT_NAME,
     DOMAIN,
     ENTRY_TYPE_GROUP,
@@ -148,7 +150,10 @@ def _create_group_runtime(hass: HomeAssistant, entry: ConfigEntry) -> iPIXELRunt
             return None
         return runtime.display
 
-    display = CompositeDisplay(name=name, members=members, resolver=_resolve)
+    sync_slot = entry.options.get(CONF_SYNC_SLOT, entry.data.get(CONF_SYNC_SLOT, DEFAULT_SYNC_SLOT))
+    display = CompositeDisplay(
+        name=name, members=members, resolver=_resolve, sync_slot=int(sync_slot or 0) or None
+    )
     return iPIXELRuntime(hass, entry, display)
 
 

@@ -39,8 +39,10 @@ from .const import (
     CONF_MEMBERS,
     CONF_NAME,
     CONF_ROW,
+    CONF_SYNC_SLOT,
     CONF_WIDTH,
     DEFAULT_ACK_TIMEOUT,
+    DEFAULT_SYNC_SLOT,
     DEFAULT_NAME,
     DOMAIN,
     ENTRY_TYPE_GROUP,
@@ -77,6 +79,10 @@ async def async_validate_panel(hass: HomeAssistant, address: str, name: str) -> 
     return {"width": info.width, "height": info.height}
 
 
+def _sync_slot_selector() -> NumberSelector:
+    return NumberSelector(NumberSelectorConfig(min=0, max=255, step=1, mode=NumberSelectorMode.BOX))
+
+
 def _position_schema(row: int, col: int) -> vol.Schema:
     return vol.Schema(
         {
@@ -103,6 +109,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._group_name: str = ""
         self._group_pending: list[str] = []
         self._group_members: list[dict[str, Any]] = []
+        self._group_sync_slot: int = DEFAULT_SYNC_SLOT
 
     @staticmethod
     @callback
@@ -283,6 +290,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors[CONF_MEMBERS] = "need_two_panels"
             else:
                 self._group_name = user_input[CONF_NAME]
+                self._group_sync_slot = int(user_input.get(CONF_SYNC_SLOT, DEFAULT_SYNC_SLOT))
                 self._group_pending = members
                 self._group_members = []
                 return await self.async_step_group_position()
@@ -302,6 +310,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_MEMBERS): SelectSelector(
                         SelectSelectorConfig(options=options, multiple=True, mode=SelectSelectorMode.LIST)
                     ),
+                    vol.Optional(CONF_SYNC_SLOT, default=DEFAULT_SYNC_SLOT): _sync_slot_selector(),
                 }
             ),
             errors=errors,
@@ -325,6 +334,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_ENTRY_TYPE: ENTRY_TYPE_GROUP,
                         CONF_NAME: self._group_name,
                         CONF_MEMBERS: self._group_members,
+                        CONF_SYNC_SLOT: self._group_sync_slot,
                     },
                 )
 
@@ -350,6 +360,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         self._group_pending: list[str] = []
         self._group_members: list[dict[str, Any]] = []
         self._group_name: str = ""
+        self._group_sync_slot: int = DEFAULT_SYNC_SLOT
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Dispatch on entry type."""
@@ -394,10 +405,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 errors[CONF_MEMBERS] = "need_two_panels"
             else:
                 self._group_name = user_input[CONF_NAME]
+                self._group_sync_slot = int(user_input.get(CONF_SYNC_SLOT, DEFAULT_SYNC_SLOT))
                 self._group_pending = members
                 self._group_members = []
                 return await self.async_step_group_position()
 
+        current_slot = self._entry.options.get(CONF_SYNC_SLOT, self._entry.data.get(CONF_SYNC_SLOT, DEFAULT_SYNC_SLOT))
         options = [
             SelectOptionDict(value=entry.entry_id, label=f"{entry.title} ({entry.data.get(CONF_ADDRESS)})")
             for entry in panels
@@ -411,6 +424,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     vol.Required(CONF_MEMBERS, default=default_members): SelectSelector(
                         SelectSelectorConfig(options=options, multiple=True, mode=SelectSelectorMode.LIST)
                     ),
+                    vol.Optional(CONF_SYNC_SLOT, default=int(current_slot)): _sync_slot_selector(),
                 }
             ),
             errors=errors,
@@ -434,7 +448,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             if not self._group_pending:
                 return self.async_create_entry(
                     title="",
-                    data={CONF_NAME: self._group_name, CONF_MEMBERS: self._group_members},
+                    data={
+                        CONF_NAME: self._group_name,
+                        CONF_MEMBERS: self._group_members,
+                        CONF_SYNC_SLOT: self._group_sync_slot,
+                    },
                 )
 
         entry_id = self._group_pending[0]

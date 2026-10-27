@@ -41,11 +41,22 @@ class CompositeDisplay(Display):
         name: str,
         members: list[MemberSpec],
         resolver: Callable[[str], PanelDisplay | None],
+        sync_slot: int | None = None,
     ) -> None:
-        """Initialise the composite display."""
+        """Initialise the composite display.
+
+        Args:
+            name: Display name
+            members: Panels and their grid positions
+            resolver: Returns the PanelDisplay for a member key (None when not loaded)
+            sync_slot: When set (1-255), animations are first stored in this slot on
+                every panel and then started with one simultaneous show-slot command,
+                so all panels begin playing at the same moment. None/0 disables this.
+        """
         self._name = name
         self._members = list(members)
         self._resolver = resolver
+        self._sync_slot = int(sync_slot) if sync_slot else None
         self._listeners: list[Callable[[], None]] = []
         self._panel_unsubs: dict[str, Callable[[], None]] = {}
 
@@ -56,6 +67,11 @@ class CompositeDisplay(Display):
     def members(self) -> list[MemberSpec]:
         """Return the configured members."""
         return list(self._members)
+
+    @property
+    def sync_slot(self) -> int | None:
+        """Return the slot used for synchronised animation start (None = off)."""
+        return self._sync_slot
 
     def _resolve_all(self) -> dict[str, PanelDisplay]:
         found: dict[str, PanelDisplay] = {}
@@ -218,17 +234,30 @@ class CompositeDisplay(Display):
     ) -> None:
         """Slice every frame over the panels and upload one GIF per panel.
 
-        The panels start playing as soon as their own upload finishes, so
-        playback across panels is synchronised on a best-effort basis.
+        With ``sync_slot`` configured (and no explicit ``save_slot``) the GIFs are
+        stored in that slot on every panel first; once all uploads are done a
+        show-slot command is sent to all panels at the same time so the
+        animations start together. Otherwise every panel starts playing as soon
+        as its own upload finishes.
         """
         canvases = [self._prepare_canvas(frame) for frame in frames]
+        tiles = self._tiles()
+        synchronised = self._sync_slot is not None and not save_slot
+        upload_slot = self._sync_slot if synchronised else save_slot
+
         calls = []
-        for tile, panel in self._tiles():
+        for tile, panel in tiles:
             tile_frames = [canvas.crop(tile.box) for canvas in canvases]
             calls.append(
-                (panel.name, panel.async_show_gif(tile_frames, durations, loop=loop, save_slot=save_slot))
+                (panel.name, panel.async_show_gif(tile_frames, durations, loop=loop, save_slot=upload_slot))
             )
         await self._gather(calls)
+
+        if synchronised:
+            _LOGGER.debug("Starting animation from slot %d on all panels of '%s'", upload_slot, self._name)
+            await self._gather(
+                [(panel.name, panel.async_call("show_slot", upload_slot)) for _, panel in tiles]
+            )
 
     async def async_show_frame(self, image: Image.Image, brightness: int = 100) -> None:
         """Stream a frame to all panels concurrently."""

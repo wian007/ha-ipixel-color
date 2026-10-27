@@ -32,10 +32,11 @@
       },
       "group": {
         "title": "Combined display",
-        "description": "Select the panels that together form one large display. In the next steps you place each panel on a grid (row/column).",
+        "description": "Select the panels that together form one large display. In the next steps you place each panel on a grid (row/column). GIFs are first stored in the given slot on every panel and then started simultaneously so the animation runs in sync on all panels.",
         "data": {
           "name": "Name",
-          "members": "Panels"
+          "members": "Panels",
+          "sync_slot": "Animation sync slot (0 = off)"
         }
       },
       "group_position": {
@@ -74,10 +75,11 @@
       },
       "group": {
         "title": "Combined display",
-        "description": "Change the panels of this combined display. In the next steps you place each panel on the grid.",
+        "description": "Change the panels of this combined display. In the next steps you place each panel on the grid. GIFs are first stored in the given slot on every panel and then started simultaneously so the animation runs in sync on all panels.",
         "data": {
           "name": "Name",
-          "members": "Panels"
+          "members": "Panels",
+          "sync_slot": "Animation sync slot (0 = off)"
         }
       },
       "group_position": {

@@ -56,19 +56,21 @@ def make_panel_entry(address: str, name: str, entry_id: str | None = None) -> Mo
     )
 
 
-def make_group_entry(name: str, members: list[tuple[str, int, int]], entry_id: str | None = None) -> MockConfigEntry:
+def make_group_entry(
+    name: str,
+    members: list[tuple[str, int, int]],
+    entry_id: str | None = None,
+    sync_slot: int | None = None,
+) -> MockConfigEntry:
     """Create a combined display entry from (entry_id, row, col) tuples."""
-    return MockConfigEntry(
-        domain=DOMAIN,
-        title=name,
-        version=2,
-        entry_id=entry_id,
-        data={
-            CONF_ENTRY_TYPE: ENTRY_TYPE_GROUP,
-            CONF_NAME: name,
-            CONF_MEMBERS: [
-                {CONF_MEMBER_ENTRY_ID: member_id, CONF_ROW: row, CONF_COL: col}
-                for member_id, row, col in members
-            ],
-        },
-    )
+    data = {
+        CONF_ENTRY_TYPE: ENTRY_TYPE_GROUP,
+        CONF_NAME: name,
+        CONF_MEMBERS: [
+            {CONF_MEMBER_ENTRY_ID: member_id, CONF_ROW: row, CONF_COL: col}
+            for member_id, row, col in members
+        ],
+    }
+    if sync_slot is not None:
+        data["sync_slot"] = sync_slot
+    return MockConfigEntry(domain=DOMAIN, title=name, version=2, entry_id=entry_id, data=data)

@@ -100,8 +100,12 @@ display's *Width* sensor. Panels that are temporarily unavailable are skipped; t
 *Panels loaded* sensor shows how many are online. Change panels or positions later
 through **Configure** on the combined display.
 
-> GIF playback over several panels is synchronised on a best-effort basis: every
-> panel starts its animation when its own upload has finished.
+**Synchronised animations.** A GIF on a combined display is sliced into one GIF per
+panel. By default (option *Animation sync slot* = 1) those GIFs are first stored in
+that slot on every panel and, once all uploads have finished, started with a single
+simultaneous show-slot command so the panels begin playing together. Set the option
+to 0 to upload directly instead (each panel then starts as soon as its own upload is
+done). The slot's previous content on the panels is overwritten.
 
 ## Entities
 

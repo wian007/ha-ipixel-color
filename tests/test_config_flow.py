@@ -89,7 +89,7 @@ async def test_group_flow(hass: HomeAssistant, fake_bluetooth):
     assert result["errors"] == {CONF_MEMBERS: "need_two_panels"}
 
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_NAME: "Wall", CONF_MEMBERS: ["left", "right"]}
+        result["flow_id"], {CONF_NAME: "Wall", CONF_MEMBERS: ["left", "right"], "sync_slot": 2}
     )
     assert result["step_id"] == "group_position"
     assert result["description_placeholders"]["panel"] == "Left"
@@ -105,6 +105,7 @@ async def test_group_flow(hass: HomeAssistant, fake_bluetooth):
             {CONF_MEMBER_ENTRY_ID: "left", CONF_ROW: 0, CONF_COL: 0},
             {CONF_MEMBER_ENTRY_ID: "right", CONF_ROW: 0, CONF_COL: 1},
         ],
+        "sync_slot": 2,
     }
 
 
@@ -144,6 +145,7 @@ async def test_group_options_flow(hass: HomeAssistant, fake_bluetooth):
     result = await hass.config_entries.options.async_configure(result["flow_id"], {CONF_ROW: 1, CONF_COL: 0})
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert group.options[CONF_MEMBERS][1] == {CONF_MEMBER_ENTRY_ID: "right", CONF_ROW: 1, CONF_COL: 0}
+    assert group.options["sync_slot"] == 1  # default kept
 
 
 async def test_panel_options_flow(hass: HomeAssistant, fake_bluetooth):

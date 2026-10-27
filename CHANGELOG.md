@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.0] - 2026-09-12
 
 ### Added
+- Combined displays start animations synchronously: GIFs are stored in a configurable slot on
+  every panel and then shown with one simultaneous show-slot command (*Animation sync slot*
+  option, default 1, 0 = off).
 - **Combined displays**: group several panels on a grid (row/column) and drive them as one
   large screen. Rendered text, images/GIFs, `draw_visuals` and pixel services are sliced over
   the panels and uploaded in parallel; native features (power, brightness, clock, native text,
