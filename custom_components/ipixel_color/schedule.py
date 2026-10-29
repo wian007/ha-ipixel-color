@@ -15,20 +15,21 @@ import asyncio
 import logging
 import random
 import uuid
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timedelta
-from typing import Any, TYPE_CHECKING
 from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timedelta
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
     from .runtime import iPIXELRuntime
 
-from homeassistant.helpers.storage import Store
 from homeassistant.helpers.event import (
     async_track_time_interval,
 )
+from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -122,7 +123,7 @@ class TimeSlot:
         if not self.enabled:
             return False
 
-        now = datetime.now()
+        now = dt_util.now()  # Home Assistant timezone, not the OS clock
         day_name = now.strftime("%a").lower()
 
         if day_name not in self.days:
@@ -165,7 +166,7 @@ class PowerSchedule:
         if not self.enabled:
             return True  # Default to on if schedule disabled
 
-        now = datetime.now()
+        now = dt_util.now()  # Home Assistant timezone, not the OS clock
         day_name = now.strftime("%a").lower()
 
         if day_name not in self.days:

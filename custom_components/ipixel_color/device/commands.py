@@ -1,5 +1,6 @@
 """Command building for iPIXEL Color devices."""
 from __future__ import annotations
+
 import logging
 
 from pypixelcolor.lib.transport.send_plan import SendPlan, Window
@@ -855,8 +856,9 @@ def image_to_rgb_bytes(
     Returns:
         Raw RGB bytes [R,G,B,R,G,B,...] with length = width * height * 3
     """
-    from PIL import Image
     import io
+
+    from PIL import Image
 
     # Load image
     img = Image.open(io.BytesIO(image_bytes))

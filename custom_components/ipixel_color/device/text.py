@@ -1,7 +1,6 @@
 """Native text display plans using pypixelcolor."""
 from __future__ import annotations
 
-
 from pypixelcolor.commands.send_text import send_text
 from pypixelcolor.lib.device_info import DeviceInfo
 from pypixelcolor.lib.transport.send_plan import SendPlan

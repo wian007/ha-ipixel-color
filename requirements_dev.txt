@@ -1,0 +1,29 @@
+# Development dependencies for the iPIXEL Color integration.
+#   python -m venv .venv && . .venv/bin/activate && pip install -r requirements_dev.txt
+# or: make setup
+#
+# pytest-homeassistant-custom-component pins a matching Home Assistant core.
+pytest-homeassistant-custom-component>=0.13.100
+tzdata
+
+# Runtime requirements (mirrors manifest.json)
+bleak-retry-connector>=3.5.0
+pillow>=10.0.0
+pypixelcolor>=0.5.0
+
+# Home Assistant components pulled in by the tests (bluetooth, http, camera, ...)
+bluetooth-adapters
+bluetooth-auto-recovery
+bluetooth-data-tools
+habluetooth
+dbus-fast
+pyserial
+pyudev
+aiohttp_cors
+home-assistant-frontend
+PyTurboJPEG
+numpy
+
+# Tooling
+pytest-cov
+ruff

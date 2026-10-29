@@ -1,7 +1,6 @@
 """Clock mode commands for iPIXEL Color devices using pypixelcolor."""
 from __future__ import annotations
 
-
 from pypixelcolor.commands.set_clock_mode import set_clock_mode
 from pypixelcolor.commands.set_time import set_time
 

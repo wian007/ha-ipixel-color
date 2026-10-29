@@ -1,0 +1,16 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+extend-exclude = ["custom_components/ipixel_color/www"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "I"]
+ignore = ["E501", "B905", "W293", "E402", "E731", "UP006", "UP007"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["custom_components.ipixel_color"]
