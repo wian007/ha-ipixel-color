@@ -151,7 +151,7 @@ class BluetoothClient:
                 raise iPIXELConnectionError(
                     f"iPIXEL device {self._address} not found: {err}"
                 ) from err
-            except (BleakError, asyncio.TimeoutError, OSError) as err:
+            except (TimeoutError, BleakError, OSError) as err:
                 raise iPIXELConnectionError(
                     f"Failed to connect to iPIXEL device {self._address}: {err}"
                 ) from err
@@ -160,7 +160,7 @@ class BluetoothClient:
 
             try:
                 await client.start_notify(NOTIFY_UUID, self._on_notify)
-            except (BleakError, asyncio.TimeoutError) as err:
+            except (TimeoutError, BleakError) as err:
                 _LOGGER.warning(
                     "Could not enable notifications on %s: %s (ACKs will time out)",
                     self._address,
@@ -199,10 +199,10 @@ class BluetoothClient:
             if client.is_connected:
                 try:
                     await client.stop_notify(NOTIFY_UUID)
-                except (BleakError, asyncio.TimeoutError):
+                except (TimeoutError, BleakError):
                     pass
                 await client.disconnect()
-        except (BleakError, asyncio.TimeoutError, OSError) as err:
+        except (TimeoutError, BleakError, OSError) as err:
             _LOGGER.debug("Error while disconnecting from %s: %s", self._address, err)
 
     def _on_disconnected(self, _client: BleakClientWithServiceCache) -> None:
@@ -329,7 +329,7 @@ class BluetoothClient:
     async def _async_wait(self, awaitable: Awaitable[Any], what: str) -> Any:
         try:
             result = await asyncio.wait_for(awaitable, timeout=self._ack_timeout)
-        except asyncio.TimeoutError as err:
+        except TimeoutError as err:
             raise iPIXELTimeoutError(
                 f"Timeout waiting for {what} from {self._address}"
             ) from err

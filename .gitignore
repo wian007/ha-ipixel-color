@@ -175,7 +175,6 @@ homeassistant/
 test_font_rendering.py
 
 # Local development
-.devcontainer/
 *.code-workspace
 
 # Temporary files

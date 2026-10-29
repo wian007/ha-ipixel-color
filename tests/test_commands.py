@@ -12,7 +12,11 @@ from custom_components.ipixel_color.device.commands import (
     make_power_command,
     make_raw_rgb_chunk_command,
 )
-from custom_components.ipixel_color.device.image import frames_to_gif_bytes, image_to_png_bytes, split_gif_frames
+from custom_components.ipixel_color.device.image import (
+    frames_to_gif_bytes,
+    image_to_png_bytes,
+    split_gif_frames,
+)
 
 
 def test_power_and_brightness():

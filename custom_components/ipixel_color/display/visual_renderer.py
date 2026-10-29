@@ -15,17 +15,16 @@ from typing import Any
 from PIL import Image, ImageDraw, ImageFont
 
 from ..color import hex_to_rgb
-from ..fonts import get_font_path
 from ..const import (
-    ELEMENT_TEXT,
-    ELEMENT_TEXTSCROLL,
-    ELEMENT_TEXTLONG,
     ELEMENT_ICON,
     ELEMENT_IMAGE,
     ELEMENT_PIXELS,
+    ELEMENT_TEXT,
+    ELEMENT_TEXTLONG,
+    ELEMENT_TEXTSCROLL,
 )
-from .font_cache import get_font_cache, FontCache
-
+from ..fonts import get_font_path
+from .font_cache import FontCache, get_font_cache
 
 _LOGGER = logging.getLogger(__name__)
 

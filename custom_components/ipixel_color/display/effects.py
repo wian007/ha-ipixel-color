@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
-from PIL import Image, ImageFilter, ImageEnhance, ImageOps
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -165,8 +165,8 @@ def effect_desaturate(image: Image.Image) -> Image.Image:
 
 # === Shader-inspired procedural effects (ported from ipixel-shader GLSL) ===
 
-import math
 import colorsys
+import math
 
 
 def generate_plasma_wave(width: int, height: int, time: float = 0.0) -> Image.Image:

@@ -36,7 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Services accept `entity_id` as target and default to the only display when just one is
   configured (this also makes the bundled Lovelace cards work again).
 - Diagnostics download, Dutch translation, entity translation keys.
-- Test suite with a simulated panel (no hardware needed).
+- Test suite with a simulated panel (no hardware needed); `requirements_dev.txt`, `pyproject.toml`,
+  `Makefile` and a dev container for local development.
 
 ### Changed
 - Complete refactor around a `Display` abstraction (`PanelDisplay` / `CompositeDisplay`) and
@@ -51,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pypixelcolor` 0.5.0 or newer is required.
 
 ### Fixed
+- Time slots and the power schedule use the Home Assistant timezone instead of the OS clock.
 - Errors are raised to the UI/service caller instead of being logged and swallowed.
 - `send_mix_data` crashed with a `NameError` in the window builder.
 - Clock 24h / show date switches sent a display update on every start-up and lost their
