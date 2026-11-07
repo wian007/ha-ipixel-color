@@ -548,6 +548,79 @@ async def test_synchronised_show_slot_is_written_without_response(hass: HomeAssi
         assert panel.writes_without_response == 3, "show-slot and the two restart bursts skip the response"
 
 
+async def test_stages_follow_a_sensor_from_stored_slots(hass: HomeAssistant, fake_bluetooth, aioclient_mock, monkeypatch):
+    """set_stages stores the GIFs once; afterwards a sensor change is a single show-slot."""
+    monkeypatch.setattr("custom_components.ipixel_color.display.composite.RESTART_BLANK_SECONDS", 0.001)
+    monkeypatch.setattr("custom_components.ipixel_color.runtime.REALIGN_DELAY_SECONDS", 0.1)
+    await _setup_panel(hass, fake_bluetooth, LEFT, "Left", "left", DEVICE_TYPE_32X32)
+    await _setup_panel(hass, fake_bluetooth, RIGHT, "Right", "right", DEVICE_TYPE_32X32)
+    group = make_group_entry("Wall", [("left", 0, 0), ("right", 0, 1)], entry_id="wall")
+    group.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(group.entry_id)
+    await hass.async_block_till_done()
+    gif = await _gif_bytes((64, 32))
+    for i in range(3):
+        aioclient_mock.get(f"http://x/stage{i}.gif", content=gif, headers={"Content-Type": "image/gif"})
+    hass.states.async_set("sensor.load", "150")
+    panels = [fake_bluetooth.panels[LEFT], fake_bluetooth.panels[RIGHT]]
+    for p in panels:
+        p.clear()
+
+    await hass.services.async_call(
+        DOMAIN,
+        "set_stages",
+        {
+            "entity_id": _entity(hass, "switch", "group_wall_power"),
+            "stages": "http://x/stage0.gif\nhttp://x/stage1.gif\nhttp://x/stage2.gif",
+            "source": "sensor.load",
+            "thresholds": "100, 200",
+            "base_slot": 10,
+        },
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    for p in panels:
+        slots = sorted({f.data[14] for f in p.frames_for((0x03, 0x00))})
+        assert slots == [10, 11, 12], "every stage stored in its own slot on every panel"
+        # 150 is at/above the first threshold only -> stage 1 -> slot 11 shown
+        assert bytes([7, 0, 8, 0x80, 1, 0, 11]) in [f.data for f in p.frames]
+        p.clear()
+
+    # A sensor change within the same stage does nothing; crossing a threshold shows the next slot without an upload.
+    hass.states.async_set("sensor.load", "180")
+    await hass.async_block_till_done()
+    assert all(p.frames == [] for p in panels)
+    hass.states.async_set("sensor.load", "250")
+    await _settle(hass)
+    for p in panels:
+        assert not p.frames_for((0x03, 0x00)), "no upload"
+        assert bytes([7, 0, 8, 0x80, 1, 0, 12]) in [f.data for f in p.frames]
+        p.clear()
+
+    # The mapping survives a reload of the display: the stage follows the sensor again, without uploads.
+    assert await hass.config_entries.async_reload(group.entry_id)
+    await hass.async_block_till_done()
+    for p in panels:
+        p.clear()
+    hass.states.async_set("sensor.load", "50")
+    await _settle(hass)
+    for p in panels:
+        assert not p.frames_for((0x03, 0x00))
+        assert bytes([7, 0, 8, 0x80, 1, 0, 10]) in [f.data for f in p.frames]
+
+    # show_stage picks one by hand; clear_stages stops following.
+    for p in panels:
+        p.clear()
+    await hass.services.async_call(DOMAIN, "show_stage", {"entity_id": _entity(hass, "switch", "group_wall_power"), "stage": 2}, blocking=True)
+    assert all(bytes([7, 0, 8, 0x80, 1, 0, 12]) in [f.data for f in p.frames] for p in panels)
+    await hass.services.async_call(DOMAIN, "clear_stages", {"entity_id": _entity(hass, "switch", "group_wall_power")}, blocking=True)
+    for p in panels:
+        p.clear()
+    hass.states.async_set("sensor.load", "500")
+    await _settle(hass)
+    assert all(p.frames == [] for p in panels)
+
+
 async def test_migrate_v1_entry(hass: HomeAssistant, fake_bluetooth):
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 

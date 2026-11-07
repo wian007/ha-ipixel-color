@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Staged animations: `set_stages` stores a series of GIFs in slots on the panels once and
+  follows a numeric entity with thresholds; a change of stage is a single show-slot command
+  (instant, started in step on a combined display) instead of an upload. `show_stage` picks a
+  stage by hand, `clear_stages` stops following. The mapping survives restarts.
 - Animations on a combined display run in step: after the synchronised start, and every five
   minutes (rounded to whole loops), the panels are blanked and released with two bursts so they
   all resume at the same moment; a plain show-slot does not restart a slot that is already

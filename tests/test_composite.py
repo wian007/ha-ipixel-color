@@ -284,13 +284,19 @@ async def test_looping_gif_is_resynchronised_periodically(monkeypatch):
     assert restarts(panels["left"]) == count
 
 
-async def test_show_slot_service_uses_the_synchronised_burst():
+async def test_show_slot_service_uses_the_synchronised_burst(monkeypatch):
+    from custom_components.ipixel_color.display import composite as composite_module
+
+    monkeypatch.setattr(composite_module, "RESTART_BLANK_SECONDS", 0.001)
     panels = {"left": StubPanel("left", 32, 32), "right": StubPanel("right", 32, 32)}
     composite = make_composite(panels, [MemberSpec("left", 0, 0), MemberSpec("right", 0, 1)], sync_slot=1)
     await composite.async_call("show_slot", 4)
     for panel in panels.values():
-        assert panel.calls == [("show_slot", (4,))]
+        # burst, then the restart in step so the stored animation runs together
+        assert panel.calls == [("show_slot", (4,)), ("set_diy_mode", (1,)), ("set_diy_mode", (0,))]
     assert composite.content_persists
+    assert composite._resync_task is not None  # noqa: SLF001
+    composite.shutdown()
 
 
 async def test_gif_synchronised_start_via_slot():

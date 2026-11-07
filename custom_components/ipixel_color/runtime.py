@@ -67,6 +67,7 @@ from .fonts import get_font_path
 if TYPE_CHECKING:
     from .display.animation_controller import AnimationController
     from .schedule import iPIXELScheduleManager
+    from .stages import StageManager
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -167,6 +168,7 @@ class iPIXELRuntime:
         self.display = display
         self.settings = DisplaySettings()
         self.schedule_manager: iPIXELScheduleManager | None = None
+        self.stage_manager: StageManager | None = None
         self.animation_controller: AnimationController | None = None
 
         self._last_frame: Image.Image | None = None
@@ -258,6 +260,10 @@ class iPIXELRuntime:
 
         self.schedule_manager = iPIXELScheduleManager(self.hass, self)
         await self.schedule_manager.async_load()
+        from .stages import StageManager
+
+        self.stage_manager = StageManager(self.hass, self)
+        await self.stage_manager.async_load()
 
         self._unsubs.append(self.display.add_listener(self._on_display_changed))
 
@@ -374,6 +380,8 @@ class iPIXELRuntime:
             self.animation_controller = None
         if self.schedule_manager is not None:
             await self.schedule_manager.async_shutdown()
+        if self.stage_manager is not None:
+            await self.stage_manager.async_shutdown()
         if isinstance(self.display, CompositeDisplay):
             self.display.shutdown()
         else:
@@ -854,6 +862,13 @@ class iPIXELRuntime:
         canvas = fit_to_canvas(image, width, height)
         await self.display.async_show_image(canvas, save_slot=save_slot)
         self.set_last_frame(canvas)
+
+    async def async_show_slot(self, slot: int) -> None:
+        """Show stored content from a slot (a wall starts all panels in step)."""
+        await self.display.async_call("show_slot", int(slot))
+        self._last_render = None
+        self._known_empty = False
+        self.set_last_frame(None)
 
     async def async_set_power(self, on: bool) -> None:
         """Set power and remember it."""

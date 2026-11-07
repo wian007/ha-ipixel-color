@@ -534,6 +534,88 @@ show_slot:
           max: 255
           mode: box
 
+set_stages:
+  name: Set stages
+  description: Store a series of GIFs/images in slots on the panels once (low to high) and, with a source entity and thresholds, switch between them automatically. Showing a stage is a single command, so changes are instant and start in step on a combined display.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
+  fields:
+    stages:
+      name: Stages
+      description: URLs or media-source ids, one per line (or a list), ordered from low to high
+      required: true
+      example: |
+        media-source://media_source/local/fire/fire_0.gif
+        media-source://media_source/local/fire/fire_1.gif
+        media-source://media_source/local/fire/fire_2.gif
+      selector:
+        text:
+          multiline: true
+    source:
+      name: Source
+      description: Numeric entity whose value selects the stage (optional)
+      required: false
+      selector:
+        entity:
+          domain:
+            - sensor
+            - number
+            - input_number
+    thresholds:
+      name: Thresholds
+      description: Ascending values at which the next stage starts; one fewer than the number of stages (e.g. "120, 200" for three stages)
+      required: false
+      example: "120, 200, 280, 360"
+      selector:
+        text:
+    base_slot:
+      name: First slot
+      description: The stages occupy this slot and the ones after it (slot 1 is used for synchronised uploads)
+      required: false
+      default: 10
+      selector:
+        number:
+          min: 2
+          max: 250
+    upload:
+      name: Upload
+      description: Upload the GIFs to the slots (off = the slots already hold them; only the mapping is set)
+      required: false
+      default: true
+      selector:
+        boolean:
+
+show_stage:
+  name: Show stage
+  description: Show one of the stored stages now.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
+  fields:
+    stage:
+      name: Stage
+      description: Index of the stage (0 = first)
+      required: true
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 50
+
+clear_stages:
+  name: Clear stages
+  description: Stop following the source entity and forget the stages (the slots stay on the panels).
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
+
 sync_animation:
   name: Synchronise animation
   description: Restart the animation on all panels of a combined display at the same moment (blanks them for a fraction of a second). Use when the panels of a wall have drifted apart.

@@ -59,6 +59,9 @@ SERVICE_SET_PIXELS = "set_pixels"
 SERVICE_CLEAR_DISPLAY = "clear_display"
 SERVICE_SHOW_SLOT = "show_slot"
 SERVICE_SYNC_ANIMATION = "sync_animation"
+SERVICE_SET_STAGES = "set_stages"
+SERVICE_SHOW_STAGE = "show_stage"
+SERVICE_CLEAR_STAGES = "clear_stages"
 SERVICE_DELETE_SLOT = "delete_slot"
 SERVICE_ERASE_DATA = "erase_data"
 SERVICE_SET_PROGRAM_MODE = "set_program_mode"
@@ -486,6 +489,59 @@ async def handle_sync_animation(runtime: iPIXELRuntime, call: ServiceCall) -> No
     await runtime.display.async_sync_animation()
 
 
+def _stage_manager(runtime: iPIXELRuntime):
+    if runtime.stage_manager is None:
+        raise HomeAssistantError(f"{runtime.name} has no stage manager")
+    return runtime.stage_manager
+
+
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [v.strip() for v in value.splitlines() if v.strip()] or [v.strip() for v in value.split(",") if v.strip()]
+    if isinstance(value, (list, tuple)):
+        return [str(v.get("media_content_id") if isinstance(v, dict) else v).strip() for v in value]
+    return []
+
+
+def _float_list(value: Any) -> list[float]:
+    if value in (None, ""):
+        return []
+    if isinstance(value, str):
+        return [float(v.strip()) for v in value.split(",") if v.strip()]
+    if isinstance(value, (list, tuple)):
+        return [float(v) for v in value]
+    return [float(value)]
+
+
+async def handle_set_stages(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Store a list of GIFs in slots once and (optionally) follow a sensor to switch between them."""
+    data = call.data
+    stages = _string_list(data.get("stages"))
+    if len(stages) < 2:
+        raise ServiceValidationError("stages needs at least two URLs or media ids (low to high)")
+    thresholds = _float_list(data.get("thresholds"))
+    source = data.get("source") or None
+    if source and len(thresholds) != len(stages) - 1:
+        raise ServiceValidationError(f"{len(stages)} stages need {len(stages) - 1} thresholds")
+    await _stage_manager(runtime).async_set_stages(
+        stages,
+        base_slot=int(data.get("base_slot", 10) or 10),
+        entity_id=source,
+        thresholds=thresholds,
+        upload=_bool(data.get("upload"), True),
+    )
+
+
+async def handle_show_stage(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Show one of the stored stages now."""
+    await _stage_manager(runtime).async_show_stage(int(call.data.get("stage", 0)))
+
+
+async def handle_clear_stages(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Stop following the source and forget the stages."""
+    await _stage_manager(runtime).async_clear()
+
+
 async def handle_show_slot(runtime: iPIXELRuntime, call: ServiceCall) -> None:
     """Show a stored slot."""
     await runtime.display.async_call("show_slot", int(call.data.get("slot", 0)))
@@ -702,6 +758,9 @@ SERVICES: dict[str, tuple[ServiceHandler, vol.Schema]] = {
     SERVICE_CLEAR_DISPLAY: (handle_clear_display, _schema()),
     SERVICE_SHOW_SLOT: (handle_show_slot, _schema()),
     SERVICE_SYNC_ANIMATION: (handle_sync_animation, _schema()),
+    SERVICE_SET_STAGES: (handle_set_stages, _schema()),
+    SERVICE_SHOW_STAGE: (handle_show_stage, _schema()),
+    SERVICE_CLEAR_STAGES: (handle_clear_stages, _schema()),
     SERVICE_DELETE_SLOT: (handle_delete_slot, _schema()),
     SERVICE_ERASE_DATA: (handle_erase_data, _schema()),
     SERVICE_SET_PROGRAM_MODE: (handle_set_program_mode, _schema()),

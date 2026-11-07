@@ -337,10 +337,13 @@ class CompositeDisplay(Display):
     def _start_resync(self, tiles: list[tuple[Tile, PanelDisplay]], slot: int, durations: list[int]) -> None:
         """Restart the animation on every panel together, once per whole number of loops."""
         self._cancel_resync()
-        if GIF_RESYNC_SECONDS <= 0 or not durations:
+        if GIF_RESYNC_SECONDS <= 0:
             return
-        loop_ms = max(1, sum(max(10, int(d)) for d in durations))
-        interval = math.ceil(GIF_RESYNC_SECONDS * 1000 / loop_ms) * loop_ms / 1000
+        if durations:
+            loop_ms = max(1, sum(max(10, int(d)) for d in durations))
+            interval = math.ceil(GIF_RESYNC_SECONDS * 1000 / loop_ms) * loop_ms / 1000
+        else:  # loop length unknown (stored slot): plain interval
+            interval = float(GIF_RESYNC_SECONDS)
         self._resync_task = asyncio.get_running_loop().create_task(self._async_resync_loop(tiles, slot, interval))
 
     async def _async_resync_loop(self, tiles: list[tuple[Tile, PanelDisplay]], slot: int, interval: float) -> None:
@@ -511,6 +514,10 @@ class CompositeDisplay(Display):
                 raise iPIXELNotAvailableError(f"No panels of combined display '{self._name}' are available")
             await self._async_burst(tiles, method, *args)
             if method == "show_slot":
+                # Showing a stored slot is how pre-uploaded content is switched
+                # instantly; start it in step and keep it in step like a fresh GIF.
+                await self._async_restart_in_step(tiles)
+                self._start_resync(tiles, int(args[0]), [])
                 self._content_in_slot = True
             return
         await self._broadcast("async_call", method, *args, **kwargs)

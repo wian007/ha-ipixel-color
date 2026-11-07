@@ -263,9 +263,11 @@ They are available for rendered text; for native text mode the built-in
 
 ## Examples
 
-- `examples/homelab-fire-automation.yaml` with `tools/generate_fire_gifs.py`: flames on a 2x2 wall
-  whose height follows a metric (five pre-rendered GIFs in the media folder, one upload per
-  class change, started in step on all panels).
+- Flames whose height follows a metric: render five GIFs with `tools/generate_fire_gifs.py`
+  into the media folder, then call `ipixel_color.set_stages` once with the five media ids, the
+  sensor and four thresholds. The GIFs are stored in slots on the panels; every change of class
+  is a single command and starts in step on a combined display. See
+  `examples/homelab-fire-stages.yaml`.
 
 ## Development
 

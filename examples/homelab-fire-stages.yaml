@@ -1,0 +1,26 @@
+# Flames on a 2x2 iPIXEL wall whose height follows a load metric, using
+# stored slots: the GIFs are uploaded once, switching is a single command.
+#
+# 1. Render the animations into the Home Assistant media folder:
+#        python tools/generate_fire_gifs.py /media/fire
+# 2. Call this service once (Developer tools > Actions, YAML mode). Adjust
+#    the entity and the thresholds (one fewer than the number of stages).
+#    The mapping is stored; after a restart the wall keeps following the
+#    sensor without uploading anything again.
+action: ipixel_color.set_stages
+target:
+  entity_id: camera.combined_display_voorbeeld
+data:
+  stages:
+    - media-source://media_source/local/fire/fire_0.gif
+    - media-source://media_source/local/fire/fire_1.gif
+    - media-source://media_source/local/fire/fire_2.gif
+    - media-source://media_source/local/fire/fire_3.gif
+    - media-source://media_source/local/fire/fire_4.gif
+  source: sensor.homelab_totaal_vermogen
+  thresholds: "120, 200, 280, 360"
+  base_slot: 10
+# Later, to pick a stage by hand:
+#   action: ipixel_color.show_stage   data: {stage: 4}
+# To stop following the sensor:
+#   action: ipixel_color.clear_stages
