@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Burst commands (synchronised show-slot and the in-step restart) wait for the panel's own
   acknowledgement and are sent again as confirmed writes when it does not arrive, so a panel can
   no longer miss a switch and stay on the previous content.
+- `show_slot` and `show_stage` switch without blanking (every panel starts the new slot fresh at
+  the burst); `in_step: true` adds the blank-and-release restart for re-showing a slot that is
+  already playing.
+- A tile of an animation that never changes (the dark top of a low fire) is stored as a still;
+  it used to fail to encode, leaving those slots empty on the affected panels.
 - Staged animations: `set_stages` stores a series of GIFs in slots on the panels once and
   follows a numeric entity with thresholds; a change of stage is a single show-slot command
   (instant, started in step on a combined display) instead of an upload. `show_stage` picks a
