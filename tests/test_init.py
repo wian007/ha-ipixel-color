@@ -13,7 +13,7 @@ from homeassistant.helpers import entity_registry as er
 
 from custom_components.ipixel_color.const import DOMAIN
 
-from .conftest import make_group_entry, make_panel_entry
+from .conftest import get_device, make_group_entry, make_panel_entry
 from .fake_panel import DEVICE_TYPE_32X32, DEVICE_TYPE_64X16
 
 LEFT = "AA:BB:CC:DD:EE:01"
@@ -53,10 +53,11 @@ async def test_panel_setup_creates_entities(hass: HomeAssistant, fake_bluetooth)
     assert hass.states.get(_entity(hass, "text", f"{LEFT}_text_display")).state == ""
     assert hass.states.get(_entity(hass, "select", f"{LEFT}_mode_select")).state == "textimage"
 
-    # Connecting only queried the device info; nothing else was sent at startup.
+    # Connecting only queried the device info; nothing else was sent at startup
+    # (auto update is off, so there is nothing to restore).
     assert [f.command for f in panel.frames] == [(1, 0x80)]
 
-    device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, LEFT)})
+    device = get_device(hass, LEFT, "left")
     assert device is not None and device.model == "LED Matrix 64x16"
 
     assert await hass.config_entries.async_unload(entry.entry_id)
@@ -166,7 +167,7 @@ async def test_service_target_by_device_and_entity(hass: HomeAssistant, fake_blu
     with pytest.raises(HomeAssistantError):
         await hass.services.async_call(DOMAIN, "sync_time", {}, blocking=True)
 
-    device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, RIGHT)})
+    device = get_device(hass, RIGHT, "right")
     await hass.services.async_call(DOMAIN, "set_brightness", {"device_id": device.id, "level": 77}, blocking=True)
     assert right.frames[-1].data == bytes([5, 0, 4, 0x80, 77]) and not left.frames
 
@@ -253,6 +254,19 @@ async def test_panel_not_reachable_retries(hass: HomeAssistant, fake_bluetooth):
     assert not await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.SETUP_RETRY
+    # the failed client does not keep listening for advertisements
+    assert fake_bluetooth.callbacks.get(LEFT, []) == []
+
+
+async def test_device_info_failure_is_a_retry_not_an_error(hass: HomeAssistant, fake_bluetooth):
+    """A BLE error right after connecting (while reading device info) must retry setup."""
+    panel = fake_bluetooth.add(LEFT)
+    panel.max_write = 2  # every write fails: the device-info query cannot be sent
+    entry = make_panel_entry(LEFT, "Left", entry_id="left")
+    entry.add_to_hass(hass)
+    assert not await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.SETUP_RETRY
 
 
 async def test_reconnect_after_disconnect(hass: HomeAssistant, fake_bluetooth):
@@ -267,6 +281,81 @@ async def test_reconnect_after_disconnect(hass: HomeAssistant, fake_bluetooth):
     await hass.services.async_call(DOMAIN, "set_brightness", {"level": 33}, blocking=True)
     assert panel.connect_count == 2
     assert panel.frames[-1].data == bytes([5, 0, 4, 0x80, 33])
+
+
+async def test_large_writes_fall_back_to_smaller_chunks(hass: HomeAssistant, fake_bluetooth):
+    """A panel that drops the link on big writes gets the image with smaller writes."""
+    await _setup_panel(hass, fake_bluetooth, LEFT, "Left", "left")
+    panel = fake_bluetooth.panels[LEFT]
+    panel.max_write = 100
+    panel.clear()
+
+    await hass.services.async_call(DOMAIN, "display_text", {"text": "Hi", "mode": "textimage"}, blocking=True)
+    assert panel.last_image() is not None and panel.last_image().size == (64, 16)
+    assert panel.rejected_writes >= 1 and panel.connect_count >= 2
+
+    client = hass.data[DOMAIN]["left"].display.api._bluetooth
+    assert client.chunk_size <= 100
+    # The reduced size sticks: the next upload succeeds without another drop.
+    rejected = panel.rejected_writes
+    await hass.services.async_call(DOMAIN, "display_text", {"text": "Yo", "mode": "textimage"}, blocking=True)
+    assert panel.rejected_writes == rejected
+
+
+async def test_reconnect_clears_and_restores_content(hass: HomeAssistant, fake_bluetooth):
+    """When a panel advertises again after a dropped link it is cleared and repainted."""
+    await _setup_panel(hass, fake_bluetooth, LEFT, "Left", "left")
+    panel = fake_bluetooth.panels[LEFT]
+    await hass.services.async_call(DOMAIN, "display_text", {"text": "Hi", "mode": "textimage"}, blocking=True)
+    assert panel.frames_for((0x02, 0x00))
+    assert fake_bluetooth.callbacks[LEFT], "the client watches for advertisements"
+
+    # Link drops (power cycle); the panel advertises again.
+    panel.is_connected = False
+    panel.disconnected_callback(panel)
+    panel.clear()
+    fake_bluetooth.advertise(LEFT)
+    await _settle(hass)
+
+    commands = [f.command for f in panel.frames]
+    assert commands[0] == (1, 0x80), "reconnected"
+    assert (3, 0x80) in commands, "cleared"
+    assert commands.index((3, 0x80)) < commands.index((0x02, 0x00)), "cleared before repainting"
+    assert panel.connect_count == 2
+
+    # A panel that never showed HA content is reconnected but left alone.
+    fake_bluetooth.add(RIGHT)
+    await _setup_panel(hass, fake_bluetooth, RIGHT, "Right", "right")
+    right = fake_bluetooth.panels[RIGHT]
+    right.is_connected = False
+    right.disconnected_callback(right)
+    right.clear()
+    fake_bluetooth.advertise(RIGHT)
+    await _settle(hass)
+    assert [f.command for f in right.frames] == [(1, 0x80)]
+
+
+async def test_group_repaints_when_a_member_reconnects(hass: HomeAssistant, fake_bluetooth):
+    await _setup_panel(hass, fake_bluetooth, LEFT, "Left", "left")
+    await _setup_panel(hass, fake_bluetooth, RIGHT, "Right", "right")
+    group = make_group_entry("Wall", [("left", 0, 0), ("right", 0, 1)], entry_id="wall")
+    group.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(group.entry_id)
+    await hass.async_block_till_done()
+    await hass.services.async_call(
+        DOMAIN, "display_text", {"entity_id": _entity(hass, "text", "group_wall_text_display"), "text": "WALL", "mode": "textimage"}, blocking=True
+    )
+    left, right = fake_bluetooth.panels[LEFT], fake_bluetooth.panels[RIGHT]
+    left.clear()
+    right.clear()
+
+    right.is_connected = False
+    right.disconnected_callback(right)
+    fake_bluetooth.advertise(RIGHT)
+    await _settle(hass)
+    # the wall was cleared and painted again on both panels
+    assert (3, 0x80) in [f.command for f in right.frames]
+    assert right.last_image() is not None and left.last_image() is not None
 
 
 async def test_migrate_v1_entry(hass: HomeAssistant, fake_bluetooth):
@@ -479,9 +568,8 @@ async def test_service_target_by_area(hass: HomeAssistant, fake_bluetooth):
     await _setup_panel(hass, fake_bluetooth, LEFT, "Left", "left")
     await _setup_panel(hass, fake_bluetooth, RIGHT, "Right", "right")
     area = ar.async_get(hass).async_get_or_create("Living room")
-    device_registry = dr.async_get(hass)
-    device = device_registry.async_get_device(identifiers={(DOMAIN, RIGHT)})
-    device_registry.async_update_device(device.id, area_id=area.id)
+    device = get_device(hass, RIGHT, "right")
+    dr.async_get(hass).async_update_device(device.id, area_id=area.id)
 
     left, right = fake_bluetooth.panels[LEFT], fake_bluetooth.panels[RIGHT]
     left.clear()
@@ -512,11 +600,10 @@ async def test_panels_are_linked_via_group_device(hass: HomeAssistant, fake_blue
     assert await hass.config_entries.async_setup(group.entry_id)
     await hass.async_block_till_done()
 
-    registry = dr.async_get(hass)
-    group_device = registry.async_get_device(identifiers={(DOMAIN, "group_wall")})
-    for address in (LEFT, RIGHT):
-        assert registry.async_get_device(identifiers={(DOMAIN, address)}).via_device_id == group_device.id
+    group_device = get_device(hass, "group_wall", "wall")
+    for address, entry_id in ((LEFT, "left"), (RIGHT, "right")):
+        assert get_device(hass, address, entry_id).via_device_id == group_device.id
 
     assert await hass.config_entries.async_unload(group.entry_id)
     await hass.async_block_till_done()
-    assert registry.async_get_device(identifiers={(DOMAIN, LEFT)}).via_device_id is None
+    assert get_device(hass, LEFT, "left").via_device_id is None

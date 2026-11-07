@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Still images on a combined display are shown synchronised: stored in the sync slot on every
+  panel first, then one simultaneous show-slot command (as GIFs already were).
+- While placing the panels of a combined display, each panel shows the last four characters of
+  its address so it is clear which panel is which.
+- A panel that drops off (power cycle, out of range) is reconnected automatically as soon as it
+  advertises again; it is cleared and the content Home Assistant was showing is restored,
+  including the combined display it belongs to.
+- Panel option *BLE packet size* (0 = automatic).
+
+### Changed
+- BLE writes are 100 bytes through a Bluetooth proxy and 244 bytes on a local adapter, and are
+  halved automatically when bulk writes fail (GATT error 133). Uploads through an ESPHome proxy
+  are several times faster and no longer stall.
+- The ACK timeout grows with the size of an upload (large GIFs on several panels).
+- A combined display drives at most four panels at a time and retries a failed panel once before
+  the synchronised show command, which only goes to panels that received the new content.
+
+### Fixed
+- `services.yaml` could not be parsed (the `on` field of `set_power` was read as a boolean), so
+  the service descriptions were missing in the UI.
+- Works with Home Assistant 2026.x (tested against 2026.2 and 2026.9 / bleak 3): device
+  registry lookups use the config-entry scoped API where available, the version check of the
+  Lovelace card no longer reads the manifest on the event loop and native text no longer
+  resolves font files on the event loop.
+- Development setup follows Home Assistant's own dependency pins (`bleak`, `habluetooth`, ...)
+  and installs `aiousbwatcher` and `serialx`; the simulated panel works with bleak 1.x, 2.x
+  and 3.x and `make test` finds `libstdc++` on NixOS.
+
 ## [0.2.0] - 2026-09-12
 
 ### Added

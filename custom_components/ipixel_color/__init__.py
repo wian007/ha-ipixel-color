@@ -12,13 +12,16 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.loader import async_get_integration
 
 from .api import iPIXELAPI
 from .const import (
     CARD_URL_PATH,
     CONF_ACK_TIMEOUT,
     CONF_ADDRESS,
+    CONF_CHUNK_SIZE,
     CONF_COL,
     CONF_ENTRY_TYPE,
     CONF_HEIGHT,
@@ -102,6 +105,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await _async_register_frontend(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    runtime.async_schedule_startup_restore()
 
     if kind == ENTRY_TYPE_PANEL:
         # Groups resolve their members lazily; tell them a panel (re)appeared.
@@ -124,10 +128,12 @@ async def _async_create_panel_runtime(hass: HomeAssistant, entry: ConfigEntry) -
         name=name,
         ack_timeout=float(options.get(CONF_ACK_TIMEOUT, DEFAULT_ACK_TIMEOUT)),
         size_override=size_override,
+        chunk_size=int(options.get(CONF_CHUNK_SIZE, 0) or 0) or None,
     )
     try:
         await api.connect()
     except iPIXELError as err:
+        await api.disconnect()  # also stops the client from reconnecting in the background
         raise ConfigEntryNotReady(f"{name} ({address}): {err}") from err
 
     display = PanelDisplay(api, key=entry.entry_id, name=name)
@@ -163,22 +169,34 @@ def _create_group_runtime(hass: HomeAssistant, entry: ConfigEntry) -> iPIXELRunt
 
 
 @callback
+def async_get_device(registry: dr.DeviceRegistry, runtime: iPIXELRuntime) -> dr.DeviceEntry | None:
+    """Return the device registry entry of a display.
+
+    Home Assistant 2026.9 deprecated looking devices up by identifier alone
+    (identifiers are scoped to a config entry since then); older versions do
+    not have the replacement yet.
+    """
+    identifier = (DOMAIN, runtime.unique_prefix)
+    if hasattr(registry, "async_get_device_by_identifier"):
+        return registry.async_get_device_by_identifier(identifier, runtime.entry.entry_id)
+    return registry.async_get_device(identifiers={identifier})
+
+
+@callback
 def _async_link_group_devices(hass: HomeAssistant) -> None:
     """Mark panel devices as connected via their combined display (device registry)."""
-    from homeassistant.helpers import device_registry as dr
-
     registry = dr.async_get(hass)
     for runtime in list(hass.data.get(DOMAIN, {}).values()):
         if not isinstance(runtime, iPIXELRuntime) or not isinstance(runtime.display, CompositeDisplay):
             continue
-        group_device = registry.async_get_device(identifiers={(DOMAIN, runtime.unique_prefix)})
+        group_device = async_get_device(registry, runtime)
         if group_device is None:
             continue
         for member in runtime.display.members:
             panel_runtime = get_runtime(hass, member.key)
             if panel_runtime is None:
                 continue
-            panel_device = registry.async_get_device(identifiers={(DOMAIN, panel_runtime.unique_prefix)})
+            panel_device = async_get_device(registry, panel_runtime)
             if panel_device is not None and panel_device.via_device_id != group_device.id:
                 registry.async_update_device(panel_device.id, via_device_id=group_device.id)
 
@@ -186,17 +204,15 @@ def _async_link_group_devices(hass: HomeAssistant) -> None:
 @callback
 def _async_unlink_group_devices(hass: HomeAssistant, runtime: iPIXELRuntime) -> None:
     """Remove the via-device link of the panels of a combined display being unloaded."""
-    from homeassistant.helpers import device_registry as dr
-
     registry = dr.async_get(hass)
-    group_device = registry.async_get_device(identifiers={(DOMAIN, runtime.unique_prefix)})
+    group_device = async_get_device(registry, runtime)
     if group_device is None:
         return
     for member in runtime.display.members:  # type: ignore[union-attr]
         panel_runtime = get_runtime(hass, member.key)
         if panel_runtime is None:
             continue
-        panel_device = registry.async_get_device(identifiers={(DOMAIN, panel_runtime.unique_prefix)})
+        panel_device = async_get_device(registry, panel_runtime)
         if panel_device is not None and panel_device.via_device_id == group_device.id:
             registry.async_update_device(panel_device.id, via_device_id=None)
 
@@ -250,17 +266,16 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
         _LOGGER.warning("Could not serve the iPIXEL Lovelace card: %s", err)
         return
 
-    await _async_add_lovelace_resource(hass, f"{CARD_URL_PATH}?v={_card_version()}")
+    await _async_add_lovelace_resource(hass, f"{CARD_URL_PATH}?v={await _async_card_version(hass)}")
 
 
-def _card_version() -> str:
+async def _async_card_version(hass: HomeAssistant) -> str:
+    """Return the integration version (cache buster for the card URL)."""
     try:
-        import json
-
-        manifest = json.loads((Path(__file__).parent / "manifest.json").read_text())
-        return str(manifest.get("version", "0"))
+        integration = await async_get_integration(hass, DOMAIN)
     except Exception:  # noqa: BLE001
         return "0"
+    return str(integration.version or "0")
 
 
 async def _async_add_lovelace_resource(hass: HomeAssistant, url: str) -> None:
