@@ -288,9 +288,8 @@ async def test_gif_synchronised_start_via_slot():
     frames = [Image.new("RGB", (64, 32), (1, 1, 1)), Image.new("RGB", (64, 32), (2, 2, 2))]
     await composite.async_show_gif(frames, [50, 50])
     for panel in panels.values():
-        # uploaded into slot 3, blanked so every panel is idle, then started
-        # with one show_slot on every panel
-        assert panel.calls == [("gif", 3), ("clear",), ("show_slot", (3,))]
+        # uploaded into slot 3, then started with one show_slot on every panel
+        assert panel.calls == [("gif", 3), ("show_slot", (3,))]
 
     # An explicit slot bypasses the synchronised start.
     for panel in panels.values():
