@@ -366,6 +366,10 @@ class CompositeDisplay(Display):
 
         done = await self._run_on_tiles(self._tiles(), _upload)
         if synchronised:
+            # A panel that is already playing applies show-slot at its next
+            # frame boundary; a blanked (idle) panel starts at once. Blank them
+            # all first so they start like after a power cycle: together.
+            await self._gather([(panel.name, panel.async_clear()) for _, panel in done], [p for _, p in done])
             await self._async_show_slot_everywhere(done, upload_slot)
             if loop == 0 and len(frames) > 1:
                 self._start_resync(done, upload_slot, durations)
