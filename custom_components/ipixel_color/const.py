@@ -44,6 +44,10 @@ MAX_CONNECT_ATTEMPTS = 3
 # one there; local adapters handle several connections at once.
 PANEL_UPLOAD_CONCURRENCY = 4
 PROXY_UPLOAD_CONCURRENCY = 1
+# A looping animation on a combined display is restarted on all panels at
+# once about this often (rounded to whole loops) because the panels' own
+# clocks drift apart by roughly half a second per 20 minutes. 0 disables it.
+GIF_RESYNC_SECONDS = 60.0
 DEFAULT_ACK_TIMEOUT = 10.0
 # Extra ACK wait per kilobyte of upload: panels decode and store large GIFs
 # before they acknowledge, and a proxy shared by several panels is slower.
