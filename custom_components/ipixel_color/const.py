@@ -54,6 +54,10 @@ GIF_RESYNC_SECONDS = 300.0
 # already playing, but blanking (DIY mode 1) and leaving DIY mode again does,
 # and when both are sent as bursts every panel resumes at the same moment.
 RESTART_BLANK_SECONDS = 0.4
+# A burst command (written without link-layer response) must be acknowledged
+# by the panel within this time, otherwise it is sent again as a confirmed
+# write: unconfirmed writes can get lost on the way through a proxy.
+BURST_ACK_TIMEOUT = 0.6
 # After the panels of a combined display have all (re)connected, wait this
 # long for stragglers and then restart them in step once: connecting to a
 # panel stalls its animation for a moment, and the connects are staggered.

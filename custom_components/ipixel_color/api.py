@@ -13,7 +13,7 @@ from PIL import Image
 from pypixelcolor.lib.device_info import DeviceInfo
 
 from .bluetooth.client import BluetoothClient
-from .const import DEFAULT_ACK_TIMEOUT
+from .const import BURST_ACK_TIMEOUT, DEFAULT_ACK_TIMEOUT
 from .device.clock import make_clock_mode_command, make_time_command
 from .device.commands import (
     RAW_RGB_CHUNK_SIZE,
@@ -158,9 +158,21 @@ class iPIXELAPI:
     async def _send(
         self, plan_id: str, payload: bytes, *, requires_ack: bool = False, write_response: bool = True
     ) -> None:
-        await self._bluetooth.async_send_command(
-            plan_id, payload, requires_ack=requires_ack, write_response=write_response
-        )
+        if write_response:
+            await self._bluetooth.async_send_command(plan_id, payload, requires_ack=requires_ack)
+            return
+        # Burst: write without link-layer response so several panels get the
+        # command almost together, then insist on the panel's own acknowledgement
+        # and fall back to a confirmed write if it does not come. An unconfirmed
+        # write can be lost on the way through a Bluetooth proxy, and a panel that
+        # misses a show-slot would stay on the previous content.
+        try:
+            await self._bluetooth.async_send_command(
+                plan_id, payload, requires_ack=True, write_response=False, ack_timeout=BURST_ACK_TIMEOUT
+            )
+        except iPIXELTimeoutError:
+            _LOGGER.debug("%s did not acknowledge the burst '%s'; sending it confirmed", self._name, plan_id)
+            await self._bluetooth.async_send_command(plan_id, payload, requires_ack=requires_ack)
 
     async def _send_plan(self, plan) -> None:
         await self._bluetooth.async_send_plan(plan)

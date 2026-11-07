@@ -103,6 +103,10 @@ class FakePanel:
         if cmd in ((0x02, 0x00), (0x03, 0x00), (0x00, 0x01), (0x04, 0x00), (0x01, 0x02), (0x00, 0x02)):
             self._notify(bytes([0x05, 0x00, cmd[0], cmd[1], 0x01]))
             self._notify(bytes([0x05, 0x00, cmd[0], cmd[1], 0x03]))
+            return
+        # Every other short command is acknowledged with status 1, like the
+        # real panels do (e.g. 05 00 08 80 01 for show_slot, 05 00 04 01 01 for DIY mode).
+        self._notify(bytes([0x05, 0x00, cmd[0], cmd[1], 0x01]))
 
     # --- helpers for assertions ---------------------------------------------------
     def frames_for(self, command: tuple[int, int]) -> list[Frame]:

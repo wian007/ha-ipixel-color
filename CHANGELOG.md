@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Burst commands (synchronised show-slot and the in-step restart) wait for the panel's own
+  acknowledgement and are sent again as confirmed writes when it does not arrive, so a panel can
+  no longer miss a switch and stay on the previous content.
 - Staged animations: `set_stages` stores a series of GIFs in slots on the panels once and
   follows a numeric entity with thresholds; a change of stage is a single show-slot command
   (instant, started in step on a combined display) instead of an upload. `show_stage` picks a
