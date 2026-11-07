@@ -182,6 +182,10 @@ class iPIXELRuntime:
         self._heartbeat_unsub: CALLBACK_TYPE | None = None
         self._pixel_lit = False
         self._fun_mode_ready = False
+        # True only after HA itself blanked the display in this session. After a
+        # restart or a reconnect the panel may show anything, and the status
+        # pixel must never wipe content HA does not know about.
+        self._known_empty = False
         self._debouncer = Debouncer(
             hass,
             _LOGGER,
@@ -286,6 +290,8 @@ class iPIXELRuntime:
         else:
             _LOGGER.debug("%s reconnected; it showed no Home Assistant content", self.name)
         self._fun_mode_ready = False
+        if not restored:
+            self._known_empty = False
         self._refresh_status_pixel()
 
     async def async_restore_content(self) -> bool:
@@ -388,16 +394,21 @@ class iPIXELRuntime:
 
     async def async_clear(self) -> None:
         """Clear the display; it is empty afterwards (status pixel may appear)."""
-        await self.display.async_clear()
-        self._last_render = None
-        self._fun_mode_ready = True  # the blank command is "enter DIY mode, clear"
-        self._pixel_lit = False
-        self.set_last_frame(None)
+        async with self._update_lock:
+            await self.display.async_clear()
+            self._last_render = None
+            self._known_empty = True
+            self._fun_mode_ready = True  # the blank command is "enter DIY mode, clear"
+            self._pixel_lit = False
+            self.set_last_frame(None)
         self._refresh_status_pixel()
+
+    def _status_pixel_wanted(self) -> bool:
+        return self.settings.status_pixel and self._known_empty and self.display.available
 
     @callback
     def _refresh_status_pixel(self) -> None:
-        wanted = self.settings.status_pixel and self.is_empty and self.display.available
+        wanted = self._status_pixel_wanted()
         if wanted and self._heartbeat_unsub is None:
             self._heartbeat_unsub = async_track_time_interval(
                 self.hass, self._async_heartbeat, timedelta(seconds=STATUS_PIXEL_INTERVAL)
@@ -405,7 +416,7 @@ class iPIXELRuntime:
             self.hass.async_create_task(self._async_heartbeat())
         elif not wanted and self._heartbeat_unsub is not None:
             self._stop_heartbeat()
-            if self._pixel_lit and self.is_empty and self.display.available:
+            if self._pixel_lit and self._known_empty and self.display.available:
                 self.hass.async_create_task(self._async_heartbeat(lit=False))
 
     @callback
@@ -415,24 +426,30 @@ class iPIXELRuntime:
             self._heartbeat_unsub = None
 
     async def _async_heartbeat(self, _now: Any = None, *, lit: bool | None = None) -> None:
-        """Toggle the corner pixel; a pixel that stops changing means HA is gone."""
-        if lit is None and not (self.settings.status_pixel and self.is_empty):
-            return
-        if not self.display.available or not self.display.is_connected:
-            return
-        lit = (not self._pixel_lit) if lit is None else lit
-        try:
-            if not self._fun_mode_ready:
-                await self.display.async_set_fun_mode(True)
-                self._fun_mode_ready = True
-            await self.display.async_set_pixels(
-                [{"x": self.display.width - 1, "y": 0, "color": STATUS_PIXEL_COLOR if lit else "000000"}]
-            )
-        except iPIXELError as err:
-            self._fun_mode_ready = False
-            _LOGGER.debug("Status pixel of %s not updated: %s", self.name, err)
-            return
-        self._pixel_lit = lit
+        """Toggle the corner pixel; a pixel that stops changing means HA is gone.
+
+        Runs under the update lock and re-checks that the display is still
+        known to be empty, so it can never blank content that was rendered in
+        the meantime (entering fun mode clears the screen).
+        """
+        async with self._update_lock:
+            if not self._known_empty or not self.display.is_connected:
+                return
+            if lit is None and not self.settings.status_pixel:
+                return
+            lit = (not self._pixel_lit) if lit is None else lit
+            try:
+                if not self._fun_mode_ready:
+                    await self.display.async_set_fun_mode(True)
+                    self._fun_mode_ready = True
+                await self.display.async_set_pixels(
+                    [{"x": self.display.width - 1, "y": 0, "color": STATUS_PIXEL_COLOR if lit else "000000"}]
+                )
+            except iPIXELError as err:
+                self._fun_mode_ready = False
+                _LOGGER.debug("Status pixel of %s not updated: %s", self.name, err)
+                return
+            self._pixel_lit = lit
 
     # ------------------------------------------------------------------
     # Preview
@@ -581,6 +598,7 @@ class iPIXELRuntime:
                 raise
             self._last_error = None
             self._last_render = (text, mode, overrides)
+            self._known_empty = False
             self._fun_mode_ready = False
             self._pixel_lit = False
             self._refresh_status_pixel()

@@ -371,6 +371,11 @@ async def test_status_pixel_heartbeat_on_empty_display(hass: HomeAssistant, fake
         "switch", "turn_on", {ATTR_ENTITY_ID: _entity(hass, "switch", f"{LEFT}_status_pixel")}, blocking=True
     )
     await _settle(hass)
+    # HA does not know what the panel shows after start-up: nothing is sent.
+    assert panel.frames == [], "no heartbeat on a display HA did not blank itself"
+
+    await hass.services.async_call(DOMAIN, "clear_display", {}, blocking=True)
+    await _settle(hass)
     assert panel.frames_for((4, 1)), "fun mode enabled for pixel drawing"
     beats = pixel_frames()
     assert len(beats) >= 2, "the pixel toggles while the display is empty"

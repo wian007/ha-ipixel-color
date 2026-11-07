@@ -20,8 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entity supports *Browse media* (pick an image in the media browser and play it on the display),
   `display_image` has a *Media* picker, and `media-source://` ids are accepted wherever a URL is
   (including the image URL entity and schedules).
-- *Status pixel* switch per display: while the display shows no Home Assistant content, one
-  green pixel in the top-right corner toggles every 10 s as long as HA is connected.
+- *Status pixel* switch per display: after Home Assistant has cleared the display, one green
+  pixel in the top-right corner toggles every 10 s as long as HA is connected; it never runs on
+  a display HA did not blank itself (after a restart the panel may show anything).
 
 ### Changed
 - BLE writes are 100 bytes through a Bluetooth proxy and 244 bytes on a local adapter, and are
