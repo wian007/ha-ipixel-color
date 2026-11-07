@@ -2,7 +2,8 @@
   "domain": "ipixel_color",
   "name": "iPIXEL Color",
   "after_dependencies": [
-    "lovelace"
+    "lovelace",
+    "media_source"
   ],
   "bluetooth": [
     {

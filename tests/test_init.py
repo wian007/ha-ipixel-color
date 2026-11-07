@@ -420,6 +420,66 @@ async def test_unsafe_text_animations_are_blocked_on_wide_panels(hass: HomeAssis
     assert fake_bluetooth.panels[RIGHT].frames_for((0x00, 0x01))
 
 
+async def test_display_image_from_media_source(hass: HomeAssistant, fake_bluetooth, aioclient_mock):
+    """A media-source id is resolved through the media browser and downloaded."""
+    from unittest.mock import AsyncMock, patch
+
+    from homeassistant.components.media_source import PlayMedia
+
+    await _setup_panel(hass, fake_bluetooth, LEFT, "Left", "left")
+    panel = fake_bluetooth.panels[LEFT]
+    gif = await _gif_bytes((40, 20))
+    media_id = "media-source://media_source/local/pic.gif"
+    aioclient_mock.get("http://ha.local:8123/media/local/pic.gif?authSig=abc", content=gif, headers={"Content-Type": "image/gif"})
+
+    with patch(
+        "custom_components.ipixel_color.runtime.media_source.async_resolve_media",
+        new=AsyncMock(return_value=PlayMedia("/media/local/pic.gif?authSig=abc", "image/gif")),
+    ) as resolve, patch(
+        "custom_components.ipixel_color.runtime.async_process_play_media_url",
+        side_effect=lambda hass, url: f"http://ha.local:8123{url}",
+    ):
+        # service with the media picker
+        panel.clear()
+        await hass.services.async_call(
+            DOMAIN, "display_image", {"media": {"media_content_id": media_id, "media_content_type": "image/gif"}}, blocking=True
+        )
+        assert len(panel.last_gif_frames()) == 2
+        assert resolve.await_args.args[1] == media_id
+
+        # media player play_media with a media-source id
+        panel.clear()
+        await hass.services.async_call(
+            "media_player",
+            "play_media",
+            {ATTR_ENTITY_ID: _entity(hass, "media_player", f"{LEFT}_media_player"), "media_content_id": media_id, "media_content_type": "image/gif"},
+            blocking=True,
+        )
+        assert len(panel.last_gif_frames()) == 2
+        state = hass.states.get(_entity(hass, "media_player", f"{LEFT}_media_player"))
+        assert state.state == "playing" and state.attributes["media_content_id"] == media_id
+
+
+async def test_media_player_browses_images(hass: HomeAssistant, fake_bluetooth):
+    from unittest.mock import AsyncMock, patch
+
+    from homeassistant.components.media_player import BrowseMedia, MediaClass
+
+    await _setup_panel(hass, fake_bluetooth, LEFT, "Left", "left")
+    entity_id = _entity(hass, "media_player", f"{LEFT}_media_player")
+    assert hass.states.get(entity_id).attributes["supported_features"] & 131072  # BROWSE_MEDIA
+    root = BrowseMedia(media_class=MediaClass.DIRECTORY, media_content_id="", media_content_type="", title="Media", can_play=False, can_expand=True)
+    with patch("custom_components.ipixel_color.media_player.media_source.async_browse_media", new=AsyncMock(return_value=root)) as browse:
+        entity = hass.data["entity_components"]["media_player"].get_entity(entity_id)
+        result = await entity.async_browse_media(None, None)
+    assert result is root
+    assert browse.await_args.kwargs["content_filter"] is not None
+    image = BrowseMedia(media_class=MediaClass.IMAGE, media_content_id="x", media_content_type="image/png", title="x", can_play=True, can_expand=False)
+    audio = BrowseMedia(media_class=MediaClass.MUSIC, media_content_id="y", media_content_type="audio/mpeg", title="y", can_play=True, can_expand=False)
+    content_filter = browse.await_args.kwargs["content_filter"]
+    assert content_filter(image) and not content_filter(audio)
+
+
 async def test_migrate_v1_entry(hass: HomeAssistant, fake_bluetooth):
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 

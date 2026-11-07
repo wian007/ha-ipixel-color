@@ -4,7 +4,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from homeassistant.components import media_source
 from homeassistant.components.media_player import (
+    BrowseMedia,
     MediaPlayerEntity,
     MediaPlayerEntityFeature,
     MediaPlayerState,
@@ -41,6 +43,7 @@ class iPIXELMediaPlayer(iPIXELDeviceEntity, MediaPlayerEntity, RestoreEntity):
         | MediaPlayerEntityFeature.PAUSE
         | MediaPlayerEntityFeature.STOP
         | MediaPlayerEntityFeature.PLAY_MEDIA
+        | MediaPlayerEntityFeature.BROWSE_MEDIA
         | MediaPlayerEntityFeature.TURN_ON
         | MediaPlayerEntityFeature.TURN_OFF
     )
@@ -83,8 +86,18 @@ class iPIXELMediaPlayer(iPIXELDeviceEntity, MediaPlayerEntity, RestoreEntity):
         """Return the title."""
         return self._media_title
 
+    async def async_browse_media(
+        self, media_content_type: MediaType | str | None = None, media_content_id: str | None = None
+    ) -> BrowseMedia:
+        """Browse the media library for images and GIFs."""
+        return await media_source.async_browse_media(
+            self.hass,
+            media_content_id,
+            content_filter=lambda item: item.media_content_type.startswith("image/"),
+        )
+
     async def async_play_media(self, media_type: MediaType | str, media_id: str, **kwargs: Any) -> None:
-        """Show an image/GIF from a URL."""
+        """Show an image/GIF from a URL or a media-source item."""
         self._current_url = media_id
         self._media_title = media_id.rsplit("/", 1)[-1] if "/" in media_id else media_id
         await self._async_run(self._async_show(media_id))

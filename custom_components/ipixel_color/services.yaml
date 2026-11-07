@@ -100,7 +100,7 @@ update_display:
 
 display_image:
   name: Display image
-  description: Show an image or GIF from a URL or a local file (spread over a combined display).
+  description: Show an image or GIF from a URL, the media library or a local file (spread over a combined display).
   target:
     device:
       integration: ipixel_color
@@ -109,11 +109,19 @@ display_image:
   fields:
     url:
       name: URL
-      description: URL of a PNG/JPG/BMP/WEBP/GIF
+      description: URL of a PNG/JPG/BMP/WEBP/GIF, or a media-source id (media-source://media_source/local/image.gif)
       required: false
       example: "https://example.com/image.gif"
       selector:
         text:
+    media:
+      name: Media
+      description: Image or GIF from the media library (the media folder or any connected media source)
+      required: false
+      selector:
+        media:
+          accept:
+            - "image/*"
     path:
       name: Path
       description: Local file path (must be in allowlist_external_dirs)

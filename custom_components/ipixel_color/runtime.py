@@ -15,8 +15,11 @@ from dataclasses import dataclass, field, fields
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
+from homeassistant.components import media_source
+from homeassistant.components.media_player import async_process_play_media_url
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.debounce import Debouncer
 from homeassistant.helpers.entity import DeviceInfo
@@ -720,21 +723,37 @@ class iPIXELRuntime:
     # ------------------------------------------------------------------
     # Helpers used by services
     # ------------------------------------------------------------------
+    async def async_resolve_media(self, url: str) -> tuple[str, str | None]:
+        """Turn a ``media-source://`` id (media browser) into a fetchable URL.
+
+        Plain URLs are returned unchanged. The second value is the MIME type
+        reported by the media source, if any.
+        """
+        if not media_source.is_media_source_id(url):
+            return url, None
+        try:
+            item = await media_source.async_resolve_media(self.hass, url, None)
+            return async_process_play_media_url(self.hass, item.url), item.mime_type
+        except HomeAssistantError as err:
+            raise iPIXELCommandError(f"Cannot resolve media {url}: {err}") from err
+
     async def async_fetch_image(self, url: str) -> tuple[bytes, str]:
-        """Download an image and guess its extension."""
+        """Download an image (URL or media-source id) and guess its extension."""
+        source = url
+        url, mime_type = await self.async_resolve_media(url)
         session = async_get_clientsession(self.hass)
         try:
             async with session.get(url, timeout=30) as response:
                 if response.status != 200:
-                    raise iPIXELCommandError(f"Failed to download {url}: HTTP {response.status}")
+                    raise iPIXELCommandError(f"Failed to download {source}: HTTP {response.status}")
                 data = await response.read()
-                content_type = response.headers.get("Content-Type", "").lower()
+                content_type = (response.headers.get("Content-Type") or mime_type or "").lower()
         except iPIXELError:
             raise
         except Exception as err:  # noqa: BLE001
-            raise iPIXELCommandError(f"Failed to download {url}: {err}") from err
+            raise iPIXELCommandError(f"Failed to download {source}: {err}") from err
 
-        lowered = url.lower().split("?")[0]
+        lowered = source.lower().split("?")[0]
         if "gif" in content_type or lowered.endswith(".gif"):
             extension = ".gif"
         elif "jpeg" in content_type or "jpg" in content_type or lowered.endswith((".jpg", ".jpeg")):

@@ -254,7 +254,7 @@ async def handle_update_display(runtime: iPIXELRuntime, call: ServiceCall) -> No
 
 
 async def handle_display_image(runtime: iPIXELRuntime, call: ServiceCall) -> None:
-    """Show an image or GIF from a URL or a local file.
+    """Show an image or GIF from a URL, a media library item or a local file.
 
     ``method``: ``upload`` (default) uses the panel's image/GIF upload (animated,
     can be stored in a slot); ``stream`` sends raw pixels (fast, still image, not stored).
@@ -262,8 +262,13 @@ async def handle_display_image(runtime: iPIXELRuntime, call: ServiceCall) -> Non
     data = call.data
     url = _first(data, "url", "gif_url")
     path = _first(data, "path", "image_path")
+    media = data.get("media") or data.get("media_content_id")
+    if isinstance(media, dict):
+        media = media.get("media_content_id")
+    if media and not url and not path:
+        url = media
     if not url and not path:
-        raise ServiceValidationError("Provide url or path")
+        raise ServiceValidationError("Provide url, media or path")
     method = data.get("method", "upload")
     if method not in ("upload", "stream"):
         raise ServiceValidationError("method must be upload or stream")

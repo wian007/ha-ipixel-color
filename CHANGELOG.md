@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   advertises again; it is cleared and the content Home Assistant was showing is restored,
   including the combined display it belongs to.
 - Panel option *BLE packet size* (0 = automatic).
+- Images and GIFs can be picked from the Home Assistant media library: the media player
+  entity supports *Browse media* (pick an image in the media browser and play it on the display),
+  `display_image` has a *Media* picker, and `media-source://` ids are accepted wherever a URL is
+  (including the image URL entity and schedules).
 - *Status pixel* switch per display: while the display shows no Home Assistant content, one
   green pixel in the top-right corner toggles every 10 s as long as HA is connected.
 
