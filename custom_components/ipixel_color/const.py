@@ -44,12 +44,6 @@ MAX_CONNECT_ATTEMPTS = 3
 # one there; local adapters handle several connections at once.
 PANEL_UPLOAD_CONCURRENCY = 4
 PROXY_UPLOAD_CONCURRENCY = 1
-# A looping animation on a combined display is restarted on all panels at
-# once about this often (rounded to whole loops) because the panels' own
-# clocks drift apart by roughly half a second per 20 minutes. The restart
-# blanks the panels briefly (see RESTART_BLANK_SECONDS), so not too often.
-# 0 disables it.
-GIF_RESYNC_SECONDS = 300.0
 # Restarting in step: a show-slot command does not restart a slot that is
 # already playing, but blanking (DIY mode 1) and leaving DIY mode again does,
 # and when both are sent as bursts every panel resumes at the same moment.

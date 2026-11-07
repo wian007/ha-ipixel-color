@@ -20,10 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   follows a numeric entity with thresholds; a change of stage is a single show-slot command
   (instant, started in step on a combined display) instead of an upload. `show_stage` picks a
   stage by hand, `clear_stages` stops following. The mapping survives restarts.
-- Animations on a combined display run in step: after the synchronised start, and every five
-  minutes (rounded to whole loops), the panels are blanked and released with two bursts so they
-  all resume at the same moment; a plain show-slot does not restart a slot that is already
-  playing. New service `sync_animation` does the same on demand.
+- Animations on a combined display start in step: after the synchronised start the panels are
+  blanked and released with two bursts so they all resume at the same moment (a plain show-slot
+  does not restart a slot that is already playing). The same happens once a few seconds after
+  all panels have (re)connected, and on demand with the new `sync_animation` service.
 - Content that sits in the sync slot is not re-uploaded when a panel reconnects: the panels
   resume it themselves after a dropped link or a power cycle, in step with each other.
 - Still images on a combined display are shown synchronised: stored in the sync slot on every

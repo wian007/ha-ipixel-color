@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import math
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
@@ -11,7 +10,6 @@ from typing import Any
 from PIL import Image
 
 from ..const import (
-    GIF_RESYNC_SECONDS,
     PANEL_UPLOAD_CONCURRENCY,
     PROXY_UPLOAD_CONCURRENCY,
     RESTART_BLANK_SECONDS,
@@ -168,7 +166,7 @@ class CompositeDisplay(Display):
 
     def shutdown(self) -> None:
         """Unsubscribe from member panels."""
-        self._cancel_resync()
+        self._content_changed()
         for unsub in self._panel_unsubs.values():
             unsub()
         self._panel_unsubs.clear()
@@ -287,7 +285,7 @@ class CompositeDisplay(Display):
 
     async def async_disconnect(self) -> None:
         """Disconnect from all loaded member panels."""
-        self._cancel_resync()
+        self._content_changed()
         await self._broadcast("async_disconnect")
 
     # ------------------------------------------------------------------
@@ -300,7 +298,7 @@ class CompositeDisplay(Display):
         panel and then shown with one simultaneous show-slot command, so the
         whole picture appears at once instead of panel by panel.
         """
-        self._cancel_resync()
+        self._content_changed()
         canvas = self._prepare_canvas(image)
         synchronised = self._sync_slot is not None and not save_slot
         upload_slot = self._sync_slot if synchronised else save_slot
@@ -313,9 +311,8 @@ class CompositeDisplay(Display):
             self._content_in_slot = True
 
     # ------------------------------------------------------------------
-    # Keeping a looping animation in step across panels
+    # Keeping the panels in step
     # ------------------------------------------------------------------
-    _resync_task: asyncio.Task | None = None
     _content_in_slot = False
 
     @property
@@ -329,32 +326,9 @@ class CompositeDisplay(Display):
         """
         return self._content_in_slot
 
-    def _cancel_resync(self) -> None:
+    def _content_changed(self) -> None:
+        """Any new content: the panels no longer hold the current content in a slot."""
         self._content_in_slot = False
-        task = self._resync_task
-        self._resync_task = None
-        if task is not None and not task.done():
-            task.cancel()
-
-    def _start_resync(self, tiles: list[tuple[Tile, PanelDisplay]], slot: int, durations: list[int]) -> None:
-        """Restart the animation on every panel together, once per whole number of loops."""
-        self._cancel_resync()
-        if GIF_RESYNC_SECONDS <= 0:
-            return
-        if durations:
-            loop_ms = max(1, sum(max(10, int(d)) for d in durations))
-            interval = math.ceil(GIF_RESYNC_SECONDS * 1000 / loop_ms) * loop_ms / 1000
-        else:  # loop length unknown (stored slot): plain interval
-            interval = float(GIF_RESYNC_SECONDS)
-        self._resync_task = asyncio.get_running_loop().create_task(self._async_resync_loop(tiles, slot, interval))
-
-    async def _async_resync_loop(self, tiles: list[tuple[Tile, PanelDisplay]], slot: int, interval: float) -> None:
-        while True:
-            await asyncio.sleep(interval)
-            try:
-                await self._async_restart_in_step(tiles)
-            except iPIXELError as err:
-                _LOGGER.debug("Animation resync of '%s' skipped: %s", self._name, err)
 
     async def _async_restart_in_step(self, tiles: list[tuple[Tile, PanelDisplay]]) -> None:
         """Make every panel restart its current content at the same moment.
@@ -404,7 +378,7 @@ class CompositeDisplay(Display):
         animations start together. Otherwise every panel starts playing as soon
         as its own upload finishes.
         """
-        self._cancel_resync()
+        self._content_changed()
         canvases = [self._prepare_canvas(frame) for frame in frames]
         synchronised = self._sync_slot is not None and not save_slot
         upload_slot = self._sync_slot if synchronised else save_slot
@@ -418,13 +392,11 @@ class CompositeDisplay(Display):
             await self._async_show_slot_everywhere(done, upload_slot)
             if len(frames) > 1:
                 await self._async_restart_in_step(done)
-            if loop == 0 and len(frames) > 1:
-                self._start_resync(done, upload_slot, durations)
             self._content_in_slot = True
 
     async def async_show_frame(self, image: Image.Image, brightness: int = 100) -> None:
         """Stream a frame to all panels concurrently."""
-        self._cancel_resync()
+        self._content_changed()
         canvas = self._prepare_canvas(image)
         calls = [
             (panel.name, panel.async_show_frame(canvas.crop(tile.box), brightness))
@@ -434,7 +406,7 @@ class CompositeDisplay(Display):
 
     async def async_set_pixels(self, pixels: list[dict]) -> None:
         """Route pixels in canvas coordinates to the right panel."""
-        self._cancel_resync()
+        self._content_changed()
         layout = self.layout
         resolved = self._resolve_all()
         per_panel: dict[str, list[dict]] = {}
@@ -457,7 +429,7 @@ class CompositeDisplay(Display):
 
     async def async_fill(self, color: str) -> None:
         """Fill every panel with the colour."""
-        self._cancel_resync()
+        self._content_changed()
         await self._broadcast("async_fill", color)
 
     # ------------------------------------------------------------------
@@ -465,23 +437,23 @@ class CompositeDisplay(Display):
     # ------------------------------------------------------------------
     async def async_show_native_text(self, text: str, **kwargs: Any) -> None:
         """Send device rendered text to every panel (each panel scrolls on its own)."""
-        self._cancel_resync()
+        self._content_changed()
         await self._broadcast("async_show_native_text", text, **kwargs)
 
     async def async_set_clock_mode(self, **kwargs: Any) -> None:
         """Clock mode on every panel."""
-        self._cancel_resync()
+        self._content_changed()
         await self._broadcast("async_set_clock_mode", **kwargs)
 
     async def async_set_rhythm_mode(self, style: int, speed: int = 4) -> None:
         """Rhythm mode on every panel."""
-        self._cancel_resync()
+        self._content_changed()
         await self._broadcast("async_set_rhythm_mode", style, speed)
 
     async def async_set_power(self, on: bool) -> None:
         """Power on/off every panel."""
         if not on:
-            self._cancel_resync()
+            self._content_changed()
         await self._broadcast("async_set_power", on)
 
     async def async_set_brightness(self, level: int) -> None:
@@ -494,7 +466,7 @@ class CompositeDisplay(Display):
 
     async def async_clear(self) -> None:
         """Clear every panel."""
-        self._cancel_resync()
+        self._content_changed()
         await self._broadcast("async_clear")
 
     async def async_sync_time(self) -> None:
@@ -507,7 +479,7 @@ class CompositeDisplay(Display):
 
     async def async_call(self, method: str, *args: Any, **kwargs: Any) -> None:
         """Call an API method on every panel."""
-        self._cancel_resync()
+        self._content_changed()
         in_step = bool(kwargs.pop("in_step", False))
         if method in ("show_slot", "set_diy_mode") and args and not kwargs:
             # Reach every panel as close together as possible (one unconfirmed
@@ -522,7 +494,6 @@ class CompositeDisplay(Display):
                 # blank-and-release restart (for re-showing the current slot).
                 if in_step:
                     await self._async_restart_in_step(tiles)
-                self._start_resync(tiles, int(args[0]), [])
                 self._content_in_slot = True
             return
         await self._broadcast("async_call", method, *args, **kwargs)
