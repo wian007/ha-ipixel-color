@@ -534,7 +534,9 @@ async def handle_set_stages(runtime: iPIXELRuntime, call: ServiceCall) -> None:
 
 async def handle_show_stage(runtime: iPIXELRuntime, call: ServiceCall) -> None:
     """Show one of the stored stages now."""
-    await _stage_manager(runtime).async_show_stage(int(call.data.get("stage", 0)))
+    await _stage_manager(runtime).async_show_stage(
+        int(call.data.get("stage", 0)), in_step=_bool(call.data.get("in_step"), False)
+    )
 
 
 async def handle_clear_stages(runtime: iPIXELRuntime, call: ServiceCall) -> None:
@@ -544,7 +546,7 @@ async def handle_clear_stages(runtime: iPIXELRuntime, call: ServiceCall) -> None
 
 async def handle_show_slot(runtime: iPIXELRuntime, call: ServiceCall) -> None:
     """Show a stored slot."""
-    await runtime.display.async_call("show_slot", int(call.data.get("slot", 0)))
+    await runtime.async_show_slot(int(call.data.get("slot", 0)), in_step=_bool(call.data.get("in_step"), False))
 
 
 async def handle_delete_slot(runtime: iPIXELRuntime, call: ServiceCall) -> None:

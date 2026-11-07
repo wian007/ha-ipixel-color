@@ -508,6 +508,7 @@ class CompositeDisplay(Display):
     async def async_call(self, method: str, *args: Any, **kwargs: Any) -> None:
         """Call an API method on every panel."""
         self._cancel_resync()
+        in_step = bool(kwargs.pop("in_step", False))
         if method in ("show_slot", "set_diy_mode") and args and not kwargs:
             # Reach every panel as close together as possible (one unconfirmed
             # write each) instead of confirmed writes one by one.
@@ -516,9 +517,11 @@ class CompositeDisplay(Display):
                 raise iPIXELNotAvailableError(f"No panels of combined display '{self._name}' are available")
             await self._async_burst(tiles, method, *args)
             if method == "show_slot":
-                # Showing a stored slot is how pre-uploaded content is switched
-                # instantly; start it in step and keep it in step like a fresh GIF.
-                await self._async_restart_in_step(tiles)
+                # Switching to another stored slot starts every panel fresh at
+                # the burst, so no blanking is needed; ``in_step`` forces the
+                # blank-and-release restart (for re-showing the current slot).
+                if in_step:
+                    await self._async_restart_in_step(tiles)
                 self._start_resync(tiles, int(args[0]), [])
                 self._content_in_slot = True
             return

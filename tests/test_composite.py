@@ -292,9 +292,14 @@ async def test_show_slot_service_uses_the_synchronised_burst(monkeypatch):
     composite = make_composite(panels, [MemberSpec("left", 0, 0), MemberSpec("right", 0, 1)], sync_slot=1)
     await composite.async_call("show_slot", 4)
     for panel in panels.values():
-        # burst, then the restart in step so the stored animation runs together
-        assert panel.calls == [("show_slot", (4,)), ("set_diy_mode", (1,)), ("set_diy_mode", (0,))]
+        # switching to another slot: one burst, every panel starts fresh at it
+        assert panel.calls == [("show_slot", (4,))]
+        panel.calls.clear()
     assert composite.content_persists
+    # re-showing in step: burst, then blank-and-release so a playing slot restarts together
+    await composite.async_call("show_slot", 4, in_step=True)
+    for panel in panels.values():
+        assert panel.calls == [("show_slot", (4,)), ("set_diy_mode", (1,)), ("set_diy_mode", (0,))]
     assert composite._resync_task is not None  # noqa: SLF001
     composite.shutdown()
 

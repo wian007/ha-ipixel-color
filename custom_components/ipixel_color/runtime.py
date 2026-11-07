@@ -863,9 +863,13 @@ class iPIXELRuntime:
         await self.display.async_show_image(canvas, save_slot=save_slot)
         self.set_last_frame(canvas)
 
-    async def async_show_slot(self, slot: int) -> None:
-        """Show stored content from a slot (a wall starts all panels in step)."""
-        await self.display.async_call("show_slot", int(slot))
+    async def async_show_slot(self, slot: int, *, in_step: bool = False) -> None:
+        """Show stored content from a slot (a wall sends it to all panels in one burst).
+
+        ``in_step`` additionally blanks and releases the panels so that a slot
+        that is already playing restarts on all of them together.
+        """
+        await self.display.async_call("show_slot", int(slot), in_step=in_step)
         self._last_render = None
         self._known_empty = False
         self.set_last_frame(None)

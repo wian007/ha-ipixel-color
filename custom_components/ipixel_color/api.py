@@ -240,11 +240,12 @@ class iPIXELAPI:
         """Select the visible screen buffer (1-9)."""
         await self._send("set_screen", self._build(make_screen_command, int(screen)))
 
-    async def show_slot(self, slot: int, *, fast: bool = False) -> None:
+    async def show_slot(self, slot: int, *, fast: bool = False, in_step: bool = False) -> None:
         """Show stored content from a slot (0-255).
 
         ``fast`` writes without link-layer acknowledgement so that several
-        panels receive the command as close together as possible.
+        panels receive the command as close together as possible; ``in_step``
+        only matters for a combined display.
         """
         await self._send("show_slot", self._build(make_show_slot_command, int(slot)), write_response=not fast)
 

@@ -533,6 +533,14 @@ show_slot:
           min: 0
           max: 255
           mode: box
+    in_step:
+      name: Restart in step
+      description: Blank the panels of a combined display briefly and release them together, so a slot that is already playing restarts on all of them at once (not needed when switching to another slot)
+      required: false
+      default: false
+      selector:
+        boolean:
+
 
 set_stages:
   name: Set stages
@@ -606,6 +614,14 @@ show_stage:
         number:
           min: 0
           max: 50
+    in_step:
+      name: Restart in step
+      description: Blank the panels of a combined display briefly and release them together, so a slot that is already playing restarts on all of them at once (not needed when switching to another slot)
+      required: false
+      default: false
+      selector:
+        boolean:
+
 
 clear_stages:
   name: Clear stages

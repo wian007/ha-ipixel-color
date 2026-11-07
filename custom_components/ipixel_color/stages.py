@@ -120,13 +120,13 @@ class StageManager:
         if entity_id:
             await self.async_update_from_source(force=True)
 
-    async def async_show_stage(self, stage: int) -> None:
+    async def async_show_stage(self, stage: int, *, in_step: bool = False) -> None:
         """Show a stage now (its slot must have been stored)."""
         if self.config is None:
             raise iPIXELCommandError("No stages configured; call set_stages first")
         if not 0 <= stage < self.config.count:
             raise iPIXELCommandError(f"Stage {stage} does not exist (0-{self.config.count - 1})")
-        await self.runtime.async_show_slot(self.config.slot_for(stage))
+        await self.runtime.async_show_slot(self.config.slot_for(stage), in_step=in_step)
         self.config.current = stage
         await self._async_save()
 
