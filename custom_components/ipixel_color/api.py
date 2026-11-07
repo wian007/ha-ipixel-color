@@ -92,6 +92,11 @@ class iPIXELAPI:
         return self._address
 
     @property
+    def transport_key(self) -> str:
+        """Return which radio (proxy or local adapter) carries this panel."""
+        return self._bluetooth.transport_key
+
+    @property
     def name(self) -> str:
         """Return the configured device name."""
         return self._name

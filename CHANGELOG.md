@@ -29,8 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   halved automatically when bulk writes fail (GATT error 133). Uploads through an ESPHome proxy
   are several times faster and no longer stall.
 - The ACK timeout grows with the size of an upload (large GIFs on several panels).
-- A combined display drives at most four panels at a time and retries a failed panel once before
-  the synchronised show command, which only goes to panels that received the new content.
+- A combined display uploads to panels behind the same Bluetooth proxy one at a time (parallel
+  streams through one proxy only starve each other) and in parallel across adapters; a failed
+  panel is retried once, and the synchronised show command is written without link-layer
+  response so all panels start within milliseconds. It only goes to panels that received the
+  new content.
+- A panel whose notification subscription fails is reconnected instead of being kept as
+  connected without ACKs (service calls used to hang for minutes).
 
 ### Fixed
 - **`clear_display` no longer factory-resets the panel.** It sent opcode 0x8003, which

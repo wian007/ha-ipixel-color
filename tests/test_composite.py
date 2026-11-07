@@ -187,6 +187,40 @@ async def test_missing_member_is_skipped():
         await empty.async_show_image(Image.new("RGB", (8, 8)))
 
 
+async def test_uploads_are_serialised_per_proxy():
+    import asyncio
+
+    class SlowPanel(StubPanel):
+        def __init__(self, *args, transport_key="local", **kwargs):
+            super().__init__(*args, **kwargs)
+            self.transport_key = transport_key
+            self.active = 0
+            self.max_active = 0
+
+        async def async_show_image(self, image, *, save_slot=0):
+            self.active += 1
+            SlowPanel.running[self.transport_key] = SlowPanel.running.get(self.transport_key, 0) + 1
+            SlowPanel.peak[self.transport_key] = max(SlowPanel.peak.get(self.transport_key, 0), SlowPanel.running[self.transport_key])
+            await asyncio.sleep(0.01)
+            SlowPanel.running[self.transport_key] -= 1
+            self.images.append(image)
+
+    SlowPanel.running, SlowPanel.peak = {}, {}
+    panels = {
+        "a": SlowPanel("a", 32, 32, transport_key="proxy:AA"),
+        "b": SlowPanel("b", 32, 32, transport_key="proxy:AA"),
+        "c": SlowPanel("c", 32, 32, transport_key="local"),
+        "d": SlowPanel("d", 32, 32, transport_key="local"),
+    }
+    composite = make_composite(
+        panels, [MemberSpec("a", 0, 0), MemberSpec("b", 0, 1), MemberSpec("c", 1, 0), MemberSpec("d", 1, 1)]
+    )
+    await composite.async_show_image(Image.new("RGB", (64, 64)))
+    assert all(len(p.images) == 1 for p in panels.values())
+    assert SlowPanel.peak["proxy:AA"] == 1, "panels behind one proxy upload one at a time"
+    assert SlowPanel.peak["local"] == 2, "local panels upload in parallel"
+
+
 async def test_failed_panel_is_retried_before_synchronised_show():
     class FlakyPanel(StubPanel):
         def __init__(self, *args, fail_times=1, **kwargs):

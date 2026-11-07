@@ -9,7 +9,7 @@ from typing import Any
 
 from PIL import Image
 
-from ..const import PANEL_UPLOAD_CONCURRENCY
+from ..const import PANEL_UPLOAD_CONCURRENCY, PROXY_UPLOAD_CONCURRENCY
 from ..exceptions import iPIXELError, iPIXELNotAvailableError
 from .base import Display
 from .layout import Layout, PanelSpec, Tile, compute_layout
@@ -170,15 +170,32 @@ class CompositeDisplay(Display):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-    async def _gather_results(self, calls: list[tuple[str, Any]]) -> list[BaseException | None]:
-        """Run coroutines concurrently (at most PANEL_UPLOAD_CONCURRENCY at a time)."""
-        limit = asyncio.Semaphore(PANEL_UPLOAD_CONCURRENCY)
+    @staticmethod
+    def _transport_key(panel: Any) -> str:
+        return str(getattr(panel, "transport_key", "local"))
 
-        async def _limited(coro: Any) -> Any:
-            async with limit:
+    async def _gather_results(self, calls: list[tuple[str, Any]], panels: list[Any] | None = None) -> list[BaseException | None]:
+        """Run coroutines concurrently, limited per transport.
+
+        Panels behind the same Bluetooth proxy share one radio, so their
+        uploads run one after the other (PROXY_UPLOAD_CONCURRENCY); panels on
+        local adapters or different proxies run in parallel.
+        """
+        keys = [self._transport_key(p) for p in panels] if panels else ["local"] * len(calls)
+        limits: dict[str, asyncio.Semaphore] = {}
+        for key in keys:
+            if key not in limits:
+                limits[key] = asyncio.Semaphore(
+                    PROXY_UPLOAD_CONCURRENCY if key.startswith("proxy:") else PANEL_UPLOAD_CONCURRENCY
+                )
+
+        async def _limited(key: str, coro: Any) -> Any:
+            async with limits[key]:
                 return await coro
 
-        results = await asyncio.gather(*(_limited(coro) for _, coro in calls), return_exceptions=True)
+        results = await asyncio.gather(
+            *(_limited(key, coro) for key, (_, coro) in zip(keys, calls)), return_exceptions=True
+        )
         for err in results:
             if isinstance(err, asyncio.CancelledError):
                 raise err
@@ -193,13 +210,13 @@ class CompositeDisplay(Display):
                 raise first
             raise iPIXELError(f"All panels of '{self._name}' failed: {first}") from first
 
-    async def _gather(self, calls: list[tuple[str, Any]]) -> None:
+    async def _gather(self, calls: list[tuple[str, Any]], panels: list[Any] | None = None) -> None:
         """Run coroutines concurrently; log partial failures, raise if all fail."""
         if not calls:
             raise iPIXELNotAvailableError(
                 f"No panels of combined display '{self._name}' are available"
             )
-        results = await self._gather_results(calls)
+        results = await self._gather_results(calls, panels)
         failures = [(name, err) for (name, _), err in zip(calls, results) if err is not None]
         self._raise_if_all_failed(failures, len(calls))
 
@@ -217,14 +234,17 @@ class CompositeDisplay(Display):
             raise iPIXELNotAvailableError(
                 f"No panels of combined display '{self._name}' are available"
             )
-        results = await self._gather_results([(panel.name, make_call(tile, panel)) for tile, panel in tiles])
+        results = await self._gather_results(
+            [(panel.name, make_call(tile, panel)) for tile, panel in tiles], [panel for _, panel in tiles]
+        )
         succeeded = [tp for tp, err in zip(tiles, results) if err is None]
         failed = [(tp, err) for tp, err in zip(tiles, results) if err is not None]
         if failed:
             for (_, panel), err in failed:
                 _LOGGER.debug("Panel '%s' of '%s' failed, retrying once: %s", panel.name, self._name, err)
             retry = await self._gather_results(
-                [(panel.name, make_call(tile, panel)) for (tile, panel), _ in failed]
+                [(panel.name, make_call(tile, panel)) for (tile, panel), _ in failed],
+                [panel for (_, panel), _ in failed],
             )
             failures: list[tuple[str, BaseException]] = []
             for (tp, _), err in zip(failed, retry):
@@ -237,7 +257,7 @@ class CompositeDisplay(Display):
 
     async def _broadcast(self, method: str, *args: Any, **kwargs: Any) -> None:
         panels = self.panels
-        await self._gather([(p.name, getattr(p, method)(*args, **kwargs)) for p in panels])
+        await self._gather([(p.name, getattr(p, method)(*args, **kwargs)) for p in panels], panels)
 
     def _prepare_canvas(self, image: Image.Image) -> Image.Image:
         if image.mode != "RGB":
@@ -282,7 +302,10 @@ class CompositeDisplay(Display):
 
     async def _async_show_slot_everywhere(self, tiles: list[tuple[Tile, PanelDisplay]], slot: int) -> None:
         _LOGGER.debug("Showing slot %d on all panels of '%s'", slot, self._name)
-        await self._gather([(panel.name, panel.async_call("show_slot", slot, fast=True)) for _, panel in tiles])
+        await self._gather(
+            [(panel.name, panel.async_call("show_slot", slot, fast=True)) for _, panel in tiles],
+            [panel for _, panel in tiles],
+        )
 
     async def async_show_gif(
         self,

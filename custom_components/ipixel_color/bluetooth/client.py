@@ -77,6 +77,7 @@ class BluetoothClient:
         self._size_override = size_override
         self._chunk_override = int(chunk_size) if chunk_size else None
         self._chunk_limit: int | None = self._chunk_override
+        self._source: str | None = None
 
         self._client: BleakClientWithServiceCache | None = None
         self._ack = AckManager()
@@ -117,6 +118,11 @@ class BluetoothClient:
     def chunk_size(self) -> int:
         """Return the current maximum BLE write size."""
         return self._chunk_limit or BLE_CHUNK_SIZE
+
+    @property
+    def transport_key(self) -> str:
+        """Identify the radio the panel is reached through (``proxy:<mac>`` or ``local``)."""
+        return f"proxy:{self._source}" if self._source else "local"
 
     @callback
     def async_add_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
@@ -301,7 +307,9 @@ class BluetoothClient:
             scanner = bluetooth.async_scanner_by_source(self._hass, info.source)
             if isinstance(scanner, bluetooth.BaseHaRemoteScanner):
                 _LOGGER.debug("%s is reached via Bluetooth proxy %s", self._address, info.source)
+                self._source = info.source
                 return BLE_PROXY_CHUNK_SIZE
+        self._source = None
         return BLE_CHUNK_SIZE
 
     def _reduce_chunk_size(self) -> bool:

@@ -38,9 +38,12 @@ DEFAULT_SYNC_SLOT = 1
 # Connection settings
 CONNECTION_TIMEOUT = 20.0
 MAX_CONNECT_ATTEMPTS = 3
-# How many panels of a combined display are driven at the same time (an
-# ESPHome Bluetooth proxy offers at most 8 connection slots).
+# How many panels of a combined display are driven at the same time per
+# transport. Through one Bluetooth proxy the uploads share a single radio and
+# parallel streams only starve each other (ACK timeouts), so they run one by
+# one there; local adapters handle several connections at once.
 PANEL_UPLOAD_CONCURRENCY = 4
+PROXY_UPLOAD_CONCURRENCY = 1
 DEFAULT_ACK_TIMEOUT = 10.0
 # Extra ACK wait per kilobyte of upload: panels decode and store large GIFs
 # before they acknowledge, and a proxy shared by several panels is slower.

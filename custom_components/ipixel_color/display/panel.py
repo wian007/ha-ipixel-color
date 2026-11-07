@@ -26,6 +26,11 @@ class PanelDisplay(Display):
         return self._key
 
     @property
+    def transport_key(self) -> str:
+        """Return which radio carries this panel; uploads are serialised per proxy."""
+        return self._api.transport_key
+
+    @property
     def api(self) -> iPIXELAPI:
         """Return the underlying API."""
         return self._api
