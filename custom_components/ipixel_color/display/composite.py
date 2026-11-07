@@ -303,13 +303,27 @@ class CompositeDisplay(Display):
         )
         if synchronised:
             await self._async_show_slot_everywhere(done, upload_slot)
+            self._content_in_slot = True
 
     # ------------------------------------------------------------------
     # Keeping a looping animation in step across panels
     # ------------------------------------------------------------------
     _resync_task: asyncio.Task | None = None
+    _content_in_slot = False
+
+    @property
+    def content_persists(self) -> bool:
+        """True when the panels hold the current content in a slot.
+
+        Such content survives a dropped link or a power cycle on the panel
+        itself (the panel resumes the slot when it boots), so it must not be
+        re-uploaded after a reconnect: that would restart the animation on
+        one panel only and break the synchronisation a joint boot gave.
+        """
+        return self._content_in_slot
 
     def _cancel_resync(self) -> None:
+        self._content_in_slot = False
         task = self._resync_task
         self._resync_task = None
         if task is not None and not task.done():
@@ -369,6 +383,7 @@ class CompositeDisplay(Display):
             await self._async_show_slot_everywhere(done, upload_slot)
             if loop == 0 and len(frames) > 1:
                 self._start_resync(done, upload_slot, durations)
+            self._content_in_slot = True
 
     async def async_show_frame(self, image: Image.Image, brightness: int = 100) -> None:
         """Stream a frame to all panels concurrently."""

@@ -8,8 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- A looping GIF on a combined display is restarted on all panels together about once a minute
-  (rounded to whole loops): the panels' own clocks drift about half a second per 20 minutes.
+- A looping GIF on a combined display can be restarted on all panels together periodically
+  (rounded to whole loops) to counter clock drift between panels (about half a second per
+  20 minutes). Off by default: it only helps when the commands reach all panels within a few
+  milliseconds (local adapter or a fast proxy).
+- Content that sits in the sync slot is not re-uploaded when a panel reconnects: the panels
+  resume it themselves after a dropped link or a power cycle, in step with each other.
 - Still images on a combined display are shown synchronised: stored in the sync slot on every
   panel first, then one simultaneous show-slot command (as GIFs already were).
 - While placing the panels of a combined display, each panel shows the last four characters of

@@ -335,10 +335,12 @@ async def test_reconnect_clears_and_restores_content(hass: HomeAssistant, fake_b
     assert [f.command for f in right.frames] == [(1, 0x80)]
 
 
-async def test_group_repaints_when_a_member_reconnects(hass: HomeAssistant, fake_bluetooth):
+async def test_group_repaints_when_a_member_reconnects(hass: HomeAssistant, fake_bluetooth, monkeypatch):
+    """Without a sync slot the wall is painted again; with one the panels keep it themselves."""
+    monkeypatch.setattr("custom_components.ipixel_color.bluetooth.client.AUTO_RECONNECT_INTERVAL", 0)
     await _setup_panel(hass, fake_bluetooth, LEFT, "Left", "left")
     await _setup_panel(hass, fake_bluetooth, RIGHT, "Right", "right")
-    group = make_group_entry("Wall", [("left", 0, 0), ("right", 0, 1)], entry_id="wall")
+    group = make_group_entry("Wall", [("left", 0, 0), ("right", 0, 1)], entry_id="wall", sync_slot=0)
     group.add_to_hass(hass)
     assert await hass.config_entries.async_setup(group.entry_id)
     await hass.async_block_till_done()
@@ -356,6 +358,26 @@ async def test_group_repaints_when_a_member_reconnects(hass: HomeAssistant, fake
     # the wall was cleared and painted again on both panels
     assert (4, 1) in [f.command for f in right.frames]
     assert right.last_image() is not None and left.last_image() is not None
+
+    # A wall whose content sits in the sync slot is left alone: the panels
+    # resume the slot themselves after a drop or a power cycle, and a repaint
+    # would restart the animation on one panel only.
+    assert await hass.config_entries.async_unload(group.entry_id)
+    synced = make_group_entry("Wall2", [("left", 0, 0), ("right", 0, 1)], entry_id="wall2")
+    synced.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(synced.entry_id)
+    await hass.async_block_till_done()
+    await hass.services.async_call(
+        DOMAIN, "display_text", {"entity_id": _entity(hass, "text", "group_wall2_text_display"), "text": "SYNC", "mode": "textimage"}, blocking=True
+    )
+    left.clear()
+    right.clear()
+    right.is_connected = False
+    right.disconnected_callback(right)
+    fake_bluetooth.advertise(RIGHT)
+    await _settle(hass)
+    assert [f.command for f in right.frames] == [(1, 0x80)], "reconnected only, nothing repainted"
+    assert left.frames == []
 
 
 async def test_status_pixel_heartbeat_on_empty_display(hass: HomeAssistant, fake_bluetooth, monkeypatch):

@@ -302,6 +302,9 @@ class iPIXELRuntime:
         otherwise the last successful render is repeated. A display that never
         showed Home Assistant content is left alone. Returns True when restored.
         """
+        if getattr(self.display, "content_persists", False):
+            _LOGGER.debug("%s keeps its content in a slot on the panels; no repaint needed", self.name)
+            return False
         if self.settings.auto_update:
             args: tuple = (None, None, None)
         elif self._last_render is not None:
