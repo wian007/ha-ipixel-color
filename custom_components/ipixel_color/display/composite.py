@@ -282,7 +282,7 @@ class CompositeDisplay(Display):
 
     async def _async_show_slot_everywhere(self, tiles: list[tuple[Tile, PanelDisplay]], slot: int) -> None:
         _LOGGER.debug("Showing slot %d on all panels of '%s'", slot, self._name)
-        await self._gather([(panel.name, panel.async_call("show_slot", slot)) for _, panel in tiles])
+        await self._gather([(panel.name, panel.async_call("show_slot", slot, fast=True)) for _, panel in tiles])
 
     async def async_show_gif(
         self,

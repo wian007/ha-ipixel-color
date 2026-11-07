@@ -150,8 +150,12 @@ class iPIXELAPI:
             info = await self.connect()
         return info
 
-    async def _send(self, plan_id: str, payload: bytes, *, requires_ack: bool = False) -> None:
-        await self._bluetooth.async_send_command(plan_id, payload, requires_ack=requires_ack)
+    async def _send(
+        self, plan_id: str, payload: bytes, *, requires_ack: bool = False, write_response: bool = True
+    ) -> None:
+        await self._bluetooth.async_send_command(
+            plan_id, payload, requires_ack=requires_ack, write_response=write_response
+        )
 
     async def _send_plan(self, plan) -> None:
         await self._bluetooth.async_send_plan(plan)
@@ -219,9 +223,13 @@ class iPIXELAPI:
         """Select the visible screen buffer (1-9)."""
         await self._send("set_screen", self._build(make_screen_command, int(screen)))
 
-    async def show_slot(self, slot: int) -> None:
-        """Show stored content from a slot (0-255)."""
-        await self._send("show_slot", self._build(make_show_slot_command, int(slot)))
+    async def show_slot(self, slot: int, *, fast: bool = False) -> None:
+        """Show stored content from a slot (0-255).
+
+        ``fast`` writes without link-layer acknowledgement so that several
+        panels receive the command as close together as possible.
+        """
+        await self._send("show_slot", self._build(make_show_slot_command, int(slot)), write_response=not fast)
 
     async def delete_slot(self, slot: int) -> None:
         """Delete stored content from a slot (0-255)."""

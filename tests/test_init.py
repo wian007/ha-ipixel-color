@@ -485,6 +485,41 @@ async def test_media_player_browses_images(hass: HomeAssistant, fake_bluetooth):
     assert content_filter(image) and not content_filter(audio)
 
 
+async def test_failed_notification_subscription_reconnects(hass: HomeAssistant, fake_bluetooth):
+    """Without notifications no ACK arrives, so a failed subscribe reconnects instead of hanging."""
+    panel = fake_bluetooth.add(LEFT)
+    panel.fail_notify_times = 1
+    entry = make_panel_entry(LEFT, "Left", entry_id="left")
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
+    assert panel.connect_count == 2 and panel.notify_handler is not None
+
+    # Failing twice in a row is a connection error (setup retry), not a hang.
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    panel.fail_notify_times = 2
+    assert not await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+
+
+async def test_synchronised_show_slot_is_written_without_response(hass: HomeAssistant, fake_bluetooth):
+    await _setup_panel(hass, fake_bluetooth, LEFT, "Left", "left", DEVICE_TYPE_32X32)
+    await _setup_panel(hass, fake_bluetooth, RIGHT, "Right", "right", DEVICE_TYPE_32X32)
+    group = make_group_entry("Wall", [("left", 0, 0), ("right", 0, 1)], entry_id="wall")
+    group.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(group.entry_id)
+    await hass.async_block_till_done()
+    runtime = hass.data[DOMAIN]["wall"]
+    for panel in fake_bluetooth.panels.values():
+        assert panel.writes_without_response == 0
+    await runtime.async_show_image_bytes(await _gif_bytes(), ".gif")
+    for panel in fake_bluetooth.panels.values():
+        assert panel.frames[-1].data == bytes([7, 0, 8, 0x80, 1, 0, 1]), "show_slot last"
+        assert panel.writes_without_response == 1, "only the show-slot write skips the response"
+
+
 async def test_migrate_v1_entry(hass: HomeAssistant, fake_bluetooth):
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 

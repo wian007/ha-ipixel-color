@@ -242,14 +242,35 @@ class BluetoothClient:
 
             self._client = client
 
-            try:
-                await client.start_notify(NOTIFY_UUID, self._on_notify)
-            except (TimeoutError, BleakError) as err:
-                _LOGGER.warning(
-                    "Could not enable notifications on %s: %s (ACKs will time out)",
-                    self._address,
-                    err,
-                )
+            # Without notifications no ACK or response ever arrives, so a failed
+            # subscription is a failed connection: drop the link and try once more.
+            for attempt in (1, 2):
+                try:
+                    await client.start_notify(NOTIFY_UUID, self._on_notify)
+                    break
+                except (TimeoutError, BleakError) as err:
+                    _LOGGER.warning(
+                        "Could not enable notifications on %s (attempt %d): %s", self._address, attempt, err
+                    )
+                    await self._async_close_locked()
+                    if attempt == 2:
+                        raise iPIXELConnectionError(
+                            f"Could not enable notifications on {self._address}: {err}"
+                        ) from err
+                    try:
+                        client = await establish_connection(
+                            BleakClientWithServiceCache,
+                            ble_device,
+                            self._name,
+                            disconnected_callback=self._on_disconnected,
+                            max_attempts=MAX_CONNECT_ATTEMPTS,
+                            use_services_cache=True,
+                        )
+                    except (BleakNotFoundError, TimeoutError, BleakError, OSError) as err2:
+                        raise iPIXELConnectionError(
+                            f"Failed to reconnect to iPIXEL device {self._address}: {err2}"
+                        ) from err2
+                    self._client = client
 
             try:
                 info = await self._async_fetch_device_info()
@@ -374,17 +395,23 @@ class BluetoothClient:
         *,
         requires_ack: bool = False,
         response_handler: ResponseHandler | None = None,
+        write_response: bool = True,
     ) -> CommandResult:
-        """Send a single-window command."""
+        """Send a single-window command.
+
+        ``write_response=False`` writes without waiting for the link-layer
+        acknowledgement; used for commands that must reach several panels as
+        close together as possible (synchronised show-slot).
+        """
         plan = single_window_plan(
             plan_id,
             data,
             requires_ack=requires_ack,
             response_handler=response_handler,
         )
-        return await self.async_send_plan(plan)
+        return await self.async_send_plan(plan, write_response=write_response)
 
-    async def async_send_plan(self, plan: SendPlan) -> CommandResult:
+    async def async_send_plan(self, plan: SendPlan, *, write_response: bool = True) -> CommandResult:
         """Send a (possibly multi-window) plan, connecting first if needed.
 
         A failed multi-packet write (typically GATT error 133 through a
@@ -395,7 +422,7 @@ class BluetoothClient:
             await self.async_connect()
             async with self._op_lock:
                 try:
-                    return await self._async_send_locked(plan)
+                    return await self._async_send_locked(plan, write_response=write_response)
                 except (BleakError, OSError) as err:
                     chunked = any(len(window.data) > BLE_MIN_CHUNK_SIZE for window in plan.windows)
                     if chunked and self._reduce_chunk_size():
@@ -414,7 +441,7 @@ class BluetoothClient:
                         f"BLE error while sending '{plan.id}' to {self._address}: {err}"
                     ) from err
 
-    async def _async_send_locked(self, plan: SendPlan) -> CommandResult:
+    async def _async_send_locked(self, plan: SendPlan, *, write_response: bool = True) -> CommandResult:
         client = self._client
         if client is None or not client.is_connected:
             raise iPIXELConnectionError(f"Not connected to {self._address}")
@@ -430,7 +457,7 @@ class BluetoothClient:
             for index, window in enumerate(plan.windows):
                 self._ack.reset()
                 for piece in _chunk_bytes(window.data, chunk_size):
-                    await client.write_gatt_char(WRITE_UUID, piece, response=True)
+                    await client.write_gatt_char(WRITE_UUID, piece, response=write_response)
                 if plan.ack_policy.ack_per_window and window.requires_ack:
                     await self._async_wait(
                         self._ack.window_event.wait(),

@@ -43,9 +43,16 @@ class FakePanel:
     connect_count: int = 0
     max_write: int | None = None
     rejected_writes: int = 0
+    fail_notify_times: int = 0
+    writes_without_response: int = 0
 
     # --- BleakClient interface -------------------------------------------------
     async def start_notify(self, uuid: str, handler) -> None:
+        if self.fail_notify_times:
+            from bleak.exc import BleakError
+
+            self.fail_notify_times -= 1
+            raise BleakError("Bluetooth GATT Error handle=10 error=133 description=Error")
         self.notify_handler = handler
 
     async def stop_notify(self, uuid: str) -> None:
@@ -59,6 +66,8 @@ class FakePanel:
 
         if not self.is_connected:
             raise BleakError("Not connected")
+        if not response:
+            self.writes_without_response += 1
         if self.max_write is not None and len(data) > self.max_write:
             # A proxy drops the link when a write is too large for the panel.
             self.rejected_writes += 1
