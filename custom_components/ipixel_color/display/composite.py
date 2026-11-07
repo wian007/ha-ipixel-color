@@ -211,6 +211,8 @@ class CompositeDisplay(Display):
     def _raise_if_all_failed(self, failures: list[tuple[str, BaseException]], total: int) -> None:
         for name, err in failures:
             _LOGGER.warning("Panel '%s' of '%s' failed: %s", name, self._name, err)
+            if not isinstance(err, iPIXELError):
+                _LOGGER.debug("Unexpected error from panel '%s'", name, exc_info=err)
         if failures and len(failures) == total:
             _, first = failures[0]
             if isinstance(first, iPIXELError):

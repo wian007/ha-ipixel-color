@@ -54,12 +54,18 @@ def frames_to_gif_bytes(frames: list[Image.Image], durations: list[int], loop: i
     if len(durations) != len(frames):
         durations = (list(durations) + [100] * len(frames))[: len(frames)]
     buffer = io.BytesIO()
-    if len(palette_frames) == 1:
+    first = frames[0].convert("RGB").tobytes()
+    static = all(frame.convert("RGB").tobytes() == first for frame in frames[1:])
+    if len(palette_frames) == 1 or static:
+        # A tile of a combined display can be the same in every frame (for
+        # example the dark top of a low fire). PIL collapses identical frames
+        # to one and its single-frame writer cannot take a duration list, so
+        # write a still that lasts the whole loop.
         palette_frames[0].save(
             buffer,
             format="GIF",
             save_all=True,
-            duration=int(durations[0]),
+            duration=int(sum(int(d) for d in durations)) or 100,
             loop=loop,
             disposal=2,
             optimize=False,

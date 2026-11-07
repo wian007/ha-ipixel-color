@@ -60,6 +60,15 @@ def test_image_to_rgb_bytes_resizes():
     assert rgb == bytes([1, 2, 3]) * 8
 
 
+def test_gif_with_identical_frames_becomes_a_still():
+    """A tile that does not change (dark top of a low fire) must still encode."""
+    frames = [Image.new("RGB", (8, 4), (0, 0, 0)) for _ in range(5)]
+    data = frames_to_gif_bytes(frames, [90] * 5)
+    decoded, durations, _loop = split_gif_frames(data)
+    assert len(decoded) == 1 and durations == [450]
+    assert decoded[0].getpixel((0, 0)) == (0, 0, 0)
+
+
 def test_gif_roundtrip():
     frames = [Image.new("RGB", (8, 4), (255, 0, 0)), Image.new("RGB", (8, 4), (0, 0, 255))]
     data = frames_to_gif_bytes(frames, [100, 200])
