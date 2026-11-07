@@ -76,9 +76,12 @@ STATUS_PIXEL_INTERVAL = 10.0
 UNSAFE_TEXT_ANIMATIONS = (3, 4)
 STATUS_PIXEL_COLOR = "00c000"
 BLE_CHUNK_SIZE = 244
-# Through an ESPHome/Shelly Bluetooth proxy 244 byte writes stall and fail with
-# GATT error 133; 100 byte writes are reliable and several times faster.
-BLE_PROXY_CHUNK_SIZE = 100
+# Writes through a Bluetooth proxy. Every confirmed write costs about the same
+# time (one round trip, ~100 ms through an ESPHome proxy) whatever its size, so
+# 244 byte writes upload 2.4x faster than 100 byte ones. They do stall and fail
+# (GATT error 133) when the proxy's Wi-Fi power saving is on; the client then
+# halves the write size automatically, and the panel option can force a size.
+BLE_PROXY_CHUNK_SIZE = 244
 BLE_MIN_CHUNK_SIZE = 20
 TIME_SYNC_INTERVAL_HOURS = 1
 

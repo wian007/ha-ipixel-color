@@ -43,9 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a display HA did not blank itself (after a restart the panel may show anything).
 
 ### Changed
-- BLE writes are 100 bytes through a Bluetooth proxy and 244 bytes on a local adapter, and are
-  halved automatically when bulk writes fail (GATT error 133). Uploads through an ESPHome proxy
-  are several times faster and no longer stall.
+- BLE writes are halved automatically when bulk writes fail (GATT error 133) and the panel
+  option *BLE packet size* can force a size. Through a healthy ESPHome proxy (Wi-Fi power
+  saving off) 244 byte writes are reliable and 2.4x faster than 100 byte ones; with power
+  saving on they stall, which the automatic halving now catches.
 - The ACK timeout grows with the size of an upload (large GIFs on several panels).
 - A combined display uploads to panels behind the same Bluetooth proxy one at a time (parallel
   streams through one proxy only starve each other) and in parallel across adapters; a failed
