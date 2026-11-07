@@ -534,6 +534,15 @@ show_slot:
           max: 255
           mode: box
 
+sync_animation:
+  name: Synchronise animation
+  description: Restart the animation on all panels of a combined display at the same moment (blanks them for a fraction of a second). Use when the panels of a wall have drifted apart.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
+
 delete_slot:
   name: Delete slot
   description: Delete content stored in a slot.

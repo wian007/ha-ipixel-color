@@ -58,6 +58,7 @@ SERVICE_SET_PIXEL = "set_pixel"
 SERVICE_SET_PIXELS = "set_pixels"
 SERVICE_CLEAR_DISPLAY = "clear_display"
 SERVICE_SHOW_SLOT = "show_slot"
+SERVICE_SYNC_ANIMATION = "sync_animation"
 SERVICE_DELETE_SLOT = "delete_slot"
 SERVICE_ERASE_DATA = "erase_data"
 SERVICE_SET_PROGRAM_MODE = "set_program_mode"
@@ -480,6 +481,11 @@ async def handle_clear_display(runtime: iPIXELRuntime, call: ServiceCall) -> Non
     await runtime.async_clear()
 
 
+async def handle_sync_animation(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Restart the animation on all panels of a combined display at the same moment."""
+    await runtime.display.async_sync_animation()
+
+
 async def handle_show_slot(runtime: iPIXELRuntime, call: ServiceCall) -> None:
     """Show a stored slot."""
     await runtime.display.async_call("show_slot", int(call.data.get("slot", 0)))
@@ -695,6 +701,7 @@ SERVICES: dict[str, tuple[ServiceHandler, vol.Schema]] = {
     SERVICE_SET_PIXELS: (handle_set_pixels, _schema()),
     SERVICE_CLEAR_DISPLAY: (handle_clear_display, _schema()),
     SERVICE_SHOW_SLOT: (handle_show_slot, _schema()),
+    SERVICE_SYNC_ANIMATION: (handle_sync_animation, _schema()),
     SERVICE_DELETE_SLOT: (handle_delete_slot, _schema()),
     SERVICE_ERASE_DATA: (handle_erase_data, _schema()),
     SERVICE_SET_PROGRAM_MODE: (handle_set_program_mode, _schema()),

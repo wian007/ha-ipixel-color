@@ -46,10 +46,18 @@ PANEL_UPLOAD_CONCURRENCY = 4
 PROXY_UPLOAD_CONCURRENCY = 1
 # A looping animation on a combined display is restarted on all panels at
 # once about this often (rounded to whole loops) because the panels' own
-# clocks drift apart by roughly half a second per 20 minutes. The restart is
-# one unconfirmed write per panel; through a healthy proxy all panels act on
-# it within a few tens of ms. 0 disables it.
-GIF_RESYNC_SECONDS = 60.0
+# clocks drift apart by roughly half a second per 20 minutes. The restart
+# blanks the panels briefly (see RESTART_BLANK_SECONDS), so not too often.
+# 0 disables it.
+GIF_RESYNC_SECONDS = 300.0
+# Restarting in step: a show-slot command does not restart a slot that is
+# already playing, but blanking (DIY mode 1) and leaving DIY mode again does,
+# and when both are sent as bursts every panel resumes at the same moment.
+RESTART_BLANK_SECONDS = 0.4
+# After the panels of a combined display have all (re)connected, wait this
+# long for stragglers and then restart them in step once: connecting to a
+# panel stalls its animation for a moment, and the connects are staggered.
+REALIGN_DELAY_SECONDS = 3.0
 DEFAULT_ACK_TIMEOUT = 10.0
 # Extra ACK wait per kilobyte of upload: panels decode and store large GIFs
 # before they acknowledge, and a proxy shared by several panels is slower.

@@ -131,6 +131,10 @@ class Display(ABC):
     async def async_call(self, method: str, *args: Any, **kwargs: Any) -> None:
         """Call an arbitrary :class:`iPIXELAPI` method on every panel."""
 
+    async def async_sync_animation(self) -> None:  # noqa: B027 - a single panel is always in step
+        """Restart the current content so that all panels run in step (no-op for one panel)."""
+        return None
+
     async def async_show_image_bytes(
         self,
         data: bytes,

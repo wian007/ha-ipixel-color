@@ -10,7 +10,12 @@ from typing import Any
 
 from PIL import Image
 
-from ..const import GIF_RESYNC_SECONDS, PANEL_UPLOAD_CONCURRENCY, PROXY_UPLOAD_CONCURRENCY
+from ..const import (
+    GIF_RESYNC_SECONDS,
+    PANEL_UPLOAD_CONCURRENCY,
+    PROXY_UPLOAD_CONCURRENCY,
+    RESTART_BLANK_SECONDS,
+)
 from ..exceptions import iPIXELError, iPIXELNotAvailableError
 from .base import Display
 from .layout import Layout, PanelSpec, Tile, compute_layout
@@ -342,9 +347,34 @@ class CompositeDisplay(Display):
         while True:
             await asyncio.sleep(interval)
             try:
-                await self._async_show_slot_everywhere(tiles, slot)
+                await self._async_restart_in_step(tiles)
             except iPIXELError as err:
                 _LOGGER.debug("Animation resync of '%s' skipped: %s", self._name, err)
+
+    async def _async_restart_in_step(self, tiles: list[tuple[Tile, PanelDisplay]]) -> None:
+        """Make every panel restart its current content at the same moment.
+
+        Blank all panels with one burst, then leave DIY mode with another: each
+        panel resumes what it showed (the stored slot) from the start, together.
+        """
+        _LOGGER.debug("Restarting the panels of '%s' in step", self._name)
+        await self._async_burst(tiles, "set_diy_mode", 1)
+        await asyncio.sleep(RESTART_BLANK_SECONDS)
+        await self._async_burst(tiles, "set_diy_mode", 0)
+
+    async def async_sync_animation(self) -> None:
+        """Restart the current content on all panels in step (service)."""
+        tiles = self._tiles()
+        if not tiles:
+            raise iPIXELNotAvailableError(f"No panels of combined display '{self._name}' are available")
+        await self._async_restart_in_step(tiles)
+
+    async def _async_burst(self, tiles: list[tuple[Tile, PanelDisplay]], method: str, *args: Any) -> None:
+        """Send one short command to every panel without waiting for responses."""
+        await self._gather(
+            [(panel.name, panel.async_call(method, *args, fast=True)) for _, panel in tiles],
+            [panel for _, panel in tiles],
+        )
 
     async def _async_show_slot_everywhere(self, tiles: list[tuple[Tile, PanelDisplay]], slot: int) -> None:
         _LOGGER.debug("Showing slot %d on all panels of '%s'", slot, self._name)
@@ -381,6 +411,8 @@ class CompositeDisplay(Display):
         done = await self._run_on_tiles(self._tiles(), _upload)
         if synchronised:
             await self._async_show_slot_everywhere(done, upload_slot)
+            if len(frames) > 1:
+                await self._async_restart_in_step(done)
             if loop == 0 and len(frames) > 1:
                 self._start_resync(done, upload_slot, durations)
             self._content_in_slot = True
@@ -471,13 +503,14 @@ class CompositeDisplay(Display):
     async def async_call(self, method: str, *args: Any, **kwargs: Any) -> None:
         """Call an API method on every panel."""
         self._cancel_resync()
-        if method == "show_slot" and args and not kwargs:
-            # Start the slot on every panel as close together as possible (one
-            # unconfirmed write each) instead of confirmed writes one by one.
+        if method in ("show_slot", "set_diy_mode") and args and not kwargs:
+            # Reach every panel as close together as possible (one unconfirmed
+            # write each) instead of confirmed writes one by one.
             tiles = self._tiles()
             if not tiles:
                 raise iPIXELNotAvailableError(f"No panels of combined display '{self._name}' are available")
-            await self._async_show_slot_everywhere(tiles, int(args[0]))
-            self._content_in_slot = True
+            await self._async_burst(tiles, method, *args)
+            if method == "show_slot":
+                self._content_in_slot = True
             return
         await self._broadcast("async_call", method, *args, **kwargs)

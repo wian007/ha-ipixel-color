@@ -255,31 +255,33 @@ async def test_looping_gif_is_resynchronised_periodically(monkeypatch):
     from custom_components.ipixel_color.display import composite as composite_module
 
     monkeypatch.setattr(composite_module, "GIF_RESYNC_SECONDS", 0.02)
+    monkeypatch.setattr(composite_module, "RESTART_BLANK_SECONDS", 0.001)
     panels = {"left": StubPanel("left", 32, 32), "right": StubPanel("right", 32, 32)}
     composite = make_composite(panels, [MemberSpec("left", 0, 0), MemberSpec("right", 0, 1)], sync_slot=2)
     frames = [Image.new("RGB", (64, 32), (1, 1, 1)), Image.new("RGB", (64, 32), (2, 2, 2))]
     await composite.async_show_gif(frames, [5, 5])  # 10 ms loop -> resync every 20 ms
     await asyncio.sleep(0.12)
-    shows = [c for c in panels["left"].calls if c == ("show_slot", (2,))]
-    assert len(shows) >= 3, "the animation is restarted on all panels repeatedly"
-    assert panels["right"].calls.count(("show_slot", (2,))) == len(shows)
+    restarts = lambda p: p.calls.count(("set_diy_mode", (0,)))  # noqa: E731
+    assert restarts(panels["left"]) >= 3, "the animation is restarted on all panels repeatedly"
+    assert restarts(panels["right"]) == restarts(panels["left"])
 
     # New content stops the periodic restarts.
     await composite.async_show_image(Image.new("RGB", (64, 32)))
-    count = panels["left"].calls.count(("show_slot", (2,)))
+    count = restarts(panels["left"])
     await asyncio.sleep(0.08)
-    assert panels["left"].calls.count(("show_slot", (2,))) == count
+    assert restarts(panels["left"]) == count
 
-    # A GIF that plays once is not resynchronised, and shutdown cancels a running resync.
+    # A GIF that plays once is started in step but not resynchronised, and
+    # shutdown cancels a running resync.
     panels["left"].calls.clear()
     await composite.async_show_gif(frames, [5, 5], loop=1)
     await asyncio.sleep(0.06)
-    assert panels["left"].calls.count(("show_slot", (2,))) == 1
+    assert restarts(panels["left"]) == 1
     await composite.async_show_gif(frames, [5, 5])
     composite.shutdown()
-    count = panels["left"].calls.count(("show_slot", (2,)))
+    count = restarts(panels["left"])
     await asyncio.sleep(0.06)
-    assert panels["left"].calls.count(("show_slot", (2,))) == count
+    assert restarts(panels["left"]) == count
 
 
 async def test_show_slot_service_uses_the_synchronised_burst():
@@ -297,8 +299,9 @@ async def test_gif_synchronised_start_via_slot():
     frames = [Image.new("RGB", (64, 32), (1, 1, 1)), Image.new("RGB", (64, 32), (2, 2, 2))]
     await composite.async_show_gif(frames, [50, 50])
     for panel in panels.values():
-        # uploaded into slot 3, then started with one show_slot on every panel
-        assert panel.calls == [("gif", 3), ("show_slot", (3,))]
+        # uploaded into slot 3, started with one show_slot on every panel, then
+        # restarted in step (blank burst, release burst)
+        assert panel.calls == [("gif", 3), ("show_slot", (3,)), ("set_diy_mode", (1,)), ("set_diy_mode", (0,))]
 
     # An explicit slot bypasses the synchronised start.
     for panel in panels.values():

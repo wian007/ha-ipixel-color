@@ -49,6 +49,7 @@ from .const import (
     MODE_TEXT,
     MODE_TEXT_IMAGE,
     ORIENTATION_MAP,
+    REALIGN_DELAY_SECONDS,
     STATUS_PIXEL_COLOR,
     STATUS_PIXEL_INTERVAL,
     TIME_SYNC_INTERVAL_HOURS,
@@ -180,6 +181,8 @@ class iPIXELRuntime:
         # None means the display shows no Home Assistant content (empty).
         self._last_render: tuple[str | None, str | None, dict[str, Any] | None] | None = None
         self._heartbeat_unsub: CALLBACK_TYPE | None = None
+        self._was_fully_connected = display.is_connected
+        self._realign_task: asyncio.Task | None = None
         self._pixel_lit = False
         self._fun_mode_ready = False
         # True only after HA itself blanked the display in this session. After a
@@ -274,7 +277,31 @@ class iPIXELRuntime:
         """Render the restored settings at start-up when auto update is on."""
         if self.settings.auto_update and self.display.is_connected:
             self.hass.async_create_task(self.async_restore_content())
+        elif self.is_group and self.display.is_connected:
+            self._schedule_realign()
         self._refresh_status_pixel()
+
+    # ------------------------------------------------------------------
+    # Keeping the panels of a combined display in step after (re)connects
+    # ------------------------------------------------------------------
+    @callback
+    def _schedule_realign(self) -> None:
+        """Restart the wall in step shortly after all its panels are connected again."""
+        if self._realign_task is not None and not self._realign_task.done():
+            self._realign_task.cancel()
+        self._realign_task = self.hass.async_create_background_task(
+            self._async_realign(), f"ipixel_color realign {self.name}"
+        )
+
+    async def _async_realign(self) -> None:
+        await asyncio.sleep(REALIGN_DELAY_SECONDS)
+        if not self.display.is_connected or not self.is_empty and self.settings.auto_update:
+            return
+        try:
+            _LOGGER.info("%s: all panels connected; restarting them in step", self.name)
+            await self.display.async_sync_animation()
+        except iPIXELError as err:
+            _LOGGER.debug("Could not realign %s: %s", self.name, err)
 
     @callback
     def _on_reconnected(self) -> None:
@@ -338,6 +365,8 @@ class iPIXELRuntime:
             unsub()
         self._unsubs.clear()
         self._stop_heartbeat()
+        if self._realign_task is not None and not self._realign_task.done():
+            self._realign_task.cancel()
         self._stop_template_tracking()
         self._debouncer.async_cancel()
         if self.animation_controller is not None:
@@ -386,6 +415,10 @@ class iPIXELRuntime:
         """A panel connected or dropped: refresh entities and the status pixel."""
         self._notify_listeners()
         self._refresh_status_pixel()
+        connected = self.display.is_connected
+        if self.is_group and connected and not self._was_fully_connected:
+            self._schedule_realign()
+        self._was_fully_connected = connected
 
     # ------------------------------------------------------------------
     # Status pixel (heartbeat on an empty display)

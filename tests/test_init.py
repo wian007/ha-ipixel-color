@@ -338,6 +338,8 @@ async def test_reconnect_clears_and_restores_content(hass: HomeAssistant, fake_b
 async def test_group_repaints_when_a_member_reconnects(hass: HomeAssistant, fake_bluetooth, monkeypatch):
     """Without a sync slot the wall is painted again; with one the panels keep it themselves."""
     monkeypatch.setattr("custom_components.ipixel_color.bluetooth.client.AUTO_RECONNECT_INTERVAL", 0)
+    monkeypatch.setattr("custom_components.ipixel_color.runtime.REALIGN_DELAY_SECONDS", 0.1)
+    monkeypatch.setattr("custom_components.ipixel_color.display.composite.RESTART_BLANK_SECONDS", 0.01)
     await _setup_panel(hass, fake_bluetooth, LEFT, "Left", "left")
     await _setup_panel(hass, fake_bluetooth, RIGHT, "Right", "right")
     group = make_group_entry("Wall", [("left", 0, 0), ("right", 0, 1)], entry_id="wall", sync_slot=0)
@@ -376,8 +378,12 @@ async def test_group_repaints_when_a_member_reconnects(hass: HomeAssistant, fake
     right.disconnected_callback(right)
     fake_bluetooth.advertise(RIGHT)
     await _settle(hass)
-    assert [f.command for f in right.frames] == [(1, 0x80)], "reconnected only, nothing repainted"
-    assert left.frames == []
+    # not repainted, but the wall is restarted in step: blank burst + release burst on every panel
+    restart = [bytes([5, 0, 4, 1, 1]), bytes([5, 0, 4, 1, 0])]
+    assert [f.command for f in right.frames][:1] == [(1, 0x80)], "reconnected"
+    assert [f.data for f in right.frames[1:]] == restart
+    assert [f.data for f in left.frames] == restart
+    assert not right.frames_for((0x02, 0x00)) and not left.frames_for((0x02, 0x00)), "no upload"
 
 
 async def test_status_pixel_heartbeat_on_empty_display(hass: HomeAssistant, fake_bluetooth, monkeypatch):
@@ -535,11 +541,11 @@ async def test_synchronised_show_slot_is_written_without_response(hass: HomeAssi
     await hass.async_block_till_done()
     runtime = hass.data[DOMAIN]["wall"]
     for panel in fake_bluetooth.panels.values():
-        assert panel.writes_without_response == 0
+        panel.writes_without_response = 0
     await runtime.async_show_image_bytes(await _gif_bytes(), ".gif")
     for panel in fake_bluetooth.panels.values():
-        assert panel.frames[-1].data == bytes([7, 0, 8, 0x80, 1, 0, 1]), "show_slot last"
-        assert panel.writes_without_response == 1, "only the show-slot write skips the response"
+        assert panel.frames[-3].data == bytes([7, 0, 8, 0x80, 1, 0, 1]), "show_slot after the upload"
+        assert panel.writes_without_response == 3, "show-slot and the two restart bursts skip the response"
 
 
 async def test_migrate_v1_entry(hass: HomeAssistant, fake_bluetooth):
@@ -685,8 +691,8 @@ async def test_combined_gif_starts_synchronised_from_slot(hass: HomeAssistant, f
         assert gif_frames, "GIF upload expected"
         assert all(f.data[14] == 1 for f in gif_frames), "GIF must be stored in slot 1"
         assert len(panel.last_gif_frames()) == 2 and panel.last_gif_frames()[0].size == (32, 32)
-        # the show_slot command comes after the upload
-        assert panel.frames[-1].data == bytes([7, 0, 8, 0x80, 1, 0, 1])
+        # after the upload: show_slot, then the restart in step (DIY 1, DIY 0)
+        assert [f.data for f in panel.frames[-3:]] == [bytes([7, 0, 8, 0x80, 1, 0, 1]), bytes([5, 0, 4, 1, 1]), bytes([5, 0, 4, 1, 0])]
 
 
 async def test_combined_gif_without_sync_slot(hass: HomeAssistant, fake_bluetooth):

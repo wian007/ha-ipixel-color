@@ -220,9 +220,9 @@ class iPIXELAPI:
         """Enable/disable fun mode (required for pixel control)."""
         await self._send("set_fun_mode", make_fun_mode_command(enable))
 
-    async def set_diy_mode(self, mode: int | bool) -> None:
-        """Set DIY mode (0-3)."""
-        await self._send("set_diy_mode", self._build(make_diy_mode_command, mode))
+    async def set_diy_mode(self, mode: int | bool, *, fast: bool = False) -> None:
+        """Set DIY mode (0-3); ``fast`` writes without link-layer response."""
+        await self._send("set_diy_mode", self._build(make_diy_mode_command, mode), write_response=not fast)
 
     async def set_screen(self, screen: int) -> None:
         """Select the visible screen buffer (1-9)."""
