@@ -282,6 +282,15 @@ async def test_looping_gif_is_resynchronised_periodically(monkeypatch):
     assert panels["left"].calls.count(("show_slot", (2,))) == count
 
 
+async def test_show_slot_service_uses_the_synchronised_burst():
+    panels = {"left": StubPanel("left", 32, 32), "right": StubPanel("right", 32, 32)}
+    composite = make_composite(panels, [MemberSpec("left", 0, 0), MemberSpec("right", 0, 1)], sync_slot=1)
+    await composite.async_call("show_slot", 4)
+    for panel in panels.values():
+        assert panel.calls == [("show_slot", (4,))]
+    assert composite.content_persists
+
+
 async def test_gif_synchronised_start_via_slot():
     panels = {"left": StubPanel("left", 32, 32), "right": StubPanel("right", 32, 32)}
     composite = make_composite(panels, [MemberSpec("left", 0, 0), MemberSpec("right", 0, 1)], sync_slot=3)

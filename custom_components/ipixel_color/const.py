@@ -44,13 +44,12 @@ MAX_CONNECT_ATTEMPTS = 3
 # one there; local adapters handle several connections at once.
 PANEL_UPLOAD_CONCURRENCY = 4
 PROXY_UPLOAD_CONCURRENCY = 1
-# A looping animation on a combined display can be restarted on all panels at
+# A looping animation on a combined display is restarted on all panels at
 # once about this often (rounded to whole loops) because the panels' own
-# clocks drift apart by roughly half a second per 20 minutes. Only useful when
-# the show-slot commands reach all panels within a few ms (local adapter or a
-# fast proxy); through a slow proxy the restarts arrive staggered and make
-# things worse, so it is off by default. 0 disables it.
-GIF_RESYNC_SECONDS = 0.0
+# clocks drift apart by roughly half a second per 20 minutes. The restart is
+# one unconfirmed write per panel; through a healthy proxy all panels act on
+# it within a few tens of ms. 0 disables it.
+GIF_RESYNC_SECONDS = 60.0
 DEFAULT_ACK_TIMEOUT = 10.0
 # Extra ACK wait per kilobyte of upload: panels decode and store large GIFs
 # before they acknowledge, and a proxy shared by several panels is slower.

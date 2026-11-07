@@ -471,4 +471,13 @@ class CompositeDisplay(Display):
     async def async_call(self, method: str, *args: Any, **kwargs: Any) -> None:
         """Call an API method on every panel."""
         self._cancel_resync()
+        if method == "show_slot" and args and not kwargs:
+            # Start the slot on every panel as close together as possible (one
+            # unconfirmed write each) instead of confirmed writes one by one.
+            tiles = self._tiles()
+            if not tiles:
+                raise iPIXELNotAvailableError(f"No panels of combined display '{self._name}' are available")
+            await self._async_show_slot_everywhere(tiles, int(args[0]))
+            self._content_in_slot = True
+            return
         await self._broadcast("async_call", method, *args, **kwargs)

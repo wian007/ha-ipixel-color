@@ -472,13 +472,27 @@ class BluetoothClient:
                 # was tried through an ESPHome proxy and lost packets, so the panel
                 # never acknowledged the window; only single-packet commands
                 # (synchronised show-slot) are sent unconfirmed.
+                started = time.monotonic()
+                pieces = 0
                 for piece in _chunk_bytes(window.data, chunk_size):
                     await client.write_gatt_char(WRITE_UUID, piece, response=write_response)
+                    pieces += 1
+                written = time.monotonic()
                 if plan.ack_policy.ack_per_window and window.requires_ack:
                     await self._async_wait(
                         self._ack.window_event.wait(),
                         f"window {index + 1} of '{plan.id}'",
                         timeout=self._upload_timeout(len(window.data)),
+                    )
+                    _LOGGER.debug(
+                        "%s: window %d of '%s' (%d bytes, %d writes) written in %.2fs, acknowledged after %.2fs",
+                        self._address,
+                        index + 1,
+                        plan.id,
+                        len(window.data),
+                        pieces,
+                        written - started,
+                        time.monotonic() - written,
                     )
 
             if plan.ack_policy.ack_final:
