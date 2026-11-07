@@ -261,6 +261,12 @@ They are available for rendered text; for native text mode the built-in
 - **Wrong size** – override width/height in the panel options.
 - Download diagnostics from the device page for support requests.
 
+## Examples
+
+- `examples/homelab-fire-automation.yaml` with `tools/generate_fire_gifs.py`: flames on a 2x2 wall
+  whose height follows a metric (five pre-rendered GIFs in the media folder, one upload per
+  class change, started in step on all panels).
+
 ## Development
 
 ```bash
