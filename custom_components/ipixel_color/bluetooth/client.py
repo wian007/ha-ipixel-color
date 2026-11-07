@@ -161,11 +161,15 @@ class BluetoothClient:
         """Reconnect as soon as the panel advertises again after a dropped link."""
         if self._advertisement_unsub is not None:
             return
+        # PASSIVE on purpose: an ACTIVE callback makes HA schedule active scan
+        # windows on the proxy, and an ESP32 proxy's radio then crawls for every
+        # connected panel (writes take 10x longer, ACKs time out). Seeing any
+        # advertisement of the panel is enough to know it is back.
         self._advertisement_unsub = bluetooth.async_register_callback(
             self._hass,
             self._async_advertisement_seen,
             bluetooth.BluetoothCallbackMatcher(address=self._address, connectable=True),
-            bluetooth.BluetoothScanningMode.ACTIVE,
+            bluetooth.BluetoothScanningMode.PASSIVE,
         )
 
     @callback
@@ -464,6 +468,10 @@ class BluetoothClient:
         try:
             for index, window in enumerate(plan.windows):
                 self._ack.reset()
+                # Every packet is a confirmed write. Streaming them without response
+                # was tried through an ESPHome proxy and lost packets, so the panel
+                # never acknowledged the window; only single-packet commands
+                # (synchronised show-slot) are sent unconfirmed.
                 for piece in _chunk_bytes(window.data, chunk_size):
                     await client.write_gatt_char(WRITE_UUID, piece, response=write_response)
                 if plan.ack_policy.ack_per_window and window.requires_ack:
