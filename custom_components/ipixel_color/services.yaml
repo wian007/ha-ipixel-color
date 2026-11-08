@@ -320,6 +320,61 @@ display_bars:
       default: false
       selector:
         boolean:
+    labels:
+      name: Labels
+      description: Names for the groups (or bars), comma separated, drawn in a small pixel font under a vertical chart or above each group of a horizontal one
+      required: false
+      example: "thinred, xred, nuc, redred"
+      selector:
+        text:
+    group_size:
+      name: Values per group
+      description: Lay out this many consecutive values as one group (CPU and memory of one node, say); each position in a group keeps its own colour
+      required: false
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 16
+    group_gap:
+      name: Gap between groups
+      description: Pixels between two groups (default is twice the gap plus one)
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 32
+    show_values:
+      name: Show values
+      description: Print the values in the bar colours (above a vertical chart, at the right of the label row of a horizontal one)
+      required: false
+      default: false
+      selector:
+        boolean:
+    value_format:
+      name: Value format
+      description: Python format for the printed values
+      required: false
+      default: "{:.0f}"
+      example: "{:.1f}%"
+      selector:
+        text:
+    label_font:
+      name: Label font
+      description: Pixel font for labels and values
+      required: false
+      default: 3x5
+      selector:
+        select:
+          options:
+            - 3x5
+            - 5x7
+    label_color:
+      name: Label colour
+      description: Colour of the labels (values use their bar colour)
+      required: false
+      selector:
+        color_rgb:
     baseline_color:
       name: Baseline colour
       required: false

@@ -118,3 +118,46 @@ def test_render_bars_modes_segments_and_baseline():
         render_bars(4, 4, [])
     with pytest.raises(ValueError):
         render_bars(4, 4, [1], color_mode="rainbow")
+
+
+def test_render_bars_groups_labels_and_values():
+    from custom_components.ipixel_color.device.charts import load_label_font, render_bars, render_text
+
+    # the bundled 3x5 font gives 5 rows and a 4 px pitch; "nuc" has no ascender so it sits on the baseline
+    mask = render_text("18", load_label_font("3x5"))
+    assert mask is not None and mask.size == (7, 5)
+    assert render_text("", load_label_font("3x5")) is None
+    assert render_text("x", load_label_font("5x7")).height == 7
+
+    # horizontal groups: label row, then CPU (blue) and memory (orange) bars of 4 px; numbers at the right
+    image = render_bars(
+        64, 64, [50, 100, 0, 25], maximum=100, orientation="horizontal", group_size=2, gap=0, group_gap=2,
+        labels=["thinred", "xred"], colors=["0000ff", "ffa000"], show_values=True, label_color="ffffff",
+    )
+    px = image.load()
+    # free = 64 - 2 - 2 * 6 = 50 -> bars of 50 // 4 = 12 px; group span 30, total 62, start 1
+    assert px[0, 7] == (0, 0, 255) and px[31, 7] == (0, 0, 255) and px[32, 7] == (0, 0, 0), "CPU half"
+    assert px[63, 19] == (255, 160, 0) and px[63, 30] == (255, 160, 0) and px[63, 31] == (0, 0, 0), "memory full"
+    assert px[0, 39] == (0, 0, 0), "second node idle"
+    white = [(x, y) for x in range(64) for y in range(1, 6) if px[x, y] == (255, 255, 255)]
+    assert white and min(x for x, _ in white) == 0, "label at the left of the row"
+    blue_text = [(x, y) for x in range(40, 64) for y in range(1, 6) if px[x, y] == (0, 0, 255)]
+    orange_text = [(x, y) for x in range(40, 64) for y in range(1, 6) if px[x, y] == (255, 160, 0)]
+    assert blue_text and orange_text and max(x for x, _ in orange_text) == 63, "values right-aligned in bar colours"
+    assert max(x for x, _ in blue_text) < min(x for x, _ in orange_text)
+
+    # vertical groups: labels under the bars, values above, bars in between
+    image = render_bars(32, 20, [100, 100], maximum=100, group_size=2, gap=1, labels=["a"], show_values=True, colors=["ff0000", "00ff00"])
+    px = image.load()
+    assert px[0, 19] == (0, 0, 0) and px[0, 13] == (255, 0, 0) and px[0, 6] == (255, 0, 0) and px[0, 5] == (0, 0, 0), "bars span rows 6..13"
+    assert any(px[x, 19] != (0, 0, 0) for x in range(32)) and any(px[x, 0] != (0, 0, 0) for x in range(32)), "label row and value row"
+    # a single colour per position when grouped; per bar when not
+    grouped = render_bars(5, 2, [1, 1, 1, 1], gap=0, group_size=2, colors=["ff0000", "00ff00"]).load()
+    assert grouped[2, 1] == (0, 0, 0) and grouped[3, 1] == (255, 0, 0) and grouped[4, 1] == (0, 255, 0), "group gap of 1, colours per position"
+    assert render_bars(4, 2, [1, 1, 1, 1], gap=0, colors=["ff0000", "00ff00"]).load()[2, 1] == (255, 0, 0)
+    assert render_bars(4, 2, [1, 1, 1, 1], gap=0, colors=["ff0000", "00ff00", "0000ff"]).load()[2, 1] == (0, 0, 255)
+    with pytest.raises(ValueError):
+        render_bars(8, 8, [1], labels=["x"], label_font="9x9")
+    with pytest.raises(ValueError):
+        render_bars(8, 8, [1], show_values=True, value_format="{:d}")
+

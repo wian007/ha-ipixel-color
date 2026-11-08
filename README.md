@@ -149,7 +149,7 @@ configured the target can be omitted.
 | `ipixel_color.display_text` | Show text. `mode: text` = rendered by the panel (scroll/blink animations), `mode: textimage` = rendered by Home Assistant as one image over a combined display |
 | `ipixel_color.update_display` | Re-render the current entity settings |
 | `ipixel_color.display_image` | Show an image or GIF from a `url`, a `media` library item (media browser, `media-source://...`) or a local `path`; `method: stream` sends raw pixels instead of an upload |
-| `ipixel_color.display_bars` | Bar chart of several `values` or the states of several `entities`, with colours per bar, by value or as a gradient, vertical or horizontal, gaps, segments, baseline and margin |
+| `ipixel_color.display_bars` | Bar chart of several `values` or the states of several `entities`, with colours per bar, by value or as a gradient, vertical or horizontal, gaps, segments, baseline and margin; `group_size` groups the bars (CPU and memory per node), `labels` and `show_values` print names and numbers in a pixel font |
 | `ipixel_color.draw_visuals` / `stop_visuals` | Multi-element canvas (text, scrolling text, images, pixels) with animation |
 | `ipixel_color.draw_solid_color`, `set_pixel`, `set_pixels`, `clear_display` | Pixel level control (combined coordinates on a combined display) |
 | `ipixel_color.set_power`, `set_brightness`, `set_orientation`, `set_upside_down` | Device control |

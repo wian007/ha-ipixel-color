@@ -320,7 +320,7 @@ def _str_list(value: Any) -> list[str]:
 
 
 async def handle_display_bars(runtime: iPIXELRuntime, call: ServiceCall) -> None:
-    """Draw a bar chart of several values (or the states of several entities)."""
+    """Draw a bar chart of several values (or the states of several entities), with labels."""
     from functools import partial
 
     from .device.charts import COLOR_MODES, ORIENTATIONS, render_bars
@@ -371,6 +371,13 @@ async def handle_display_bars(runtime: iPIXELRuntime, call: ServiceCall) -> None
         background=_color_hex(data.get("background"), "000000"),
         baseline=_bool(data.get("baseline"), False),
         baseline_color=_color_hex(data.get("baseline_color"), "303030"),
+        labels=_str_list(data.get("labels")) or None,
+        label_color=_color_hex(data.get("label_color"), "a0a0a0"),
+        label_font=str(data.get("label_font") or "3x5"),
+        group_size=int(data.get("group_size", 1) or 1),
+        group_gap=int(data["group_gap"]) if data.get("group_gap") not in (None, "") else None,
+        show_values=_bool(data.get("show_values"), False),
+        value_format=str(data.get("value_format") or "{:.0f}"),
     )
     try:
         image = await runtime.hass.async_add_executor_job(render)

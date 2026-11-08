@@ -746,6 +746,31 @@ async def test_display_bars_service(hass: HomeAssistant, fake_bluetooth):
 
     from homeassistant.exceptions import ServiceValidationError
 
+    # grouped bars with labels and values: a label row above each group, bars under it
+    panel.clear()
+    await hass.services.async_call(
+        DOMAIN,
+        "display_bars",
+        {
+            "values": "100, 100",
+            "max": 100,
+            "orientation": "horizontal",
+            "group_size": 2,
+            "gap": 0,
+            "labels": "node",
+            "show_values": True,
+            "label_color": [255, 255, 255],
+            "colors": "0000ff, ffa000",
+        },
+        blocking=True,
+    )
+    px = panel.last_image().load()
+    # 16 rows: label row of 6, then two bars of (16 - 6) // 2 = 5 px
+    assert px[0, 0] == (255, 255, 255) or px[1, 0] == (255, 255, 255) or px[0, 1] == (255, 255, 255), "label top-left"
+    assert px[0, 8] == (0, 0, 255) and px[0, 13] == (255, 160, 0)
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(DOMAIN, "display_bars", {"values": "1", "labels": "x", "label_font": "9x9"}, blocking=True)
+
     hass.states.async_set("sensor.b", "unknown")
     with pytest.raises(ServiceValidationError):
         await hass.services.async_call(

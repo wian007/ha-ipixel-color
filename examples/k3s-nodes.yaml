@@ -1,0 +1,60 @@
+# CPU and memory per node of a k3s cluster on a 2x2 iPIXEL wall (64x64): one
+# group per node with a blue CPU bar and an orange memory bar, the node name on
+# the left of each group and the two numbers on the right.
+#
+# 1. Sensors: one Prometheus query gives CPU and memory of every node (joined
+#    with node_uname_info for the node name). Put this in configuration.yaml
+#    and repeat the sensor for every node and metric.
+#
+# rest:
+#   - resource: https://prometheus.k3s.example.net/api/v1/query
+#     params:
+#       query: >-
+#         label_replace(100*(1-avg by(instance)(rate(node_cpu_seconds_total{mode="idle"}[1m])))
+#         * on(instance) group_left(nodename) node_uname_info, "metric", "cpu", "", "")
+#         or label_replace(100*(1-node_memory_MemAvailable_bytes/node_memory_MemTotal_bytes)
+#         * on(instance) group_left(nodename) node_uname_info, "metric", "mem", "", "")
+#     scan_interval: 10
+#     timeout: 8
+#     sensor:
+#       - name: k3s thinred CPU
+#         unique_id: k3s_thinred_cpu
+#         unit_of_measurement: "%"
+#         state_class: measurement
+#         value_template: >-
+#           {{ value_json.data.result | selectattr('metric.nodename', 'eq', 'thinred')
+#              | selectattr('metric.metric', 'eq', 'cpu') | map(attribute='value.1')
+#              | first | float | round(1) }}
+#       - name: k3s thinred memory
+#         unique_id: k3s_thinred_mem
+#         ...
+#
+# 2. The chart. Call it from an automation that triggers on the sensors (or
+#    every minute); a still over four panels takes about a second.
+action: ipixel_color.display_bars
+target:
+  entity_id: camera.combined_display_voorbeeld
+data:
+  entities:
+    - sensor.k3s_thinred_cpu
+    - sensor.k3s_thinred_memory
+    - sensor.k3s_xred_cpu
+    - sensor.k3s_xred_memory
+    - sensor.k3s_nuc_cpu
+    - sensor.k3s_nuc_memory
+    - sensor.k3s_redred_cpu
+    - sensor.k3s_redred_memory
+  group_size: 2              # CPU and memory of one node side by side
+  labels: "thinred, xred, nuc, redred"
+  show_values: true          # "18 68" at the right of every label row
+  max: 100
+  orientation: horizontal    # label row above two bars per node
+  colors: "00a0ff, ffc000"   # CPU blue, memory orange
+  gap: 0                     # the two bars touch; groups are 2 px apart
+  group_gap: 2
+# Vertical variant (names under the bars, numbers above):
+#   orientation: vertical
+#   labels: "thin, xred, nuc, red"
+#   gap: 1
+#   margin: 1
+#   segment: 3
