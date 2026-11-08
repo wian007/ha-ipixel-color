@@ -52,6 +52,9 @@ data:
   colors: "00a0ff, ffc000"   # CPU blue, memory orange
   gap: 0                     # the two bars touch; groups are 2 px apart
   group_gap: 2
+  animation: space           # twinkling stars behind the chart, a light pulse through the bars
+  frames: 24                 # one loop of 24 x 80 ms; leave animation empty for a still
+  frame_ms: 80
 # Vertical variant (names under the bars, numbers above):
 #   orientation: vertical
 #   labels: "thin, xred, nuc, red"

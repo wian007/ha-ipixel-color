@@ -771,6 +771,20 @@ async def test_display_bars_service(hass: HomeAssistant, fake_bluetooth):
     with pytest.raises(ServiceValidationError):
         await hass.services.async_call(DOMAIN, "display_bars", {"values": "1", "labels": "x", "label_font": "9x9"}, blocking=True)
 
+    # an animated chart is uploaded as one GIF with the requested number of frames
+    panel.clear()
+    await hass.services.async_call(
+        DOMAIN,
+        "display_bars",
+        {"values": "40, 80", "max": 100, "animation": "space", "frames": 6, "frame_ms": 100},
+        blocking=True,
+    )
+    assert panel.last_image() is None, "no still"
+    gif = panel.last_gif_frames()
+    assert len(gif) == 6 and gif[0].size == (64, 16)
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(DOMAIN, "display_bars", {"values": "1", "animation": "warp"}, blocking=True)
+
     hass.states.async_set("sensor.b", "unknown")
     with pytest.raises(ServiceValidationError):
         await hass.services.async_call(

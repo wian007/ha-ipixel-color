@@ -173,3 +173,37 @@ def test_native_font_names_resolve_to_bundled_files():
     # an unknown file falls back to the device font; a bare unknown name is passed on
     assert iPIXELRuntime._native_font("missing.ttf") == "UNIFONT"
     assert iPIXELRuntime._native_font("SOMETHING") == "SOMETHING"
+
+
+def test_render_bars_animation_effects():
+    from custom_components.ipixel_color.device.charts import parse_animation, render_bars, render_bars_frames
+
+    assert parse_animation(None) == () and parse_animation("none") == ()
+    assert parse_animation("space") == ("stars", "pulse")
+    assert parse_animation(["radar", "grow"]) == ("stars", "scan", "grow")
+    assert parse_animation("pulse, pulse, scan") == ("pulse", "scan")
+    with pytest.raises(ValueError):
+        parse_animation("warp")
+
+    # a still is one frame; an animation is a loop of `frames` images
+    assert len(render_bars_frames(16, 8, [1, 2])) == 1
+    frames = render_bars_frames(32, 16, [50, 100], maximum=100, gap=0, colors=["ff0000"], animation="pulse", frames=8)
+    assert len(frames) == 8 and all(f.size == (32, 16) for f in frames)
+    # pulse: the bar is brighter than its colour somewhere, and the frames differ
+    lit = [max(f.getpixel((20, y))[1] for y in range(16)) for f in frames]
+    assert max(lit) > 0 and lit.count(lit[0]) < 8
+    # stars: dim pixels in an area no bar covers, twinkling between frames
+    frames = render_bars_frames(32, 16, [10], maximum=100, animation="stars", frames=6, seed=3)
+    sky = [sum(1 for x in range(32) for y in range(0, 8) if f.getpixel((x, y)) != (0, 0, 0)) for f in frames]
+    assert all(n > 0 for n in sky)
+    assert any(frames[0].getpixel((x, y)) != frames[3].getpixel((x, y)) for x in range(32) for y in range(8))
+    # scan: a horizontal line moves down a vertical chart
+    frames = render_bars_frames(8, 8, [0], animation="scan", frames=8)
+    rows = [max(range(8), key=lambda y: sum(frames[k].getpixel((0, y)))) for k in (0, 4)]  # brightest row = head of the sweep
+    assert rows == [0, 4]
+    # grow: the bar is short in the first frame and full from the middle of the loop on
+    frames = render_bars_frames(1, 10, [100], animation="grow", frames=10, colors=["ffffff"])
+    heights = [sum(1 for y in range(10) if f.getpixel((0, y)) == (255, 255, 255)) for f in frames]
+    assert heights[0] < heights[2] < heights[4] == 10 and heights[-1] == 10
+    # render_bars ignores an animation and keeps returning one image
+    assert render_bars(4, 4, [1], animation="space").size == (4, 4)

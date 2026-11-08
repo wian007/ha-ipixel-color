@@ -1,6 +1,8 @@
 """Render small charts for a pixel display."""
 from __future__ import annotations
 
+import math
+import random
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -10,6 +12,14 @@ RGB = tuple[int, int, int]
 DEFAULT_PALETTE = ("00a0ff", "00c000", "ffc000", "ff4000", "c000ff", "00e0e0")
 COLOR_MODES = ("per_bar", "by_value", "gradient")
 ORIENTATIONS = ("vertical", "horizontal")
+# Animation effects; presets name a combination.
+ANIMATIONS = ("stars", "pulse", "scan", "grow")
+ANIMATION_PRESETS: dict[str, tuple[str, ...]] = {
+    "none": (),
+    "space": ("stars", "pulse"),
+    "radar": ("stars", "scan"),
+    "boot": ("stars", "grow", "pulse"),
+}
 # Bundled pixel fonts for labels: file, PIL size and the rows of the glyph band (top, height).
 # Keeping the band fixed puts every glyph on the same baseline whatever the text.
 LABEL_FONTS: dict[str, tuple[str, int, int, int]] = {
@@ -18,6 +28,9 @@ LABEL_FONTS: dict[str, tuple[str, int, int, int]] = {
 }
 _FONT_DIR = Path(__file__).resolve().parent.parent / "fonts"
 _PIECE_GAP = 2  # columns between two texts on one row
+_STAR_TONES: tuple[RGB, ...] = ((150, 170, 255), (255, 255, 255), (255, 225, 170), (120, 210, 255))
+_SCAN_TONE: RGB = (140, 230, 255)
+_WHITE: RGB = (255, 255, 255)
 
 
 def _rgb(value: str | RGB) -> RGB:
@@ -32,6 +45,29 @@ def _rgb(value: str | RGB) -> RGB:
 def _lerp(a: RGB, b: RGB, t: float) -> RGB:
     t = min(1.0, max(0.0, t))
     return tuple(int(round(a[i] + (b[i] - a[i]) * t)) for i in range(3))  # type: ignore[return-value]
+
+
+def _ease_out(x: float) -> float:
+    x = min(1.0, max(0.0, x))
+    return 1.0 - (1.0 - x) ** 3
+
+
+def parse_animation(value: str | list[str] | tuple[str, ...] | None) -> tuple[str, ...]:
+    """Turn ``"space"`` or ``"stars, scan"`` into a tuple of effects."""
+    if value in (None, ""):
+        return ()
+    names = value if isinstance(value, (list, tuple)) else str(value).split(",")
+    effects: list[str] = []
+    for raw in names:
+        name = str(raw).strip().lower()
+        if not name:
+            continue
+        for effect in ANIMATION_PRESETS.get(name, (name,)):
+            if effect not in ANIMATIONS:
+                raise ValueError(f"animation must be made of {', '.join(ANIMATIONS)} or a preset ({', '.join(ANIMATION_PRESETS)})")
+            if effect not in effects:
+                effects.append(effect)
+    return tuple(effects)
 
 
 def load_label_font(name: str) -> tuple[ImageFont.FreeTypeFont, int, int]:
@@ -77,7 +113,23 @@ def _blit_row(pixels, pieces: list[tuple[Image.Image, RGB]], x: int, y: int, cli
         x += mask.width + _PIECE_GAP
 
 
-def render_bars(
+def _make_stars(width: int, height: int, seed: int) -> list[tuple[int, int, RGB, float, int]]:
+    """A fixed sky: (x, y, tone, phase, cycles per loop) per star."""
+    rng = random.Random(seed)
+    stars = []
+    for _ in range(max(4, width * height // 40)):
+        tone = _lerp((0, 0, 0), rng.choice(_STAR_TONES), rng.uniform(0.25, 0.9))
+        stars.append((rng.randrange(width), rng.randrange(height), tone, rng.random(), rng.choice((1, 1, 2))))
+    return stars
+
+
+def render_bars(width: int, height: int, values: list[float], **kwargs) -> Image.Image:
+    """Draw a bar chart of ``values`` as one still; see :func:`render_bars_frames`."""
+    kwargs.pop("animation", None)
+    return render_bars_frames(width, height, values, animation=(), **kwargs)[0]
+
+
+def render_bars_frames(
     width: int,
     height: int,
     values: list[float],
@@ -103,7 +155,10 @@ def render_bars(
     group_gap: int | None = None,
     show_values: bool = False,
     value_format: str = "{:.0f}",
-) -> Image.Image:
+    animation: tuple[str, ...] | list[str] | str = (),
+    frames: int = 24,
+    seed: int = 7,
+) -> list[Image.Image]:
     """Draw a bar chart of ``values`` on a ``width`` x ``height`` canvas.
 
     Bars rise from the bottom (``vertical``) or grow from the left
@@ -122,6 +177,12 @@ def render_bars(
     ``show_values`` prints the values in the bar colours: above a vertical
     chart, right-aligned on the label row of a horizontal one. Bars and text
     that do not fit on the canvas are dropped or clipped.
+
+    ``animation`` is a tuple of effects (``stars``: a twinkling sky behind the
+    chart, ``pulse``: a light running through every bar, ``scan``: a radar line
+    sweeping the chart, ``grow``: the bars rise from nothing in the first half
+    of the loop) or a preset name; it returns ``frames`` images that loop
+    seamlessly. Without effects one frame is returned.
     """
     if width <= 0 or height <= 0:
         raise ValueError("The canvas must be at least 1x1")
@@ -141,6 +202,8 @@ def render_bars(
         value_format.format(0.0)
     except (ValueError, IndexError, KeyError) as err:
         raise ValueError(f"value_format {value_format!r} is not a format like {{:.0f}}") from err
+    effects = parse_animation(animation) if isinstance(animation, str) else parse_animation(list(animation))
+    frames = max(1, int(frames)) if effects else 1
 
     margin = max(0, int(margin))
     gap = max(0, int(gap))
@@ -177,18 +240,7 @@ def render_bars(
 
     palette = [_rgb(c) for c in (colors or DEFAULT_PALETTE)]
     low, high = _rgb(color_low), _rgb(color_high)
-    image = Image.new("RGB", (width, height), _rgb(background))
-    pixels = image.load()
-
-    if baseline:
-        line = _rgb(baseline_color)
-        if vertical:
-            for x in range(margin, margin + area_w):
-                pixels[x, base] = line
-        else:
-            for y in range(margin, margin + area_h):
-                pixels[margin, y] = line
-
+    bg = _rgb(background)
     fractions = [min(1.0, max(0.0, (value - minimum) / span)) for value in values]
 
     def bar_colour(index: int) -> RGB:
@@ -196,6 +248,8 @@ def render_bars(
             return palette[(index % group_size if group_size > 1 else index) % len(palette)]
         return _lerp(low, high, fractions[index])
 
+    # Geometry of every bar that fits: (index, first, last, full length in pixels)
+    bars: list[tuple[int, int, int, int]] = []
     for index, fraction in enumerate(fractions):
         bar_length = int(round(fraction * length))
         if fraction > 0 and bar_length == 0:
@@ -204,60 +258,115 @@ def render_bars(
         first = start + group * (group_span + between) + group_head + position * (bar_width + gap)
         if first >= margin + across:
             break
-        last = min(first + bar_width, margin + across)
-        colour = bar_colour(index)
-        for step in range(bar_length):
-            if segment and step % (segment + 1) == segment:
-                continue
-            if color_mode == "gradient":
-                colour = _lerp(low, high, step / max(1, length - 1))
-            if vertical:
-                y = base - step
-                if y < top:
-                    break
-                for x in range(first, last):
-                    pixels[x, y] = colour
-            else:
-                x = margin + step
-                for y in range(first, last):
-                    pixels[x, y] = colour
+        bars.append((index, first, min(first + bar_width, margin + across), bar_length))
 
-    if font is None:
-        return image
+    # Text is the same in every frame: render the masks once
     text_colour = _rgb(label_color)
-    canvas_clip = (margin, margin, margin + area_w, margin + area_h)
-    for group in range(groups):
-        g_first = start + group * (group_span + between)
-        if g_first >= margin + across:
-            break
-        g_last = min(g_first + group_span, margin + across)
-        label = render_text(labels[group], font) if group < len(labels) and labels[group] else None
-        value_pieces: list[tuple[Image.Image, RGB]] = []
-        if show_values:
-            for index in range(group * group_size, min(count, (group + 1) * group_size)):
-                mask = render_text(value_format.format(values[index]), font)
-                if mask is not None:
-                    value_pieces.append((mask, bar_colour(index)))
-        if vertical:
-            # labels under the group, values above it, both centred and allowed half the gap on each side
-            clip = (max(margin, g_first - between // 2), margin, min(margin + area_w, g_last + (between - between // 2)), margin + area_h)
-            slot = clip[2] - clip[0]
-            if label is not None:
-                x = clip[0] + (slot - label.width) // 2 if label.width <= slot else clip[0]
-                _blit(pixels, label, x, margin + area_h - text_rows, text_colour, clip)
-            if value_pieces:
-                row = _row_width(value_pieces)
-                x = clip[0] + (slot - row) // 2 if row <= slot else clip[0]
-                _blit_row(pixels, value_pieces, x, margin, clip)
-        else:
-            # one row at the head of the group: label at the left, values at the right
-            y = g_first
-            label_end = margin + area_w
-            if value_pieces:
-                row = _row_width(value_pieces)
-                x = max(margin, margin + area_w - row)
-                _blit_row(pixels, value_pieces, x, y, canvas_clip)
-                label_end = x - _PIECE_GAP
-            if label is not None:
-                _blit(pixels, label, margin, y, text_colour, (margin, margin, label_end, margin + area_h))
-    return image
+    texts: list[tuple[Image.Image, int, int, RGB, tuple[int, int, int, int]]] = []
+    if font is not None:
+        canvas_clip = (margin, margin, margin + area_w, margin + area_h)
+        for group in range(groups):
+            g_first = start + group * (group_span + between)
+            if g_first >= margin + across:
+                break
+            g_last = min(g_first + group_span, margin + across)
+            label = render_text(labels[group], font) if group < len(labels) and labels[group] else None
+            value_pieces: list[tuple[Image.Image, RGB]] = []
+            if show_values:
+                for index in range(group * group_size, min(count, (group + 1) * group_size)):
+                    mask = render_text(value_format.format(values[index]), font)
+                    if mask is not None:
+                        value_pieces.append((mask, bar_colour(index)))
+            if vertical:
+                # labels under the group, values above it, both centred and allowed half the gap on each side
+                clip = (max(margin, g_first - between // 2), margin, min(margin + area_w, g_last + (between - between // 2)), margin + area_h)
+                slot = clip[2] - clip[0]
+                if label is not None:
+                    x = clip[0] + (slot - label.width) // 2 if label.width <= slot else clip[0]
+                    texts.append((label, x, margin + area_h - text_rows, text_colour, clip))
+                if value_pieces:
+                    row = _row_width(value_pieces)
+                    x = clip[0] + (slot - row) // 2 if row <= slot else clip[0]
+                    for mask, colour in value_pieces:
+                        texts.append((mask, x, margin, colour, clip))
+                        x += mask.width + _PIECE_GAP
+            else:
+                # one row at the head of the group: label at the left, values at the right
+                y = g_first
+                label_end = margin + area_w
+                if value_pieces:
+                    x = max(margin, margin + area_w - _row_width(value_pieces))
+                    label_end = x - _PIECE_GAP
+                    for mask, colour in value_pieces:
+                        texts.append((mask, x, y, colour, canvas_clip))
+                        x += mask.width + _PIECE_GAP
+                if label is not None:
+                    texts.append((label, margin, y, text_colour, (margin, margin, label_end, margin + area_h)))
+
+    stars = _make_stars(width, height, seed) if "stars" in effects else []
+    images: list[Image.Image] = []
+    for k in range(frames):
+        t = k / frames
+        image = Image.new("RGB", (width, height), bg)
+        pixels = image.load()
+
+        for x, y, tone, phase, cycles in stars:
+            twinkle = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(2 * math.pi * (cycles * t + phase)))
+            pixels[x, y] = _lerp(bg, tone, twinkle)
+
+        if baseline:
+            line = _rgb(baseline_color)
+            if vertical:
+                for x in range(margin, margin + area_w):
+                    pixels[x, base] = line
+            else:
+                for y in range(margin, margin + area_h):
+                    pixels[margin, y] = line
+
+        scale = _ease_out((k + 1) / max(1, frames // 2)) if "grow" in effects else 1.0
+        for index, first, last, full_length in bars:
+            bar_length = int(round(full_length * scale))
+            if full_length and bar_length == 0:
+                bar_length = 1
+            colour = bar_colour(index)
+            pulse = ((t + 0.23 * index) % 1.0) * (length + 6) - 3 if "pulse" in effects else None
+            for step in range(bar_length):
+                if segment and step % (segment + 1) == segment:
+                    continue
+                shade = _lerp(low, high, step / max(1, length - 1)) if color_mode == "gradient" else colour
+                if pulse is not None:
+                    distance = abs(step - pulse)
+                    if distance < 2.5:
+                        shade = _lerp(shade, _WHITE, 0.8 * (1 - distance / 2.5))
+                if vertical:
+                    y = base - step
+                    if y < top:
+                        break
+                    for x in range(first, last):
+                        pixels[x, y] = shade
+                else:
+                    x = margin + step
+                    for y in range(first, last):
+                        pixels[x, y] = shade
+
+        if "scan" in effects:
+            # a bright line sweeping along the bars with a short trail behind it
+            head = int(t * length)
+            for trail, strength in ((0, 0.6), (1, 0.3), (2, 0.12)):
+                pos = head - trail
+                if pos < 0:
+                    continue
+                if vertical:
+                    y = top + pos
+                    for x in range(margin, margin + area_w):
+                        pixels[x, y] = _lerp(pixels[x, y], _SCAN_TONE, strength)
+                else:
+                    x = margin + pos
+                    if x < margin + area_w:
+                        for y in range(margin, margin + area_h):
+                            pixels[x, y] = _lerp(pixels[x, y], _SCAN_TONE, strength)
+
+        for mask, x, y, colour, clip in texts:
+            _blit(pixels, mask, x, y, colour, clip)
+        images.append(image)
+    return images

@@ -893,6 +893,18 @@ class iPIXELRuntime:
         await self.display.async_show_image(canvas, save_slot=save_slot)
         self.set_last_frame(canvas)
 
+    async def async_show_animation(self, frames: list[Image.Image], durations: list[int], *, save_slot: int = 0) -> None:
+        """Show rendered frames (durations in ms) as one animation over the display."""
+        from .display.base import fit_to_canvas
+
+        width, height = self._require_canvas()
+        sized = [fit_to_canvas(frame, width, height) for frame in frames]
+        if len(sized) == 1:
+            await self.display.async_show_image(sized[0], save_slot=save_slot)
+        else:
+            await self.display.async_show_gif(sized, durations, loop=0, save_slot=save_slot)
+        self.set_last_frame(sized[0])
+
     async def async_show_slot(self, slot: int, *, in_step: bool = False) -> None:
         """Show stored content from a slot (a wall sends it to all panels in one burst).
 

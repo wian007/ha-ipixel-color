@@ -323,7 +323,7 @@ async def handle_display_bars(runtime: iPIXELRuntime, call: ServiceCall) -> None
     """Draw a bar chart of several values (or the states of several entities), with labels."""
     from functools import partial
 
-    from .device.charts import COLOR_MODES, ORIENTATIONS, render_bars
+    from .device.charts import COLOR_MODES, ORIENTATIONS, parse_animation, render_bars_frames
 
     data = call.data
     values: list[float] = []
@@ -352,11 +352,19 @@ async def handle_display_bars(runtime: iPIXELRuntime, call: ServiceCall) -> None
         raise ServiceValidationError(f"orientation must be one of {', '.join(ORIENTATIONS)}")
     colors = [_color_hex(c, "ffffff") for c in _str_list(data.get("colors"))] or None
     maximum = data.get("max")
+    try:
+        animation = parse_animation(data.get("animation"))
+    except ValueError as err:
+        raise ServiceValidationError(str(err)) from err
+    frame_count = max(2, int(data.get("frames", 24) or 24))
+    frame_ms = max(20, int(data.get("frame_ms", 80) or 80))
     render = partial(
-        render_bars,
+        render_bars_frames,
         width,
         height,
         values,
+        animation=animation,
+        frames=frame_count,
         minimum=float(data.get("min") or 0),
         maximum=float(maximum) if maximum not in (None, "") else None,
         colors=colors,
@@ -380,10 +388,14 @@ async def handle_display_bars(runtime: iPIXELRuntime, call: ServiceCall) -> None
         value_format=str(data.get("value_format") or "{:.0f}"),
     )
     try:
-        image = await runtime.hass.async_add_executor_job(render)
+        frames = await runtime.hass.async_add_executor_job(render)
     except ValueError as err:
         raise ServiceValidationError(str(err)) from err
-    await runtime.async_show_image(image, save_slot=int(data.get("slot", 0) or 0))
+    slot = int(data.get("slot", 0) or 0)
+    if len(frames) == 1:
+        await runtime.async_show_image(frames[0], save_slot=slot)
+    else:
+        await runtime.async_show_animation(frames, [frame_ms] * len(frames), save_slot=slot)
 
 
 async def _show_frame(runtime: iPIXELRuntime, image, brightness: int) -> None:

@@ -375,6 +375,32 @@ display_bars:
       required: false
       selector:
         color_rgb:
+    animation:
+      name: Animation
+      description: "Effects for an animated chart, comma separated: stars (a twinkling sky behind the chart), pulse (a light running through every bar), scan (a radar line sweeping the chart), grow (the bars rise at the start of every loop); or a preset: space (stars + pulse), radar (stars + scan), boot (stars + grow + pulse). Empty for a still."
+      required: false
+      example: space
+      selector:
+        text:
+    frames:
+      name: Frames
+      description: Number of frames in one loop of the animation
+      required: false
+      default: 24
+      selector:
+        number:
+          min: 2
+          max: 120
+    frame_ms:
+      name: Frame time
+      description: Milliseconds per frame
+      required: false
+      default: 80
+      selector:
+        number:
+          min: 20
+          max: 1000
+          unit_of_measurement: ms
     baseline_color:
       name: Baseline colour
       required: false
