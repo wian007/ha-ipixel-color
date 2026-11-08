@@ -116,11 +116,11 @@ def get_font_locations() -> list[Path]:
     """
     locations = []
 
-    # 1st priority: Custom fonts from this integration
-    custom_fonts_dir = Path(__file__).parent / "fonts"
-    if custom_fonts_dir.exists() and custom_fonts_dir.is_dir():
-        locations.append(custom_fonts_dir)
-        _LOGGER.debug("Added custom fonts directory: %s", custom_fonts_dir)
+    # 1st priority: fonts bundled with this integration (fonts/ and the card's www/fonts/)
+    for custom_fonts_dir in (Path(__file__).parent / "fonts", Path(__file__).parent / "www" / "fonts"):
+        if custom_fonts_dir.exists() and custom_fonts_dir.is_dir():
+            locations.append(custom_fonts_dir)
+            _LOGGER.debug("Added custom fonts directory: %s", custom_fonts_dir)
 
     # 2nd priority: pypixelcolor package fonts
     try:

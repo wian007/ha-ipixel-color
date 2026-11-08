@@ -161,3 +161,15 @@ def test_render_bars_groups_labels_and_values():
     with pytest.raises(ValueError):
         render_bars(8, 8, [1], show_values=True, value_format="{:d}")
 
+
+def test_native_font_names_resolve_to_bundled_files():
+    from custom_components.ipixel_color.runtime import iPIXELRuntime
+
+    assert iPIXELRuntime._native_font(None) == "UNIFONT"
+    assert iPIXELRuntime._native_font("unifont") == "UNIFONT"
+    # fonts/ and the card's www/fonts/ are searched, with or without the extension
+    assert iPIXELRuntime._native_font("CUSONG").endswith("www/fonts/CUSONG.ttf")
+    assert iPIXELRuntime._native_font("5x5.ttf").endswith("fonts/5x5.ttf")
+    # an unknown file falls back to the device font; a bare unknown name is passed on
+    assert iPIXELRuntime._native_font("missing.ttf") == "UNIFONT"
+    assert iPIXELRuntime._native_font("SOMETHING") == "SOMETHING"

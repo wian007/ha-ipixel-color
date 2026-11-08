@@ -66,6 +66,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   connected without ACKs (service calls used to hang for minutes).
 
 ### Fixed
+- A display text font given by name (`CUSONG`, `VCR_OSD_MONO`) is looked up in the bundled
+  `fonts/` and `www/fonts/` folders instead of being passed to the device library unresolved.
 - **`clear_display` no longer factory-resets the panel.** It sent opcode 0x8003, which
   pypixelcolor documents as erasing all stored content *and the device settings*; it now sends
   the non-destructive DIY blank. `set_default_mode` keeps 0x8003 and is labelled as the factory

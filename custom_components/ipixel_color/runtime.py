@@ -773,9 +773,12 @@ class iPIXELRuntime:
         """Map a font selection to something pypixelcolor understands."""
         if not font or font.upper() in ("UNIFONT", "DEFAULT"):
             return DEFAULT_NATIVE_FONT
+        # A bundled or system TTF/OTF, named with or without its extension (CUSONG, 5x5.ttf)
+        path = get_font_path(font)
+        if path:
+            return str(path)
         if font.lower().endswith((".ttf", ".otf")):
-            path = get_font_path(font)
-            return str(path) if path else DEFAULT_NATIVE_FONT
+            return DEFAULT_NATIVE_FONT
         return font
 
     async def _async_update_clock(self, overrides: dict[str, Any]) -> None:
