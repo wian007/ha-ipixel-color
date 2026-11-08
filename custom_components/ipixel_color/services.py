@@ -63,6 +63,7 @@ SERVICE_SET_STAGES = "set_stages"
 SERVICE_SHOW_STAGE = "show_stage"
 SERVICE_CLEAR_STAGES = "clear_stages"
 SERVICE_DELETE_SLOT = "delete_slot"
+SERVICE_DISPLAY_BARS = "display_bars"
 SERVICE_ERASE_DATA = "erase_data"
 SERVICE_SET_PROGRAM_MODE = "set_program_mode"
 SERVICE_SET_SCREEN = "set_screen"
@@ -306,6 +307,76 @@ async def handle_display_image(runtime: iPIXELRuntime, call: ServiceCall) -> Non
 
     slot = int(_first(data, "slot", "buffer_slot", default=0) or 0)
     await runtime.async_show_image_bytes(image_bytes, extension, effect=data.get("effect"), save_slot=slot)
+
+
+def _str_list(value: Any) -> list[str]:
+    if value in (None, ""):
+        return []
+    if isinstance(value, str):
+        return [v.strip() for v in value.replace("\n", ",").split(",") if v.strip()]
+    if isinstance(value, (list, tuple)):
+        return [str(v).strip() for v in value if str(v).strip()]
+    return [str(value)]
+
+
+async def handle_display_bars(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Draw a bar chart of several values (or the states of several entities)."""
+    from functools import partial
+
+    from .device.charts import COLOR_MODES, ORIENTATIONS, render_bars
+
+    data = call.data
+    values: list[float] = []
+    for raw in _str_list(data.get("values")):
+        try:
+            values.append(float(raw))
+        except ValueError as err:
+            raise ServiceValidationError(f"{raw!r} is not a number") from err
+    if not values:
+        for entity_id in _str_list(data.get("entities")):
+            state = runtime.hass.states.get(entity_id)
+            try:
+                values.append(float(state.state))  # type: ignore[union-attr]
+            except (AttributeError, TypeError, ValueError) as err:
+                raise ServiceValidationError(f"{entity_id} has no numeric value") from err
+    if not values:
+        raise ServiceValidationError("Provide values or entities")
+    width, height = runtime.display.width, runtime.display.height
+    if not width or not height:
+        raise HomeAssistantError(f"{runtime.name} is not available")
+    color_mode = str(data.get("color_mode") or "per_bar")
+    orientation = str(data.get("orientation") or "vertical")
+    if color_mode not in COLOR_MODES:
+        raise ServiceValidationError(f"color_mode must be one of {', '.join(COLOR_MODES)}")
+    if orientation not in ORIENTATIONS:
+        raise ServiceValidationError(f"orientation must be one of {', '.join(ORIENTATIONS)}")
+    colors = [_color_hex(c, "ffffff") for c in _str_list(data.get("colors"))] or None
+    maximum = data.get("max")
+    render = partial(
+        render_bars,
+        width,
+        height,
+        values,
+        minimum=float(data.get("min") or 0),
+        maximum=float(maximum) if maximum not in (None, "") else None,
+        colors=colors,
+        color_mode=color_mode,
+        color_low=_color_hex(data.get("color_low"), "00c000"),
+        color_high=_color_hex(data.get("color_high"), "ff2000"),
+        orientation=orientation,
+        gap=int(data.get("gap", 1) or 0),
+        margin=int(data.get("margin", 0) or 0),
+        bar_width=int(data.get("bar_width", 0) or 0),
+        segment=int(data.get("segment", 0) or 0),
+        background=_color_hex(data.get("background"), "000000"),
+        baseline=_bool(data.get("baseline"), False),
+        baseline_color=_color_hex(data.get("baseline_color"), "303030"),
+    )
+    try:
+        image = await runtime.hass.async_add_executor_job(render)
+    except ValueError as err:
+        raise ServiceValidationError(str(err)) from err
+    await runtime.async_show_image(image, save_slot=int(data.get("slot", 0) or 0))
 
 
 async def _show_frame(runtime: iPIXELRuntime, image, brightness: int) -> None:
@@ -764,6 +835,7 @@ SERVICES: dict[str, tuple[ServiceHandler, vol.Schema]] = {
     SERVICE_SHOW_STAGE: (handle_show_stage, _schema()),
     SERVICE_CLEAR_STAGES: (handle_clear_stages, _schema()),
     SERVICE_DELETE_SLOT: (handle_delete_slot, _schema()),
+    SERVICE_DISPLAY_BARS: (handle_display_bars, _schema()),
     SERVICE_ERASE_DATA: (handle_erase_data, _schema()),
     SERVICE_SET_PROGRAM_MODE: (handle_set_program_mode, _schema()),
     SERVICE_SET_SCREEN: (handle_set_screen, _schema()),

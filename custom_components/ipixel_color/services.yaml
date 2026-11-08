@@ -184,6 +184,157 @@ draw_solid_color:
       selector:
         text:
 
+display_bars:
+  name: Display bars
+  description: Draw a bar chart of several values (or the current states of several entities) as one image over the display. The biggest bar fills the display unless a maximum is given.
+  target:
+    device:
+      integration: ipixel_color
+    entity:
+      integration: ipixel_color
+  fields:
+    values:
+      name: Values
+      description: Numbers, comma separated (templates allowed); leave empty to use the entities below
+      required: false
+      example: "35, 80, 12"
+      selector:
+        text:
+    entities:
+      name: Entities
+      description: Numeric entities whose current states are the bars (used when no values are given)
+      required: false
+      selector:
+        entity:
+          multiple: true
+          domain:
+            - sensor
+            - number
+            - input_number
+            - counter
+    min:
+      name: Minimum
+      description: Value of an empty bar
+      required: false
+      default: 0
+      selector:
+        number:
+          min: -1000000
+          max: 1000000
+          mode: box
+    max:
+      name: Maximum
+      description: Value of a full bar (default is the largest value)
+      required: false
+      example: 100
+      selector:
+        number:
+          min: -1000000
+          max: 1000000
+          mode: box
+    colors:
+      name: Colours
+      description: Hex colours used in turn for the bars (per_bar mode)
+      required: false
+      example: "00a0ff, 00c000, ffc000, ff4000"
+      selector:
+        text:
+    color_mode:
+      name: Colour mode
+      description: per_bar cycles through the colours; by_value colours each bar between low and high by its value; gradient fades every bar from low at the base to high at the top
+      required: false
+      default: per_bar
+      selector:
+        select:
+          options:
+            - per_bar
+            - by_value
+            - gradient
+    color_low:
+      name: Low colour
+      description: Colour for low values / the base (by_value and gradient modes)
+      required: false
+      selector:
+        color_rgb:
+    color_high:
+      name: High colour
+      description: Colour for high values / the top (by_value and gradient modes)
+      required: false
+      selector:
+        color_rgb:
+    orientation:
+      name: Orientation
+      description: vertical bars rise from the bottom, horizontal bars grow from the left
+      required: false
+      default: vertical
+      selector:
+        select:
+          options:
+            - vertical
+            - horizontal
+    gap:
+      name: Gap
+      description: Pixels between the bars
+      required: false
+      default: 1
+      selector:
+        number:
+          min: 0
+          max: 16
+    bar_width:
+      name: Bar width
+      description: Pixels per bar (0 = spread the bars over the display)
+      required: false
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 128
+    margin:
+      name: Margin
+      description: Empty pixels around the chart
+      required: false
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 32
+    segment:
+      name: Segments
+      description: Cut the bars into blocks of this many pixels with one pixel in between (0 = solid)
+      required: false
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 16
+    background:
+      name: Background
+      required: false
+      selector:
+        color_rgb:
+    baseline:
+      name: Baseline
+      description: Draw a line along the base of the bars
+      required: false
+      default: false
+      selector:
+        boolean:
+    baseline_color:
+      name: Baseline colour
+      required: false
+      selector:
+        color_rgb:
+    slot:
+      name: Slot
+      description: Also store the image in this slot (0 = do not store)
+      required: false
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 250
+
 draw_visuals:
   name: Draw visuals
   description: Render multiple elements (text, scrolling text, long text, images, pixels) with animation on the whole display.

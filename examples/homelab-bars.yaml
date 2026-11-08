@@ -1,0 +1,25 @@
+# A bar chart of homelab metrics on a 2x2 iPIXEL wall: the CPU of the k3s
+# cluster and the power draw of the three nodes, as four bars. Trigger this
+# from an automation on state changes of the entities (every 10-60 s is fine:
+# a still image is a small upload).
+action: ipixel_color.display_bars
+target:
+  entity_id: camera.combined_display_voorbeeld
+data:
+  values:
+    - "{{ states('sensor.k3s_cpu') }}"
+    - "{{ states('sensor.sonoff_basic_zb1gsp_vermogen_3') | float / 1.5 }}"   # Homelab-1, 150 W = 100 %
+    - "{{ states('sensor.sonoff_basic_zb1gsp_vermogen_2') | float / 1.5 }}"   # Homelab-2
+    - "{{ states('sensor.sonoff_basic_zb1gsp_vermogen') | float / 1.5 }}"     # Homelab-3
+  max: 100
+  color_mode: gradient      # green at the base, red at the top
+  color_low: "00c000"
+  color_high: "ff2000"
+  gap: 2
+  margin: 2
+  segment: 3                # LED-meter blocks of 3 pixels
+  baseline: true
+# Simpler: let the service read the entities itself (per-bar colours):
+#   entities: [sensor.k3s_cpu, sensor.k3s_memory]
+#   max: 100
+#   colors: "00a0ff, ffc000"

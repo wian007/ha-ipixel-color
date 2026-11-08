@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `display_bars` draws a bar chart of several values or entity states as one image over the
+  display: colours per bar, by value or as a base-to-top gradient, vertical or horizontal, with
+  gap, bar width, margin, segments, baseline, background and an optional slot.
 - A panel that was away while the stage changed is sent the slot of the current stage when it
   reconnects, and a combined display is put on its current stage in step once all panels are
   connected after a start (panels used to keep playing different stages until the next change).

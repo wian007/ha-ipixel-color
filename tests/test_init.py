@@ -714,6 +714,47 @@ async def test_stage_is_shown_again_at_startup(hass: HomeAssistant, fake_bluetoo
         assert not p.frames_for((0x03, 0x00)), "no upload"
 
 
+async def test_display_bars_service(hass: HomeAssistant, fake_bluetooth):
+    """display_bars renders a chart of values or entity states and uploads it as one image."""
+    await _setup_panel(hass, fake_bluetooth, LEFT, "Left", "left")
+    panel = fake_bluetooth.panels[LEFT]
+    panel.clear()
+    await hass.services.async_call(
+        DOMAIN,
+        "display_bars",
+        {"values": "25, 50, 100", "max": 100, "gap": 0, "colors": "ff0000"},
+        blocking=True,
+    )
+    image = panel.last_image()
+    assert image is not None and image.size == (64, 16)
+    px = image.load()
+    assert px[62, 15] == (255, 0, 0) and px[62, 0] == (255, 0, 0), "last bar is full (3 bars of 21 px, x = 0..62)"
+    assert px[0, 0] == (0, 0, 0) and px[0, 15] == (255, 0, 0), "first bar is a quarter"
+
+    # entity states as values, one colour per bar
+    hass.states.async_set("sensor.a", "100")
+    hass.states.async_set("sensor.b", "0")
+    panel.clear()
+    await hass.services.async_call(
+        DOMAIN,
+        "display_bars",
+        {"entities": ["sensor.a", "sensor.b"], "colors": ["00ff00", "0000ff"], "gap": 0},
+        blocking=True,
+    )
+    px = panel.last_image().load()
+    assert px[0, 0] == (0, 255, 0) and px[63, 15] == (0, 0, 0)
+
+    from homeassistant.exceptions import ServiceValidationError
+
+    hass.states.async_set("sensor.b", "unknown")
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN, "display_bars", {"entities": ["sensor.b"]}, blocking=True
+        )
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(DOMAIN, "display_bars", {}, blocking=True)
+
+
 async def test_migrate_v1_entry(hass: HomeAssistant, fake_bluetooth):
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
