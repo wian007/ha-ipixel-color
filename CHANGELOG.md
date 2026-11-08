@@ -8,9 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Example `examples/k3s-node-metrics`: a dependency-free deployment that publishes k3s node CPU
-  and memory usage from metrics-server to Home Assistant over MQTT (with discovery), and
-  `examples/k3s-fire-stages.yaml` that lets the staged flames follow the cluster CPU.
 - Burst commands (synchronised show-slot and the in-step restart) wait for the panel's own
   acknowledgement and are sent again as confirmed writes when it does not arrive, so a panel can
   no longer miss a switch and stay on the previous content.

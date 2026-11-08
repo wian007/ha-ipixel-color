@@ -268,10 +268,6 @@ They are available for rendered text; for native text mode the built-in
   sensor and four thresholds. The GIFs are stored in slots on the panels; every change of class
   is a single command and starts in step on a combined display. See
   `examples/homelab-fire-stages.yaml`.
-- The same flames following the CPU of a k3s cluster: `examples/k3s-node-metrics` is a small
-  deployment that publishes node usage from metrics-server to Home Assistant over MQTT
-  (`sensor.k3s_cpu` and friends, with discovery); `examples/k3s-fire-stages.yaml` binds the
-  stages to it.
 
 ## Development
 
