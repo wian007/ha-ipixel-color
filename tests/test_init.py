@@ -621,6 +621,58 @@ async def test_stages_follow_a_sensor_from_stored_slots(hass: HomeAssistant, fak
     assert all(p.frames == [] for p in panels)
 
 
+async def test_stage_is_shown_again_when_a_panel_reconnects(hass: HomeAssistant, fake_bluetooth, aioclient_mock, monkeypatch):
+    """A panel that missed a stage change gets the current slot when it is back, without an upload."""
+    monkeypatch.setattr("custom_components.ipixel_color.bluetooth.client.AUTO_RECONNECT_INTERVAL", 0)
+    monkeypatch.setattr("custom_components.ipixel_color.display.composite.RESTART_BLANK_SECONDS", 0.001)
+    monkeypatch.setattr("custom_components.ipixel_color.runtime.REALIGN_DELAY_SECONDS", 0.1)
+    await _setup_panel(hass, fake_bluetooth, LEFT, "Left", "left", DEVICE_TYPE_32X32)
+    await _setup_panel(hass, fake_bluetooth, RIGHT, "Right", "right", DEVICE_TYPE_32X32)
+    group = make_group_entry("Wall", [("left", 0, 0), ("right", 0, 1)], entry_id="wall")
+    group.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(group.entry_id)
+    await hass.async_block_till_done()
+    gif = await _gif_bytes((64, 32))
+    for i in range(2):
+        aioclient_mock.get(f"http://x/stage{i}.gif", content=gif, headers={"Content-Type": "image/gif"})
+    hass.states.async_set("sensor.load", "50")
+    await hass.services.async_call(
+        DOMAIN,
+        "set_stages",
+        {
+            "entity_id": _entity(hass, "switch", "group_wall_power"),
+            "stages": "http://x/stage0.gif\nhttp://x/stage1.gif",
+            "source": "sensor.load",
+            "thresholds": "100",
+            "base_slot": 10,
+        },
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    left, right = fake_bluetooth.panels[LEFT], fake_bluetooth.panels[RIGHT]
+
+    # the right panel drops and cannot be reached; the stage changes while it is away
+    right.is_connected = False
+    right.fail_connect = True
+    right.disconnected_callback(right)
+    await hass.async_block_till_done()
+    left.clear()
+    right.clear()
+    hass.states.async_set("sensor.load", "150")
+    await _settle(hass)
+    assert bytes([7, 0, 8, 0x80, 1, 0, 11]) in [f.data for f in left.frames]
+    assert right.frames == []
+
+    left.clear()
+    right.clear()
+    right.fail_connect = False
+    fake_bluetooth.advertise(RIGHT)
+    await _settle(hass)
+    assert bytes([7, 0, 8, 0x80, 1, 0, 11]) in [f.data for f in right.frames], "slot of the current stage sent again"
+    assert not right.frames_for((0x03, 0x00)) and not left.frames_for((0x03, 0x00)), "no upload"
+    assert right.last_image() is None, "no repaint over the stage"
+
+
 async def test_migrate_v1_entry(hass: HomeAssistant, fake_bluetooth):
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 

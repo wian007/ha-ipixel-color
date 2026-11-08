@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A panel that was away while the stage changed is sent the slot of the current stage when it
+  reconnects (it used to keep playing the old stage until the next change).
 - `tools/generate_fire_gifs.py` takes the number of flame levels as a second argument.
 - Burst commands (synchronised show-slot and the in-step restart) wait for the panel's own
   acknowledgement and are sent again as confirmed writes when it does not arrive, so a panel can

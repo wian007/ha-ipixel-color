@@ -335,6 +335,8 @@ class iPIXELRuntime:
         otherwise the last successful render is repeated. A display that never
         showed Home Assistant content is left alone. Returns True when restored.
         """
+        if await self._async_reshow_stage():
+            return True
         if getattr(self.display, "content_persists", False):
             _LOGGER.debug("%s keeps its content in a slot on the panels; no repaint needed", self.name)
             return False
@@ -352,6 +354,24 @@ class iPIXELRuntime:
             await self.async_update_display(text, mode=mode, overrides=overrides)
         except iPIXELError as err:
             _LOGGER.warning("Could not restore the content of %s: %s", self.name, err)
+            return False
+        return True
+
+    async def _async_reshow_stage(self) -> bool:
+        """Send the slot of the current stage again.
+
+        A panel that was away while the stage changed still plays the old slot;
+        one show-slot to the whole display puts it right (the realign that
+        follows on a combined display restarts the panels in step).
+        """
+        manager = self.stage_manager
+        config = manager.config if manager is not None else None
+        if config is None or config.current is None:
+            return False
+        try:
+            await self.async_show_slot(config.slot_for(config.current))
+        except iPIXELError as err:
+            _LOGGER.warning("Could not show stage %d of %s again: %s", config.current, self.name, err)
             return False
         return True
 
