@@ -192,3 +192,6 @@ test_font_rendering.py
 
 # Claude Code specific
 .claude/.ruff_cache/
+
+# Local MQTT credentials for the k3s example
+examples/k3s-node-metrics/mqtt.env

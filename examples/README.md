@@ -8,6 +8,9 @@ This folder contains sample Home Assistant automations and configurations to hel
 |------|-------------|
 | `automations.yaml` | 12 ready-to-use automation examples |
 | `helpers.yaml` | Input helpers, scripts, and Lovelace card examples |
+| `homelab-fire-stages.yaml` | Flames on a panel wall that follow a power sensor (`set_stages`) |
+| `k3s-fire-stages.yaml` | The same flames following the CPU usage of a k3s cluster |
+| `k3s-node-metrics/` | Kubernetes deployment that publishes k3s node CPU/memory to Home Assistant over MQTT |
 
 ## Automation Examples
 
