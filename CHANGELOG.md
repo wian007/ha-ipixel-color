@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `tools/generate_fire_gifs.py` takes the number of flame levels as a second argument.
 - Burst commands (synchronised show-slot and the in-step restart) wait for the panel's own
   acknowledgement and are sent again as confirmed writes when it does not arrive, so a panel can
   no longer miss a switch and stay on the previous content.

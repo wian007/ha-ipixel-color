@@ -263,9 +263,9 @@ They are available for rendered text; for native text mode the built-in
 
 ## Examples
 
-- Flames whose height follows a metric: render five GIFs with `tools/generate_fire_gifs.py`
-  into the media folder, then call `ipixel_color.set_stages` once with the five media ids, the
-  sensor and four thresholds. The GIFs are stored in slots on the panels; every change of class
+- Flames whose height follows a metric: render a series of GIFs (five by default, any number)
+  with `tools/generate_fire_gifs.py` into the media folder, then call `ipixel_color.set_stages`
+  once with the media ids, the sensor and one threshold fewer than there are stages. The GIFs are stored in slots on the panels; every change of class
   is a single command and starts in step on a combined display. See
   `examples/homelab-fire-stages.yaml`.
 

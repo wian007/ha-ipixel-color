@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Render fire animations whose flame height follows a load level.
 
-Produces fire_0.gif ... fire_4.gif (64x64, looping). Pair them with the
-automation in examples/homelab-fire-automation.yaml to turn a 2x2 wall of
-32x32 panels into a load indicator: the busier the homelab, the higher the
-flames. The fire is simulated at 32x32 and shown at 64x64, which keeps the
-files small (6-17 KB) so they upload in seconds through a Bluetooth proxy.
+Produces fire_0.gif ... fire_<N-1>.gif (64x64, looping), five levels by
+default. Pair them with ipixel_color.set_stages (examples/homelab-fire-stages.yaml)
+to turn a 2x2 wall of 32x32 panels into a load indicator: the busier the
+homelab, the higher the flames. The fire is simulated at 32x32 and shown at
+64x64, which keeps the files small (6-18 KB) so they upload in seconds
+through a Bluetooth proxy.
 
-    python tools/generate_fire_gifs.py /path/to/media/fire
+    python tools/generate_fire_gifs.py /path/to/media/fire [LEVELS]
 """
 from __future__ import annotations
 
@@ -21,8 +22,22 @@ FIELD = 32  # simulation size
 OUT = 64  # output size (the 2x2 wall)
 FRAMES = 14
 DURATION_MS = 100
-# cooling per row and source heat per level: lower cooling = taller flames
-LEVELS = [(0.19, 0.70), (0.12, 0.85), (0.080, 1.0), (0.052, 1.0), (0.034, 1.0)]
+# cooling per row (lower = taller flames) at the lowest and highest level, and
+# the source heat of the lowest level; levels in between are interpolated.
+COOLING_LOW, COOLING_HIGH = 0.19, 0.034
+SOURCE_LOW = 0.70
+DEFAULT_LEVELS = 5
+
+
+def levels(count: int) -> list[tuple[float, float]]:
+    """Return (cooling, source) per level, geometric in cooling so every step is visible."""
+    if count < 2:
+        raise ValueError("at least two levels are needed")
+    ratio = (COOLING_HIGH / COOLING_LOW) ** (1 / (count - 1))
+    return [
+        (COOLING_LOW * ratio**i, min(1.0, SOURCE_LOW + (1.0 - SOURCE_LOW) * i / max(1, count // 2)))
+        for i in range(count)
+    ]
 STOPS = [
     (0.0, (0, 0, 0)),
     (0.15, (70, 0, 0)),
@@ -43,8 +58,8 @@ def colour(value: float) -> tuple[int, int, int]:
     return STOPS[-1][1]
 
 
-def render(level: int) -> list[Image.Image]:
-    cooling, source = LEVELS[level]
+def render(level: int, settings: tuple[float, float]) -> list[Image.Image]:
+    cooling, source = settings
     rng = random.Random(42 + level)
     heat = [[0.0] * FIELD for _ in range(FIELD)]
     frames: list[Image.Image] = []
@@ -69,9 +84,10 @@ def render(level: int) -> list[Image.Image]:
 
 def main() -> None:
     target = Path(sys.argv[1] if len(sys.argv) > 1 else ".")
+    count = int(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_LEVELS
     target.mkdir(parents=True, exist_ok=True)
-    for level in range(len(LEVELS)):
-        frames = render(level)
+    for level, settings in enumerate(levels(count)):
+        frames = render(level, settings)
         path = target / f"fire_{level}.gif"
         frames[0].save(path, save_all=True, append_images=frames[1:], duration=DURATION_MS, loop=0, optimize=True)
         print(f"{path} ({path.stat().st_size // 1024} KB)")
