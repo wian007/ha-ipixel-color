@@ -415,6 +415,13 @@ display_bars:
         number:
           min: 0
           max: 250
+    alternate_slots:
+      name: Alternate slots
+      description: Two or more slots to take turns, e.g. "2, 3". The chart is uploaded to the slot that is not on display and then shown with one switch, so the previous chart keeps playing during the upload. Not the sync slot of a combined display.
+      required: false
+      example: "2, 3"
+      selector:
+        text:
 
 draw_visuals:
   name: Draw visuals

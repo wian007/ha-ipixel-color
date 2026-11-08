@@ -29,8 +29,8 @@
 #         unique_id: k3s_thinred_mem
 #         ...
 #
-# 2. The chart. Call it from an automation that triggers on the sensors (or
-#    every minute); a still over four panels takes about a second.
+# 2. The chart. Call it from an automation every 30 s (time_pattern seconds: "/30");
+#    a still over four panels takes about a second, this animation about 7 s.
 action: ipixel_color.display_bars
 target:
   entity_id: camera.combined_display_voorbeeld
@@ -56,8 +56,9 @@ data:
   gap: 0                     # the two bars touch; groups are 2 px apart
   group_gap: 2
   animation: space           # twinkling stars behind the chart, a light pulse through the bars
-  frames: 24                 # one loop of 24 x 80 ms; leave animation empty for a still
-  frame_ms: 80
+  frames: 12                 # one loop of 12 x 160 ms (~7 s upload over a wall); leave animation empty for a still
+  frame_ms: 160
+  alternate_slots: "2, 3"    # upload to the hidden slot, then switch: the old chart keeps playing meanwhile
 # Vertical variant (names under the bars, numbers above):
 #   orientation: vertical
 #   labels: "thin, xred, nuc, red"

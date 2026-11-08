@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field, fields
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
@@ -893,17 +894,44 @@ class iPIXELRuntime:
         await self.display.async_show_image(canvas, save_slot=save_slot)
         self.set_last_frame(canvas)
 
-    async def async_show_animation(self, frames: list[Image.Image], durations: list[int], *, save_slot: int = 0) -> None:
-        """Show rendered frames (durations in ms) as one animation over the display."""
+    async def async_show_animation(
+        self,
+        frames: list[Image.Image],
+        durations: list[int],
+        *,
+        save_slot: int = 0,
+        alternate_slots: Sequence[int] | None = None,
+    ) -> None:
+        """Show rendered frames (durations in ms) as one animation over the display.
+
+        With ``alternate_slots`` the frames are first stored in the slot of that
+        list that is not on display and then shown with one show-slot command
+        (double buffering): the current picture keeps playing during the upload
+        and the switch itself takes well under a second.
+        """
         from .display.base import fit_to_canvas
 
         width, height = self._require_canvas()
         sized = [fit_to_canvas(frame, width, height) for frame in frames]
+        if alternate_slots:
+            save_slot = self.next_alternate_slot(alternate_slots)
         if len(sized) == 1:
             await self.display.async_show_image(sized[0], save_slot=save_slot)
         else:
             await self.display.async_show_gif(sized, durations, loop=0, save_slot=save_slot)
+        if alternate_slots:
+            await self.async_show_slot(save_slot)
+            self._alternate_shown = save_slot
         self.set_last_frame(sized[0])
+
+    _alternate_shown: int | None = None
+
+    def next_alternate_slot(self, slots: Sequence[int]) -> int:
+        """Return the first of ``slots`` that is not the one shown by the last alternating upload."""
+        chosen = [int(slot) for slot in slots]
+        if len(chosen) < 2 or len(set(chosen)) != len(chosen) or any(not 1 <= slot <= 255 for slot in chosen):
+            raise ValueError("alternate_slots needs two or more different slots from 1 to 255")
+        return next((slot for slot in chosen if slot != self._alternate_shown), chosen[0])
 
     async def async_show_slot(self, slot: int, *, in_step: bool = False) -> None:
         """Show stored content from a slot (a wall sends it to all panels in one burst).

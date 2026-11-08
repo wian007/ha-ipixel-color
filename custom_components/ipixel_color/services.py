@@ -394,7 +394,17 @@ async def handle_display_bars(runtime: iPIXELRuntime, call: ServiceCall) -> None
     except ValueError as err:
         raise ServiceValidationError(str(err)) from err
     slot = int(data.get("slot", 0) or 0)
-    if len(frames) == 1:
+    alternate = _str_list(data.get("alternate_slots"))
+    if alternate:
+        if slot:
+            raise ServiceValidationError("Use either slot or alternate_slots")
+        try:
+            slots = [int(value) for value in alternate]
+            runtime.next_alternate_slot(slots)
+        except ValueError as err:
+            raise ServiceValidationError(f"alternate_slots: {err}") from err
+        await runtime.async_show_animation(frames, [frame_ms] * len(frames), alternate_slots=slots)
+    elif len(frames) == 1:
         await runtime.async_show_image(frames[0], save_slot=slot)
     else:
         await runtime.async_show_animation(frames, [frame_ms] * len(frames), save_slot=slot)

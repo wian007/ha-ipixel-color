@@ -785,6 +785,31 @@ async def test_display_bars_service(hass: HomeAssistant, fake_bluetooth):
     with pytest.raises(ServiceValidationError):
         await hass.services.async_call(DOMAIN, "display_bars", {"values": "1", "animation": "warp"}, blocking=True)
 
+    # alternate_slots: upload to the slot not on display, then one show_slot; the next call takes the other slot
+    shown = []
+    for _ in range(3):
+        panel.clear()
+        await hass.services.async_call(
+            DOMAIN,
+            "display_bars",
+            {"values": "40, 80", "animation": "pulse", "frames": 3, "alternate_slots": "2, 3"},
+            blocking=True,
+        )
+        assert len(panel.last_gif_frames()) == 3
+        switches = panel.frames_for((0x08, 0x80))
+        assert len(switches) == 1
+        shown.append(switches[0].data[6])
+    assert shown == [2, 3, 2]
+    assert hass.data[DOMAIN]["left"].last_frame is not None, "camera preview keeps the chart after the switch"
+    for bad in (
+        {"alternate_slots": "2"},
+        {"alternate_slots": "2, 2"},
+        {"alternate_slots": "0, 3"},
+        {"alternate_slots": "2, 3", "slot": 4},
+    ):
+        with pytest.raises(ServiceValidationError):
+            await hass.services.async_call(DOMAIN, "display_bars", {"values": "1", **bad}, blocking=True)
+
     hass.states.async_set("sensor.b", "unknown")
     with pytest.raises(ServiceValidationError):
         await hass.services.async_call(
