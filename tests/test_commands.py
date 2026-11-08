@@ -207,3 +207,15 @@ def test_render_bars_animation_effects():
     assert heights[0] < heights[2] < heights[4] == 10 and heights[-1] == 10
     # render_bars ignores an animation and keeps returning one image
     assert render_bars(4, 4, [1], animation="space").size == (4, 4)
+
+
+def test_render_bars_track_and_star_colour():
+    from custom_components.ipixel_color.device.charts import render_bars, render_bars_frames
+
+    # the empty rest of a bar is painted in the track colour, the bar itself keeps its colour
+    px = render_bars(1, 10, [50], maximum=100, colors=["fca311"], track="14213d").load()
+    assert px[0, 9] == (252, 163, 17) and px[0, 5] == (252, 163, 17) and px[0, 4] == (20, 33, 61) and px[0, 0] == (20, 33, 61)
+    # with one star colour every lit sky pixel is a shade of that tone (grey here: r == g == b)
+    frames = render_bars_frames(32, 16, [10], maximum=100, animation="stars", frames=3, seed=3, star_color="e5e5e5")
+    sky = [frames[0].getpixel((x, y)) for x in range(32) for y in range(8) if frames[0].getpixel((x, y)) != (0, 0, 0)]
+    assert sky and all(r == g == b for r, g, b in sky)

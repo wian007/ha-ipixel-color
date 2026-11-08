@@ -113,12 +113,12 @@ def _blit_row(pixels, pieces: list[tuple[Image.Image, RGB]], x: int, y: int, cli
         x += mask.width + _PIECE_GAP
 
 
-def _make_stars(width: int, height: int, seed: int) -> list[tuple[int, int, RGB, float, int]]:
+def _make_stars(width: int, height: int, seed: int, tones: tuple[RGB, ...] = _STAR_TONES) -> list[tuple[int, int, RGB, float, int]]:
     """A fixed sky: (x, y, tone, phase, cycles per loop) per star."""
     rng = random.Random(seed)
     stars = []
     for _ in range(max(4, width * height // 40)):
-        tone = _lerp((0, 0, 0), rng.choice(_STAR_TONES), rng.uniform(0.25, 0.9))
+        tone = _lerp((0, 0, 0), rng.choice(tones), rng.uniform(0.25, 0.9))
         stars.append((rng.randrange(width), rng.randrange(height), tone, rng.random(), rng.choice((1, 1, 2))))
     return stars
 
@@ -155,6 +155,8 @@ def render_bars_frames(
     group_gap: int | None = None,
     show_values: bool = False,
     value_format: str = "{:.0f}",
+    track: str | None = None,
+    star_color: str | None = None,
     animation: tuple[str, ...] | list[str] | str = (),
     frames: int = 24,
     seed: int = 7,
@@ -177,6 +179,9 @@ def render_bars_frames(
     ``show_values`` prints the values in the bar colours: above a vertical
     chart, right-aligned on the label row of a horizontal one. Bars and text
     that do not fit on the canvas are dropped or clipped.
+
+    ``track`` paints the empty rest of every bar in that colour, so the scale
+    stays visible; ``star_color`` makes all stars one tone instead of a mix.
 
     ``animation`` is a tuple of effects (``stars``: a twinkling sky behind the
     chart, ``pulse``: a light running through every bar, ``scan``: a radar line
@@ -241,6 +246,7 @@ def render_bars_frames(
     palette = [_rgb(c) for c in (colors or DEFAULT_PALETTE)]
     low, high = _rgb(color_low), _rgb(color_high)
     bg = _rgb(background)
+    track_colour = _rgb(track) if track else None
     fractions = [min(1.0, max(0.0, (value - minimum) / span)) for value in values]
 
     def bar_colour(index: int) -> RGB:
@@ -303,7 +309,7 @@ def render_bars_frames(
                 if label is not None:
                     texts.append((label, margin, y, text_colour, (margin, margin, label_end, margin + area_h)))
 
-    stars = _make_stars(width, height, seed) if "stars" in effects else []
+    stars = _make_stars(width, height, seed, (_rgb(star_color),) if star_color else _STAR_TONES) if "stars" in effects else []
     images: list[Image.Image] = []
     for k in range(frames):
         t = k / frames
@@ -322,6 +328,22 @@ def render_bars_frames(
             else:
                 for y in range(margin, margin + area_h):
                     pixels[margin, y] = line
+
+        if track_colour is not None:
+            for _index, first, last, _full in bars:
+                for step in range(length):
+                    if segment and step % (segment + 1) == segment:
+                        continue
+                    if vertical:
+                        y = base - step
+                        if y < top:
+                            break
+                        for x in range(first, last):
+                            pixels[x, y] = track_colour
+                    else:
+                        x = margin + step
+                        for y in range(first, last):
+                            pixels[x, y] = track_colour
 
         scale = _ease_out((k + 1) / max(1, frames // 2)) if "grow" in effects else 1.0
         for index, first, last, full_length in bars:

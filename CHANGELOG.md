@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `animation` turns the chart into a looping animation: `stars` (twinkling sky), `pulse` (a light
   running through the bars), `scan` (a radar sweep), `grow` (bars rise at the start of the loop), or
   the presets `space`, `radar` and `boot`; `frames` and `frame_ms` set the loop.
+  `track_color` paints the empty rest of every bar and `star_color` sets one tone for the sky.
 - A panel that was away while the stage changed is sent the slot of the current stage when it
   reconnects, and a combined display is put on its current stage in step once all panels are
   connected after a start (panels used to keep playing different stages until the next change).

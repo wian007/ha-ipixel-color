@@ -49,7 +49,10 @@ data:
   show_values: true          # "18 68" at the right of every label row
   max: 100
   orientation: horizontal    # label row above two bars per node
-  colors: "00a0ff, ffc000"   # CPU blue, memory orange
+  colors: "fca311, e5e5e5"   # CPU orange, memory light grey (palette 000000 14213d fca311 e5e5e5 ffffff)
+  track_color: "14213d"      # dark blue track behind every bar shows the scale
+  label_color: "ffffff"
+  star_color: "e5e5e5"
   gap: 0                     # the two bars touch; groups are 2 px apart
   group_gap: 2
   animation: space           # twinkling stars behind the chart, a light pulse through the bars

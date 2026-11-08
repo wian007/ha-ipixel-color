@@ -386,6 +386,8 @@ async def handle_display_bars(runtime: iPIXELRuntime, call: ServiceCall) -> None
         group_gap=int(data["group_gap"]) if data.get("group_gap") not in (None, "") else None,
         show_values=_bool(data.get("show_values"), False),
         value_format=str(data.get("value_format") or "{:.0f}"),
+        track=_color_hex(data["track_color"], "14213d") if data.get("track_color") not in (None, "") else None,
+        star_color=_color_hex(data["star_color"], "e5e5e5") if data.get("star_color") not in (None, "") else None,
     )
     try:
         frames = await runtime.hass.async_add_executor_job(render)
