@@ -285,6 +285,8 @@ class iPIXELRuntime:
             self.hass.async_create_task(self.async_restore_content())
         elif self.is_group and self.display.is_connected:
             self._schedule_realign()
+        elif self.display.is_connected:
+            self.hass.async_create_task(self._async_reshow_stage())
         self._refresh_status_pixel()
 
     # ------------------------------------------------------------------
@@ -304,6 +306,10 @@ class iPIXELRuntime:
         if not self.display.is_connected or not self.is_empty and self.settings.auto_update:
             return
         try:
+            # Panels may have been on different slots while apart (a stage change
+            # that not all of them received): put them on the current stage first.
+            if await self._async_reshow_stage(in_step=True):
+                return
             _LOGGER.info("%s: all panels connected; restarting them in step", self.name)
             await self.display.async_sync_animation()
         except iPIXELError as err:
@@ -357,19 +363,20 @@ class iPIXELRuntime:
             return False
         return True
 
-    async def _async_reshow_stage(self) -> bool:
+    async def _async_reshow_stage(self, *, in_step: bool = False) -> bool:
         """Send the slot of the current stage again.
 
-        A panel that was away while the stage changed still plays the old slot;
-        one show-slot to the whole display puts it right (the realign that
-        follows on a combined display restarts the panels in step).
+        A panel that was away (or off) while the stage changed still plays the
+        old slot; one show-slot to the whole display puts it right. ``in_step``
+        also restarts the panels of a combined display together.
         """
         manager = self.stage_manager
         config = manager.config if manager is not None else None
         if config is None or config.current is None:
             return False
         try:
-            await self.async_show_slot(config.slot_for(config.current))
+            _LOGGER.info("%s: showing stage %d (slot %d) again", self.name, config.current, config.slot_for(config.current))
+            await self.async_show_slot(config.slot_for(config.current), in_step=in_step)
         except iPIXELError as err:
             _LOGGER.warning("Could not show stage %d of %s again: %s", config.current, self.name, err)
             return False
