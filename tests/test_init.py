@@ -7,7 +7,7 @@ import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
@@ -817,6 +817,99 @@ async def test_display_bars_service(hass: HomeAssistant, fake_bluetooth):
         )
     with pytest.raises(ServiceValidationError):
         await hass.services.async_call(DOMAIN, "display_bars", {}, blocking=True)
+
+
+async def test_interruptions_and_restore(hass: HomeAssistant, fake_bluetooth):
+    """show_slot/display_image with a duration put the previous content back; a chart refresh waits."""
+    import io
+
+    from PIL import Image
+
+    await _setup_panel(hass, fake_bluetooth, LEFT, "Left", "left")
+    panel = fake_bluetooth.panels[LEFT]
+    runtime = hass.data[DOMAIN]["left"]
+
+    def shown_slots() -> list[int]:
+        return [f.data[6] for f in panel.frames_for((0x08, 0x80))]
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (32, 32), (255, 200, 0)).save(buffer, format="PNG")
+
+    async def _fake_fetch(url):
+        return buffer.getvalue(), ".png"
+
+    runtime.async_fetch_image = _fake_fetch
+
+    # 1. store the doorbell picture with a caption in slot 4: nothing is shown
+    await hass.services.async_call(
+        DOMAIN, "display_image", {"url": "http://x/bell.png", "caption": "Voordeur", "slot": 4}, blocking=True
+    )
+    stored = panel.last_image()
+    assert stored.size == (64, 16) and runtime.shown is None
+    assert (255, 255, 255) in [stored.getpixel((x, y)) for y in range(7, 16) for x in range(64)], "caption band"
+    assert shown_slots() == []
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN, "display_image", {"url": "http://x/bell.png", "caption": "x", "caption_font": "nope.ttf"}, blocking=True
+        )
+
+    # 2. the chart lives in slot 2 (alternate_slots), then the doorbell interrupts for 0.3 s
+    panel.clear()
+    await hass.services.async_call(
+        DOMAIN, "display_bars", {"values": "1, 2", "animation": "pulse", "frames": 2, "alternate_slots": "2, 3"}, blocking=True
+    )
+    assert runtime.shown == ("slot", 2)
+    await hass.services.async_call(DOMAIN, "show_slot", {"slot": 4, "duration": 0.3}, blocking=True)
+    assert runtime.interrupting and runtime.shown == ("slot", 4)
+    # a refresh during the interruption is uploaded to slot 3 but not switched to
+    await hass.services.async_call(
+        DOMAIN, "display_bars", {"values": "2, 1", "animation": "pulse", "frames": 2, "alternate_slots": "2, 3"}, blocking=True
+    )
+    assert shown_slots() == [2, 4]
+    await asyncio.sleep(0.5)
+    await hass.async_block_till_done()
+    assert shown_slots() == [2, 4, 3], "the fresh chart appears when the doorbell is over"
+    assert not runtime.interrupting and runtime.shown == ("slot", 3)
+
+    # 3. a second ring during the first keeps the original content to go back to; restore ends it early
+    await hass.services.async_call(DOMAIN, "show_slot", {"slot": 4, "duration": 30}, blocking=True)
+    await hass.services.async_call(DOMAIN, "show_slot", {"slot": 5, "duration": 30}, blocking=True)
+    assert runtime.interrupting
+    await hass.services.async_call(DOMAIN, "restore", {}, blocking=True)
+    assert shown_slots()[-3:] == [4, 5, 3] and not runtime.interrupting
+
+    # 4. a direct image for a while: the frames are re-uploaded afterwards for a frame-based previous
+    panel.clear()
+    await hass.services.async_call(DOMAIN, "display_image", {"url": "http://x/bell.png"}, blocking=True)
+    assert runtime.shown[0] == "frames"
+    await hass.services.async_call(DOMAIN, "show_slot", {"slot": 4, "duration": 0.2}, blocking=True)
+    await asyncio.sleep(0.4)
+    await hass.async_block_till_done()
+    assert len(panel.frames_for((0x02, 0x00))) >= 2, "the picture was uploaded again"
+    assert runtime.shown[0] == "frames" and not runtime.interrupting
+
+    # 5. new content during an interruption ends it: nothing is put back later
+    await hass.services.async_call(DOMAIN, "show_slot", {"slot": 4, "duration": 0.2}, blocking=True)
+    await hass.services.async_call(DOMAIN, "show_slot", {"slot": 7}, blocking=True)
+    assert not runtime.interrupting
+    await asyncio.sleep(0.4)
+    await hass.async_block_till_done()
+    assert runtime.shown == ("slot", 7)
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN, "display_image", {"url": "http://x/bell.png", "slot": 4, "duration": 5}, blocking=True
+        )
+
+
+async def test_shown_slot_is_sent_again_when_a_panel_reconnects(hass: HomeAssistant, fake_bluetooth):
+    """A panel that rebooted plays its own thing; the slot on display is re-sent on reconnect."""
+    await _setup_panel(hass, fake_bluetooth, LEFT, "Left", "left")
+    panel = fake_bluetooth.panels[LEFT]
+    runtime = hass.data[DOMAIN]["left"]
+    await hass.services.async_call(DOMAIN, "show_slot", {"slot": 3}, blocking=True)
+    panel.clear()
+    assert await runtime.async_restore_content()
+    assert [f.data[6] for f in panel.frames_for((0x08, 0x80))] == [3]
 
 
 async def test_migrate_v1_entry(hass: HomeAssistant, fake_bluetooth):

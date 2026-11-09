@@ -219,3 +219,32 @@ def test_render_bars_track_and_star_colour():
     frames = render_bars_frames(32, 16, [10], maximum=100, animation="stars", frames=3, seed=3, star_color="e5e5e5")
     sky = [frames[0].getpixel((x, y)) for x in range(32) for y in range(8) if frames[0].getpixel((x, y)) != (0, 0, 0)]
     assert sky and all(r == g == b for r, g, b in sky)
+
+
+def test_add_caption_puts_text_under_a_scaled_picture():
+    from custom_components.ipixel_color.device.caption import add_caption
+
+    bell = Image.new("RGB", (32, 32), (255, 200, 0))
+    (frame,) = add_caption([bell], 64, 64, "Voordeur", font="5x7", color="ffffff", background="000000")
+    assert frame.size == (64, 64)
+    px = frame.load()
+    # band of 7 + 2 rows at the bottom; the picture is scaled to 55x55 and centred above it
+    assert px[32, 54] == (255, 200, 0) and px[32, 0] == (255, 200, 0)
+    assert px[0, 27] == (0, 0, 0) and px[63, 27] == (0, 0, 0), "room left and right of the square picture"
+    band = [px[x, y] for y in range(55, 64) for x in range(64)]
+    assert (255, 255, 255) in band and (255, 200, 0) not in band
+    assert all(px[x, 55] == (0, 0, 0) for x in range(64)), "one empty row above the text"
+
+    # on top, a TTF font with a size, GIF frames keep their count
+    frames = add_caption([bell, bell.rotate(90)], 64, 64, "Poort", font="7x5.ttf", size=12, position="top")
+    assert len(frames) == 2 and any(frames[0].getpixel((x, 1)) == (255, 255, 255) for x in range(64)) is False
+    assert any(frames[0].getpixel((x, y)) == (255, 255, 255) for y in range(1, 14) for x in range(64))
+    assert frames[0].getpixel((32, 63)) == (255, 200, 0)
+
+    with pytest.raises(ValueError):
+        add_caption([bell], 64, 64, "x", font="nope.ttf")
+    with pytest.raises(ValueError):
+        add_caption([bell], 64, 64, "x", position="left")
+    # no text: the picture simply fills the canvas
+    (plain,) = add_caption([bell], 64, 64, "  ")
+    assert plain.getpixel((0, 63)) == (255, 200, 0)

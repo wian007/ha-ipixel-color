@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field, fields
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
@@ -309,7 +309,7 @@ class iPIXELRuntime:
         try:
             # Panels may have been on different slots while apart (a stage change
             # that not all of them received): put them on the current stage first.
-            if await self._async_reshow_stage(in_step=True):
+            if await self._async_reshow_stage(in_step=True) or await self._async_reshow_slot(in_step=True):
                 return
             _LOGGER.info("%s: all panels connected; restarting them in step", self.name)
             await self.display.async_sync_animation()
@@ -343,6 +343,8 @@ class iPIXELRuntime:
         showed Home Assistant content is left alone. Returns True when restored.
         """
         if await self._async_reshow_stage():
+            return True
+        if await self._async_reshow_slot():
             return True
         if getattr(self.display, "content_persists", False):
             _LOGGER.debug("%s keeps its content in a slot on the panels; no repaint needed", self.name)
@@ -382,6 +384,100 @@ class iPIXELRuntime:
             _LOGGER.warning("Could not show stage %d of %s again: %s", config.current, self.name, err)
             return False
         return True
+
+    async def _async_reshow_slot(self, *, in_step: bool = False) -> bool:
+        """Send the slot that is on display again (a panel that rebooted plays something else)."""
+        if self._shown is None or self._shown[0] != "slot":
+            return False
+        slot = self._shown[1]
+        try:
+            _LOGGER.info("%s: showing slot %d again", self.name, slot)
+            await self.async_show_slot(slot, in_step=in_step)
+        except iPIXELError as err:
+            _LOGGER.warning("Could not show slot %d of %s again: %s", slot, self.name, err)
+            return False
+        return True
+
+    # ------------------------------------------------------------------
+    # What is on the display: interrupting it and putting it back
+    # ------------------------------------------------------------------
+    # ("slot", n) | ("frames", frames, durations) | ("render", (text, mode, overrides))
+    _shown: tuple | None = None
+    _interrupted: tuple | None = None  # what was on display before the interruption
+    _held: tuple | None = None  # slot content uploaded during the interruption, switched to at its end
+    _interrupt_task: asyncio.Task | None = None
+    _showing_interrupt = False
+
+    @property
+    def interrupting(self) -> bool:
+        """True while something is shown for a limited time."""
+        return self._interrupt_task is not None and not self._interrupt_task.done()
+
+    @property
+    def shown(self) -> tuple | None:
+        """What the display shows as far as Home Assistant knows."""
+        return self._shown
+
+    def _note_shown(self, shown: tuple | None) -> None:
+        """Remember what is on display; new content ends a running interruption for good."""
+        self._shown = shown
+        if self.interrupting and not self._showing_interrupt:
+            self._interrupt_task.cancel()  # type: ignore[union-attr]
+            self._interrupt_task = None
+            self._interrupted = None
+            self._held = None
+
+    async def async_interrupt(self, show: Callable[[], Awaitable[None]], duration: float) -> None:
+        """Run ``show`` and put the previous content back after ``duration`` seconds.
+
+        A second interruption during the first replaces it and keeps the original
+        content to go back to. Slot content that arrives meanwhile (a chart refresh
+        with ``alternate_slots``) is uploaded but only switched to when the
+        interruption ends.
+        """
+        if self.interrupting:
+            self._interrupt_task.cancel()  # type: ignore[union-attr]
+            self._interrupt_task = None
+        else:
+            self._interrupted = self._shown
+            self._held = None
+        self._showing_interrupt = True
+        try:
+            await show()
+        finally:
+            self._showing_interrupt = False
+        self._interrupt_task = self.hass.async_create_background_task(
+            self._async_end_interrupt(duration), f"ipixel_color interrupt {self.name}"
+        )
+
+    async def _async_end_interrupt(self, duration: float) -> None:
+        await asyncio.sleep(duration)
+        self._interrupt_task = None
+        try:
+            await self.async_restore_previous()
+        except iPIXELError as err:
+            _LOGGER.warning("Could not put the previous content back on %s: %s", self.name, err)
+
+    async def async_restore_previous(self) -> None:
+        """Show again what was on display before the last interruption (or what arrived during it)."""
+        if self.interrupting:
+            self._interrupt_task.cancel()  # type: ignore[union-attr]
+        self._interrupt_task = None
+        target = self._held or self._interrupted
+        self._held = None
+        self._interrupted = None
+        await self._async_reshow(target)
+
+    async def _async_reshow(self, shown: tuple | None) -> None:
+        if shown is None:
+            await self.async_clear()
+        elif shown[0] == "slot":
+            await self.async_show_slot(shown[1])
+        elif shown[0] == "frames":
+            await self.async_show_animation(list(shown[1]), list(shown[2]))
+        elif shown[0] == "render":
+            text, mode, overrides = shown[1]
+            await self.async_update_display(text, mode=mode, overrides=overrides)
 
     def _groups_containing_me(self) -> list[iPIXELRuntime]:
         runtimes = self.hass.data.get(DOMAIN, {}).values()
@@ -469,6 +565,7 @@ class iPIXELRuntime:
         async with self._update_lock:
             await self.display.async_clear()
             self._last_render = None
+            self._note_shown(None)
             self._known_empty = True
             self._fun_mode_ready = True  # the blank command is "enter DIY mode, clear"
             self._pixel_lit = False
@@ -670,6 +767,7 @@ class iPIXELRuntime:
                 raise
             self._last_error = None
             self._last_render = (text, mode, overrides)
+            self._note_shown(("render", (text, mode, overrides)))
             self._known_empty = False
             self._fun_mode_ready = False
             self._pixel_lit = False
@@ -866,14 +964,23 @@ class iPIXELRuntime:
         *,
         effect: str | None = None,
         save_slot: int = 0,
+        decorate: Callable[[list[Image.Image], int, int], list[Image.Image]] | None = None,
     ) -> Image.Image:
-        """Decode an image/GIF, spread it over the display and return the first frame."""
+        """Decode an image/GIF, spread it over the display and return the first frame.
+
+        ``decorate(frames, width, height)`` may rework the decoded frames first
+        (a caption under the picture); it runs in the executor.
+        """
         from .device.image import split_gif_frames
         from .display.base import fit_to_canvas
 
         width, height = self._require_canvas()
         try:
             frames, durations, loop = await self.hass.async_add_executor_job(split_gif_frames, data)
+            if decorate is not None:
+                frames = await self.hass.async_add_executor_job(decorate, frames, width, height)
+        except ValueError:
+            raise
         except Exception as err:  # noqa: BLE001
             raise iPIXELCommandError(f"Cannot decode image ({extension}): {err}") from err
 
@@ -882,6 +989,8 @@ class iPIXELRuntime:
             await self.display.async_show_image(sized[0], save_slot=save_slot)
         else:
             await self.display.async_show_gif(sized, durations, loop=loop, save_slot=save_slot)
+        if not save_slot:
+            self._note_shown(("frames", sized, durations))
         self.set_last_frame(sized[0])
         return sized[0]
 
@@ -892,6 +1001,8 @@ class iPIXELRuntime:
         width, height = self._require_canvas()
         canvas = fit_to_canvas(image, width, height)
         await self.display.async_show_image(canvas, save_slot=save_slot)
+        if not save_slot:
+            self._note_shown(("frames", [canvas], [0]))
         self.set_last_frame(canvas)
 
     async def async_show_animation(
@@ -920,8 +1031,14 @@ class iPIXELRuntime:
         else:
             await self.display.async_show_gif(sized, durations, loop=0, save_slot=save_slot)
         if alternate_slots:
-            await self.async_show_slot(save_slot)
             self._alternate_shown = save_slot
+            if self.interrupting:
+                # Keep the interruption on display; switch when it ends.
+                self._held = ("slot", save_slot)
+                return
+            await self.async_show_slot(save_slot)
+        elif not save_slot:
+            self._note_shown(("frames", sized, durations))
         self.set_last_frame(sized[0])
 
     _alternate_shown: int | None = None
@@ -941,6 +1058,7 @@ class iPIXELRuntime:
         """
         await self.display.async_call("show_slot", int(slot), in_step=in_step)
         self._last_render = None
+        self._note_shown(("slot", int(slot)))
         self._known_empty = False
         self.set_last_frame(None)
 

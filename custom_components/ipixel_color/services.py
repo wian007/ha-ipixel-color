@@ -58,6 +58,7 @@ SERVICE_SET_PIXEL = "set_pixel"
 SERVICE_SET_PIXELS = "set_pixels"
 SERVICE_CLEAR_DISPLAY = "clear_display"
 SERVICE_SHOW_SLOT = "show_slot"
+SERVICE_RESTORE = "restore"
 SERVICE_SYNC_ANIMATION = "sync_animation"
 SERVICE_SET_STAGES = "set_stages"
 SERVICE_SHOW_STAGE = "show_stage"
@@ -306,7 +307,41 @@ async def handle_display_image(runtime: iPIXELRuntime, call: ServiceCall) -> Non
         return
 
     slot = int(_first(data, "slot", "buffer_slot", default=0) or 0)
-    await runtime.async_show_image_bytes(image_bytes, extension, effect=data.get("effect"), save_slot=slot)
+    decorate = None
+    caption = str(data.get("caption") or "").strip()
+    if caption:
+        from functools import partial
+
+        from .device.caption import POSITIONS, add_caption
+
+        position = str(data.get("caption_position") or "bottom")
+        if position not in POSITIONS:
+            raise ServiceValidationError(f"caption_position must be one of {', '.join(POSITIONS)}")
+        decorate = partial(
+            add_caption,
+            text=caption,
+            font=str(data.get("caption_font") or "5x7"),
+            size=int(data.get("caption_size", 10) or 10),
+            color=_color_hex(data.get("caption_color"), "ffffff"),
+            background=_color_hex(data.get("caption_background"), "000000"),
+            position=position,
+        )
+    duration = float(data.get("duration") or 0)
+    if duration and slot:
+        raise ServiceValidationError("duration shows the image directly; do not combine it with slot")
+
+    async def _show() -> None:
+        try:
+            await runtime.async_show_image_bytes(
+                image_bytes, extension, effect=data.get("effect"), save_slot=slot, decorate=decorate
+            )
+        except ValueError as err:
+            raise ServiceValidationError(str(err)) from err
+
+    if duration:
+        await runtime.async_interrupt(_show, duration)
+    else:
+        await _show()
 
 
 def _str_list(value: Any) -> list[str]:
@@ -647,8 +682,19 @@ async def handle_clear_stages(runtime: iPIXELRuntime, call: ServiceCall) -> None
 
 
 async def handle_show_slot(runtime: iPIXELRuntime, call: ServiceCall) -> None:
-    """Show a stored slot."""
-    await runtime.async_show_slot(int(call.data.get("slot", 0)), in_step=_bool(call.data.get("in_step"), False))
+    """Show a stored slot, for good or (with ``duration``) for a while."""
+    slot = int(call.data.get("slot", 0))
+    in_step = _bool(call.data.get("in_step"), False)
+    duration = float(call.data.get("duration") or 0)
+    if duration:
+        await runtime.async_interrupt(lambda: runtime.async_show_slot(slot, in_step=in_step), duration)
+    else:
+        await runtime.async_show_slot(slot, in_step=in_step)
+
+
+async def handle_restore(runtime: iPIXELRuntime, call: ServiceCall) -> None:
+    """Show again what was on the display before the last timed show_slot/display_image."""
+    await runtime.async_restore_previous()
 
 
 async def handle_delete_slot(runtime: iPIXELRuntime, call: ServiceCall) -> None:
@@ -861,6 +907,7 @@ SERVICES: dict[str, tuple[ServiceHandler, vol.Schema]] = {
     SERVICE_SET_PIXELS: (handle_set_pixels, _schema()),
     SERVICE_CLEAR_DISPLAY: (handle_clear_display, _schema()),
     SERVICE_SHOW_SLOT: (handle_show_slot, _schema()),
+    SERVICE_RESTORE: (handle_restore, _schema()),
     SERVICE_SYNC_ANIMATION: (handle_sync_animation, _schema()),
     SERVICE_SET_STAGES: (handle_set_stages, _schema()),
     SERVICE_SHOW_STAGE: (handle_show_stage, _schema()),
