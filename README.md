@@ -148,14 +148,16 @@ configured the target can be omitted.
 |---------|-------------|
 | `ipixel_color.display_text` | Show text. `mode: text` = rendered by the panel (scroll/blink animations), `mode: textimage` = rendered by Home Assistant as one image over a combined display |
 | `ipixel_color.update_display` | Re-render the current entity settings |
-| `ipixel_color.display_image` | Show an image or GIF from a `url`, a `media` library item (media browser, `media-source://...`) or a local `path`; `method: stream` sends raw pixels instead of an upload |
+| `ipixel_color.display_image` | Show an image or GIF from a `url`, a `media` library item (media browser, `media-source://...`) or a local `path`; `method: stream` sends raw pixels instead of an upload; `caption: Voordeur` puts a line of text under the picture (`caption_font` 3x5/5x7 or a TTF with `caption_size`, `caption_color`, `caption_position`); `duration` shows it for a number of seconds and then puts the previous content back |
 | `ipixel_color.display_bars` | Bar chart of several `values` or the states of several `entities`, with colours per bar, by value or as a gradient, vertical or horizontal, gaps, segments, baseline and margin; `group_size` groups the bars (CPU and memory per node), `labels` and `show_values` print names and numbers in a pixel font, `animation: space` adds a twinkling sky and a light pulse through the bars (also `radar`, `boot`, or any mix of `stars`, `pulse`, `scan`, `grow`); `alternate_slots: "2, 3"` uploads each new chart to the slot that is not on display and then switches, so the previous chart keeps playing during the upload |
 | `ipixel_color.draw_visuals` / `stop_visuals` | Multi-element canvas (text, scrolling text, images, pixels) with animation |
 | `ipixel_color.draw_solid_color`, `set_pixel`, `set_pixels`, `clear_display` | Pixel level control (combined coordinates on a combined display) |
 | `ipixel_color.set_power`, `set_brightness`, `set_orientation`, `set_upside_down` | Device control |
 | `ipixel_color.set_clock_mode`, `set_rhythm_mode` | Native modes (`set_rhythm_mode` takes optional 11 band `levels`) |
 | `ipixel_color.sync_time`, `set_time` | Clock |
-| `ipixel_color.show_slot`, `delete_slot`, `erase_data`, `set_program_mode`, `set_screen`, `set_diy_mode`, `set_default_mode` | Storage / screens |
+| `ipixel_color.show_slot` | Show a stored slot; `duration` shows it for a number of seconds and then puts the previous content back (a chart refresh with `alternate_slots` that arrives meanwhile is switched to at the end), see `examples/doorbell.yaml` |
+| `ipixel_color.restore` | Show again what the display showed before the last timed `show_slot`/`display_image` (ends it early) |
+| `ipixel_color.delete_slot`, `erase_data`, `set_program_mode`, `set_screen`, `set_diy_mode`, `set_default_mode` | Storage / screens |
 | `ipixel_color.add_schedule`, `remove_schedule`, `trigger_schedule`, `set_playlist`, `create_playlist`, `start_playlist`, `stop_playlist`, `set_power_schedule`, `add_time_slot` | Digital signage |
 | `ipixel_color.send_raw_command`, `send_mix_data`, `set_password`, `verify_password` | Expert |
 

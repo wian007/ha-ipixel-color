@@ -1,0 +1,25 @@
+# Doorbell on a panel wall: a bell with the name of the door, stored once, shown for 15 s.
+#
+# 1. Once (Developer tools > Actions, or a script you run after adding a panel):
+#    the picture plus caption is stored in a slot on every panel and nothing is shown yet.
+action: ipixel_color.display_image
+target:
+  entity_id: camera.combined_display_voorbeeld
+data:
+  url: http://localhost:8123/local/images/deurbel.png   # any PNG/GIF; a GIF keeps animating
+  caption: Voordeur
+  caption_color: fca311
+  slot: 4
+# Same with caption: Poort and slot: 5.
+#
+# 2. In the doorbell automation, per door:
+#   - action: ipixel_color.show_slot
+#     target:
+#       entity_id: camera.combined_display_voorbeeld
+#     data:
+#       slot: "{{ 4 if trigger.id == 'voordeur' else 5 }}"
+#       duration: 15        # then whatever was on the wall comes back by itself
+#
+# The switch takes well under a second; a chart that refreshes with alternate_slots while the
+# bell is showing is uploaded in the background and appears when the 15 s are over.
+# ipixel_color.restore ends the interruption early.

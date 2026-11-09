@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `track_color` paints the empty rest of every bar and `star_color` sets one tone for the sky.
   `alternate_slots` double-buffers the chart: every call uploads to the slot of the list that is not
   on display and then switches with one show-slot command, so a refresh no longer interrupts the wall.
+- Doorbell-style interruptions: `show_slot` and `display_image` take a `duration`; the previous content
+  (a slot, an uploaded picture or animation, or rendered text) is put back afterwards, `restore` does so
+  early, a second interruption keeps the original content, and a chart refresh with `alternate_slots`
+  that arrives meanwhile is uploaded but only switched to when the interruption ends.
+- `display_image` has `caption` (with `caption_font`, `caption_size`, `caption_color`,
+  `caption_background`, `caption_position`): a line of text under the picture, e.g. a bell with
+  "Voordeur" stored once in a slot (`examples/doorbell.yaml`).
+- A display that shows a slot sends it again when a panel reconnects (a panel that lost power plays
+  its own content otherwise); the wall realign restarts that slot in step.
 - A panel that was away while the stage changed is sent the slot of the current stage when it
   reconnects, and a combined display is put on its current stage in step once all panels are
   connected after a start (panels used to keep playing different stages until the next change).
