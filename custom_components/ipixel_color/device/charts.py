@@ -31,6 +31,29 @@ _PIECE_GAP = 2  # columns between two texts on one row
 _STAR_TONES: tuple[RGB, ...] = ((150, 170, 255), (255, 255, 255), (255, 225, 170), (120, 210, 255))
 _SCAN_TONE: RGB = (140, 230, 255)
 _WHITE: RGB = (255, 255, 255)
+# Health of a group (a node): the words a status may be given in.
+STATUSES = ("ok", "unhealthy", "down")
+_STATUS_WORDS: dict[str, str] = {
+    **dict.fromkeys(("ok", "on", "true", "1", "up", "ready", "healthy", "online", "running", "home"), "ok"),
+    **dict.fromkeys(("unhealthy", "warn", "warning", "degraded", "notready", "not_ready", "problem", "pressure"), "unhealthy"),
+    **dict.fromkeys(("down", "off", "false", "0", "offline", "unavailable", "unknown", "none", "nan", ""), "down"),
+}
+# Words that stand for "no value" where a number is expected.
+MISSING_WORDS = ("unavailable", "unknown", "none", "nan", "-")
+
+
+def parse_status(value: object) -> str:
+    """Turn a state like ``on``, ``NotReady`` or ``unavailable`` into ok, unhealthy or down."""
+    word = str(value).strip().lower().replace(" ", "")
+    try:
+        if float(word) > 0:
+            return "ok"
+        return "down"
+    except ValueError:
+        pass
+    if word not in _STATUS_WORDS:
+        raise ValueError(f"status {value!r} is not one of {', '.join(STATUSES)}")
+    return _STATUS_WORDS[word]
 
 
 def _rgb(value: str | RGB) -> RGB:
@@ -157,6 +180,10 @@ def render_bars_frames(
     value_format: str = "{:.0f}",
     track: str | None = None,
     star_color: str | None = None,
+    status: list[str] | None = None,
+    down_color: str = "ff2020",
+    unhealthy_color: str = "ffb000",
+    down_text: str = "DOWN",
     animation: tuple[str, ...] | list[str] | str = (),
     frames: int = 24,
     seed: int = 7,
@@ -183,6 +210,13 @@ def render_bars_frames(
     ``track`` paints the empty rest of every bar in that colour, so the scale
     stays visible; ``star_color`` makes all stars one tone instead of a mix.
 
+    ``status`` gives the health of every group (``ok``, ``unhealthy`` or
+    ``down``, or a state like ``on``/``off``/``unavailable``). A value may be
+    NaN ("no data"); a group without any value is down too. A down group gets
+    its label in ``down_color``, empty bars on a dim track of that colour
+    (breathing in an animation) and ``down_text`` in place of its values; an
+    unhealthy group keeps its bars and gets its label in ``unhealthy_color``.
+
     ``animation`` is a tuple of effects (``stars``: a twinkling sky behind the
     chart, ``pulse``: a light running through every bar, ``scan``: a radar line
     sweeping the chart, ``grow``: the bars rise from nothing in the first half
@@ -198,8 +232,9 @@ def render_bars_frames(
     values = [float(v) for v in values]
     if not values:
         raise ValueError("At least one value is needed")
+    missing = [math.isnan(value) for value in values]
     if maximum is None:
-        maximum = max(max(values), minimum)
+        maximum = max([value for value in values if not math.isnan(value)] + [minimum])
     if maximum <= minimum:
         maximum = minimum + 1.0
     span = maximum - minimum
@@ -246,8 +281,17 @@ def render_bars_frames(
     palette = [_rgb(c) for c in (colors or DEFAULT_PALETTE)]
     low, high = _rgb(color_low), _rgb(color_high)
     bg = _rgb(background)
-    track_colour = _rgb(track) if track else None
-    fractions = [min(1.0, max(0.0, (value - minimum) / span)) for value in values]
+    base_track = _rgb(track) if track else None
+    down_colour, unhealthy_colour = _rgb(down_color), _rgb(unhealthy_color)
+    health = [parse_status(word) for word in (status or [])][:groups]
+    health += ["ok"] * (groups - len(health))
+    for group in range(groups):
+        if all(missing[group * group_size : (group + 1) * group_size]):
+            health[group] = "down"
+    fractions = [
+        0.0 if missing[index] or health[index // group_size] == "down" else min(1.0, max(0.0, (value - minimum) / span))
+        for index, value in enumerate(values)
+    ]
 
     def bar_colour(index: int) -> RGB:
         if color_mode == "per_bar":
@@ -278,9 +322,15 @@ def render_bars_frames(
             g_last = min(g_first + group_span, margin + across)
             label = render_text(labels[group], font) if group < len(labels) and labels[group] else None
             value_pieces: list[tuple[Image.Image, RGB]] = []
-            if show_values:
+            group_colour = {"down": down_colour, "unhealthy": unhealthy_colour}.get(health[group], text_colour)
+            if health[group] == "down":
+                # the status takes the place of the numbers (a vertical chart only has room with show_values)
+                mask = render_text(down_text, font) if down_text and (show_values or not vertical) else None
+                if mask is not None:
+                    value_pieces.append((mask, down_colour))
+            elif show_values:
                 for index in range(group * group_size, min(count, (group + 1) * group_size)):
-                    mask = render_text(value_format.format(values[index]), font)
+                    mask = render_text("-" if missing[index] else value_format.format(values[index]), font)
                     if mask is not None:
                         value_pieces.append((mask, bar_colour(index)))
             if vertical:
@@ -289,7 +339,7 @@ def render_bars_frames(
                 slot = clip[2] - clip[0]
                 if label is not None:
                     x = clip[0] + (slot - label.width) // 2 if label.width <= slot else clip[0]
-                    texts.append((label, x, margin + area_h - text_rows, text_colour, clip))
+                    texts.append((label, x, margin + area_h - text_rows, group_colour, clip))
                 if value_pieces:
                     row = _row_width(value_pieces)
                     x = clip[0] + (slot - row) // 2 if row <= slot else clip[0]
@@ -307,7 +357,7 @@ def render_bars_frames(
                         texts.append((mask, x, y, colour, canvas_clip))
                         x += mask.width + _PIECE_GAP
                 if label is not None:
-                    texts.append((label, margin, y, text_colour, (margin, margin, label_end, margin + area_h)))
+                    texts.append((label, margin, y, group_colour, (margin, margin, label_end, margin + area_h)))
 
     stars = _make_stars(width, height, seed, (_rgb(star_color),) if star_color else _STAR_TONES) if "stars" in effects else []
     images: list[Image.Image] = []
@@ -329,21 +379,25 @@ def render_bars_frames(
                 for y in range(margin, margin + area_h):
                     pixels[margin, y] = line
 
-        if track_colour is not None:
-            for _index, first, last, _full in bars:
+        # the bars of a down group stand on a dim track of the down colour, breathing twice per loop
+        glow = 0.3 if frames == 1 else 0.2 + 0.3 * (0.5 + 0.5 * math.cos(4 * math.pi * t))
+        down_track = _lerp(bg, down_colour, glow)
+        for index, first, last, _full in bars:
+            track_colour = down_track if health[index // group_size] == "down" else base_track
+            if track_colour is not None:
                 for step in range(length):
-                    if segment and step % (segment + 1) == segment:
-                        continue
-                    if vertical:
-                        y = base - step
-                        if y < top:
-                            break
-                        for x in range(first, last):
-                            pixels[x, y] = track_colour
-                    else:
-                        x = margin + step
-                        for y in range(first, last):
-                            pixels[x, y] = track_colour
+                        if segment and step % (segment + 1) == segment:
+                            continue
+                        if vertical:
+                            y = base - step
+                            if y < top:
+                                break
+                            for x in range(first, last):
+                                pixels[x, y] = track_colour
+                        else:
+                            x = margin + step
+                            for y in range(first, last):
+                                pixels[x, y] = track_colour
 
         scale = _ease_out((k + 1) / max(1, frames // 2)) if "grow" in effects else 1.0
         for index, first, last, full_length in bars:

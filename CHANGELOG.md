@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `track_color` paints the empty rest of every bar and `star_color` sets one tone for the sky.
   `alternate_slots` double-buffers the chart: every call uploads to the slot of the list that is not
   on display and then switches with one show-slot command, so a refresh no longer interrupts the wall.
+- `display_bars` shows the health of every group: `status` takes `ok`, `unhealthy` or `down` per
+  node (or a state such as `on`, `off`, `NotReady`, `unavailable`). A down node gets a red label,
+  empty bars on a dim red track that breathes in an animation and `DOWN` in place of its numbers;
+  an unhealthy node gets an amber label (`down_color`, `unhealthy_color`, `down_text`). An entity
+  that is unavailable or unknown no longer fails the call: it is an empty bar, and a node of which
+  every value is missing is drawn as down.
 - Doorbell-style interruptions: `show_slot` and `display_image` take a `duration`; the previous content
   (a slot, an uploaded picture or animation, or rendered text) is put back afterwards, `restore` does so
   early, a second interruption keeps the original content, and a chart refresh with `alternate_slots`

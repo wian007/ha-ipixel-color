@@ -810,7 +810,32 @@ async def test_display_bars_service(hass: HomeAssistant, fake_bluetooth):
         with pytest.raises(ServiceValidationError):
             await hass.services.async_call(DOMAIN, "display_bars", {"values": "1", **bad}, blocking=True)
 
-    hass.states.async_set("sensor.b", "unknown")
+    # an unavailable entity is "no data": its group is drawn as down instead of failing the call
+    hass.states.async_set("sensor.b", "unavailable")
+    panel.clear()
+    await hass.services.async_call(
+        DOMAIN,
+        "display_bars",
+        {"entities": ["sensor.a", "sensor.b"], "max": 100, "gap": 0, "colors": "00ff00", "down_color": "ff0000"},
+        blocking=True,
+    )
+    px = panel.last_image().load()
+    assert px[0, 0] == (0, 255, 0) and px[63, 0] == px[63, 15] == (76, 0, 0), "second bar is a dim red track"
+    # status per group: unhealthy colours the label, down empties the bars
+    panel.clear()
+    await hass.services.async_call(
+        DOMAIN,
+        "display_bars",
+        {"values": "100, 100", "max": 100, "gap": 0, "colors": "00ff00", "status": "ok, off", "down_color": [255, 0, 0]},
+        blocking=True,
+    )
+    px = panel.last_image().load()
+    assert px[0, 0] == (0, 255, 0) and px[63, 0] == (76, 0, 0)
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(DOMAIN, "display_bars", {"values": "1", "status": "purple"}, blocking=True)
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(DOMAIN, "display_bars", {"entities": ["sensor.missing"]}, blocking=True)
+    hass.states.async_set("sensor.b", "abc")
     with pytest.raises(ServiceValidationError):
         await hass.services.async_call(
             DOMAIN, "display_bars", {"entities": ["sensor.b"]}, blocking=True

@@ -209,6 +209,44 @@ def test_render_bars_animation_effects():
     assert render_bars(4, 4, [1], animation="space").size == (4, 4)
 
 
+def test_render_bars_status():
+    from custom_components.ipixel_color.device.charts import (
+        load_label_font,
+        parse_status,
+        render_bars,
+        render_bars_frames,
+        render_text,
+    )
+
+    assert [parse_status(w) for w in ("on", "Ready", "1", "NotReady", "warning", "off", "unavailable", "0")] == [
+        "ok", "ok", "ok", "unhealthy", "unhealthy", "down", "down", "down",
+    ]
+    with pytest.raises(ValueError):
+        parse_status("purple")
+
+    nan = float("nan")
+    kwargs = dict(maximum=100, orientation="horizontal", group_size=2, gap=0, group_gap=0, colors=["0000ff", "ffa000"], labels=["a", "b", "c"], show_values=True)
+    # 3 groups on 48 rows: 16 each = label row of 6 + two bars of 5
+    image = render_bars(64, 48, [100, 100, 100, 100, nan, nan], status=["unhealthy"], label_color="ffffff", down_color="ff0000", unhealthy_color="ffff00", **kwargs)
+    px = image.load()
+    colours = lambda rows: {px[x, y] for y in rows for x in range(64)} - {(0, 0, 0)}  # noqa: E731
+    assert (255, 255, 0) in colours(range(0, 5)) and (255, 255, 255) not in colours(range(0, 5)), "unhealthy label is amber"
+    assert px[63, 8] == (0, 0, 255), "unhealthy keeps its bars"
+    assert colours(range(16, 21)) == {(255, 255, 255), (0, 0, 255), (255, 160, 0)}, "healthy group: label and values"
+    assert colours(range(32, 37)) == {(255, 0, 0)}, "group without values: red label and DOWN"
+    assert px[0, 40] == px[63, 45] == (76, 0, 0), "empty bars on a dim red track"
+    down = render_text("DOWN", load_label_font("3x5"))
+    assert px[63, 32] == (255, 0, 0) and px[64 - down.width, 32] == (255, 0, 0), "DOWN right-aligned on the label row"
+
+    # an explicit down wins over values that are still there; one missing value prints a dash
+    px = render_bars(8, 4, [100, 100, 50, nan], maximum=100, gap=0, colors=["00ff00"], group_size=2, group_gap=0, status=["down"], down_color="ff0000", track="000040").load()
+    assert px[0, 0] == px[0, 3] == (76, 0, 0) and px[4, 3] == (0, 255, 0) and px[4, 0] == (0, 0, 64) and px[7, 3] == (0, 0, 64)
+    # no values at all still draws; the track breathes in an animation and the loop is seamless
+    frames = render_bars_frames(4, 4, [nan], animation="pulse", frames=8, down_color="ff0000")
+    assert len({f.getpixel((0, 0)) for f in frames}) > 2 and frames[0].getpixel((0, 0)) == (128, 0, 0)
+    assert render_bars(4, 4, [50], maximum=100, status=["down"], down_text="").getpixel((0, 3)) == (76, 10, 10)
+
+
 def test_render_bars_track_and_star_colour():
     from custom_components.ipixel_color.device.charts import render_bars, render_bars_frames
 

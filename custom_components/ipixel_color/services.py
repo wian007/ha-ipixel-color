@@ -358,21 +358,31 @@ async def handle_display_bars(runtime: iPIXELRuntime, call: ServiceCall) -> None
     """Draw a bar chart of several values (or the states of several entities), with labels."""
     from functools import partial
 
-    from .device.charts import COLOR_MODES, ORIENTATIONS, parse_animation, render_bars_frames
+    from .device.charts import (
+        COLOR_MODES,
+        MISSING_WORDS,
+        ORIENTATIONS,
+        parse_animation,
+        parse_status,
+        render_bars_frames,
+    )
 
     data = call.data
+    # A value that is unavailable or unknown counts as "no data" (NaN): its node may be down.
     values: list[float] = []
     for raw in _str_list(data.get("values")):
         try:
-            values.append(float(raw))
+            values.append(float("nan") if raw.lower() in MISSING_WORDS else float(raw))
         except ValueError as err:
             raise ServiceValidationError(f"{raw!r} is not a number") from err
     if not values:
         for entity_id in _str_list(data.get("entities")):
             state = runtime.hass.states.get(entity_id)
+            if state is None:
+                raise ServiceValidationError(f"{entity_id} does not exist")
             try:
-                values.append(float(state.state))  # type: ignore[union-attr]
-            except (AttributeError, TypeError, ValueError) as err:
+                values.append(float("nan") if state.state.lower() in MISSING_WORDS else float(state.state))
+            except ValueError as err:
                 raise ServiceValidationError(f"{entity_id} has no numeric value") from err
     if not values:
         raise ServiceValidationError("Provide values or entities")
@@ -387,6 +397,10 @@ async def handle_display_bars(runtime: iPIXELRuntime, call: ServiceCall) -> None
         raise ServiceValidationError(f"orientation must be one of {', '.join(ORIENTATIONS)}")
     colors = [_color_hex(c, "ffffff") for c in _str_list(data.get("colors"))] or None
     maximum = data.get("max")
+    try:
+        status = [parse_status(word) for word in _str_list(data.get("status"))] or None
+    except ValueError as err:
+        raise ServiceValidationError(str(err)) from err
     try:
         animation = parse_animation(data.get("animation"))
     except ValueError as err:
@@ -423,6 +437,10 @@ async def handle_display_bars(runtime: iPIXELRuntime, call: ServiceCall) -> None
         value_format=str(data.get("value_format") or "{:.0f}"),
         track=_color_hex(data["track_color"], "14213d") if data.get("track_color") not in (None, "") else None,
         star_color=_color_hex(data["star_color"], "e5e5e5") if data.get("star_color") not in (None, "") else None,
+        status=status,
+        down_color=_color_hex(data.get("down_color"), "ff2020"),
+        unhealthy_color=_color_hex(data.get("unhealthy_color"), "ffb000"),
+        down_text=str(data["down_text"]) if data.get("down_text") is not None else "DOWN",
     )
     try:
         frames = await runtime.hass.async_add_executor_job(render)

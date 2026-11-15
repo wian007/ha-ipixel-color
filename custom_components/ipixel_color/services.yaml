@@ -254,7 +254,7 @@ display_bars:
         text:
     entities:
       name: Entities
-      description: Numeric entities whose current states are the bars (used when no values are given)
+      description: Numeric entities whose current states are the bars (used when no values are given); an unavailable or unknown entity gives an empty bar
       required: false
       selector:
         entity:
@@ -427,6 +427,32 @@ display_bars:
       required: false
       selector:
         color_rgb:
+    status:
+      name: Status
+      description: "Health of every group (node), comma separated (templates allowed): ok, unhealthy or down; states like on, off, NotReady and unavailable are understood too. A down group gets a red label, empty bars on a dim red track and DOWN in place of its values; an unhealthy group gets an amber label. A group whose values are all unavailable is shown as down without a status."
+      required: false
+      example: "ok, unhealthy, down, ok"
+      selector:
+        text:
+    down_color:
+      name: Down colour
+      description: Colour of the label, text and track of a group that is down
+      required: false
+      selector:
+        color_rgb:
+    unhealthy_color:
+      name: Unhealthy colour
+      description: Colour of the label of an unhealthy group
+      required: false
+      selector:
+        color_rgb:
+    down_text:
+      name: Down text
+      description: Text printed in place of the values of a group that is down (empty for none)
+      required: false
+      default: DOWN
+      selector:
+        text:
     animation:
       name: Animation
       description: "Effects for an animated chart, comma separated: stars (a twinkling sky behind the chart), pulse (a light running through every bar), scan (a radar line sweeping the chart), grow (the bars rise at the start of every loop); or a preset: space (stars + pulse), radar (stars + scan), boot (stars + grow + pulse). Empty for a still."

@@ -29,6 +29,15 @@
 #         unique_id: k3s_thinred_mem
 #         ...
 #
+#    A node that stops reporting makes its sensors unavailable; the chart then
+#    shows it as down by itself (red name, empty bars, DOWN). For "up but not
+#    healthy" add a sensor per node on the Ready condition of kube-state-metrics,
+#    e.g. query kube_node_status_condition{condition="Ready",status="true"} with
+#      value_template: >-
+#        {{ 'ok' if value_json.data.result | selectattr('metric.node', 'eq', 'thinred')
+#           | map(attribute='value.1') | first | default('0') | int == 1 else 'unhealthy' }}
+#    and pass those to `status` below.
+#
 # 2. The chart. Call it from an automation every 30 s (time_pattern seconds: "/30");
 #    a still over four panels takes about a second, this animation about 7 s.
 action: ipixel_color.display_bars
@@ -47,6 +56,11 @@ data:
   group_size: 2              # CPU and memory of one node side by side
   labels: "thinred, xred, nuc, redred"
   show_values: true          # "18 68" at the right of every label row
+  status:                    # per node: ok, unhealthy (amber name) or down (red name, DOWN); optional
+    - "{{ states('sensor.k3s_thinred_status') }}"
+    - "{{ states('sensor.k3s_xred_status') }}"
+    - "{{ states('sensor.k3s_nuc_status') }}"
+    - "{{ states('sensor.k3s_redred_status') }}"
   max: 100
   orientation: horizontal    # label row above two bars per node
   colors: "fca311, e5e5e5"   # CPU orange, memory light grey (palette 000000 14213d fca311 e5e5e5 ffffff)
