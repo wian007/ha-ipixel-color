@@ -411,6 +411,13 @@ display_bars:
       example: "{:.1f}%"
       selector:
         text:
+    value_icons:
+      name: Value icons
+      description: Icon before each value in a group (needs Show values); one name per bar position, repeated per group, e.g. cpu, ram
+      required: false
+      example: "cpu, ram"
+      selector:
+        text:
     label_font:
       name: Label font
       description: Pixel font for labels and values

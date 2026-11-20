@@ -40,6 +40,8 @@ _STATUS_WORDS: dict[str, str] = {
 }
 # Words that stand for "no value" where a number is expected.
 MISSING_WORDS = ("unavailable", "unknown", "none", "nan", "-")
+# Tiny built-in icons shown before the values of a group (e.g. cpu/ram per node).
+ICONS = ("cpu", "ram")
 
 
 def parse_status(value: object) -> str:
@@ -113,6 +115,46 @@ def render_text(text: str, font: tuple[ImageFont.FreeTypeFont, int, int]) -> Ima
     return canvas.crop((bbox[0], top, bbox[2], top + height))
 
 
+def render_icon(name: str, height: int, width: int | None = None) -> Image.Image:
+    """Return a monochrome mask of a built-in icon (``cpu`` or ``ram``).
+
+    Icons are drawn to the glyph band ``height`` so they line up with the value
+    text they sit in front of. ``cpu`` is a solid chip with pins on the top and
+    bottom edge; ``ram`` is a stack of memory modules (lines on the even rows).
+    """
+    key = str(name).strip().lower()
+    if key not in ICONS:
+        raise ValueError(f"icon must be one of {', '.join(ICONS)}")
+    h = max(1, int(height))
+    w = max(1, int(width)) if width else h
+    mask = Image.new("L", (w, h), 0)
+    px = mask.load()
+    if key == "cpu":
+        for y in range(1, h - 1):
+            for x in range(1, w - 1):
+                px[x, y] = 255
+        for x in range(1, w - 1, 2):
+            px[x, 0] = px[x, h - 1] = 255
+    else:  # ram: stacked modules
+        for y in range(0, h, 2):
+            for x in range(w):
+                px[x, y] = 255
+    return mask
+
+
+def _concat_masks(masks: list[Image.Image], gap: int = 1) -> Image.Image:
+    """Join masks side by side into one mask (top aligned), so they share a colour."""
+    parts = [m for m in masks if m is not None]
+    height = max(m.height for m in parts)
+    width = sum(m.width for m in parts) + gap * (len(parts) - 1)
+    out = Image.new("L", (max(1, width), height), 0)
+    x = 0
+    for mask in parts:
+        out.paste(mask, (x, 0))
+        x += mask.width + gap
+    return out
+
+
 def _blit(pixels, mask: Image.Image, x: int, y: int, colour: RGB, clip: tuple[int, int, int, int]) -> None:
     """Copy the lit pixels of ``mask`` to (x, y), clipped to (x0, y0, x1, y1) exclusive."""
     source = mask.load()
@@ -178,6 +220,7 @@ def render_bars_frames(
     group_gap: int | None = None,
     show_values: bool = False,
     value_format: str = "{:.0f}",
+    value_icons: list[str] | None = None,
     track: str | None = None,
     star_color: str | None = None,
     status: list[str] | None = None,
@@ -204,8 +247,11 @@ def render_bars_frames(
     ``labels`` name the groups (or bars) in a bundled pixel font: under the bars
     of a vertical chart, on a row above each group of a horizontal one.
     ``show_values`` prints the values in the bar colours: above a vertical
-    chart, right-aligned on the label row of a horizontal one. Bars and text
-    that do not fit on the canvas are dropped or clipped.
+    chart, right-aligned on the label row of a horizontal one. ``value_icons``
+    (one name per bar position in a group, e.g. ``["cpu", "ram"]``) draws a tiny
+    icon in front of each value, so the CPU and memory bars of a node are told
+    apart at a glance. Bars and text that do not fit on the canvas are dropped
+    or clipped.
 
     ``track`` paints the empty rest of every bar in that colour, so the scale
     stays visible; ``star_color`` makes all stars one tone instead of a mix.
@@ -255,6 +301,15 @@ def render_bars_frames(
         font = load_label_font(label_font)
         text_rows = font[2]
     text_block = (text_rows + 1) if text_rows else 0
+    icon_names = [str(name).strip().lower() for name in (value_icons or [])]
+    for name in icon_names:
+        if name and name not in ICONS:
+            raise ValueError(f"value_icons must be made of {', '.join(ICONS)}")
+    icon_masks = (
+        {name: render_icon(name, text_rows) for name in set(icon_names) if name}
+        if icon_names and text_rows
+        else {}
+    )
     vertical = orientation == "vertical"
     count = len(values)
     groups = -(-count // group_size)
@@ -331,8 +386,13 @@ def render_bars_frames(
             elif show_values:
                 for index in range(group * group_size, min(count, (group + 1) * group_size)):
                     mask = render_text("-" if missing[index] else value_format.format(values[index]), font)
-                    if mask is not None:
-                        value_pieces.append((mask, bar_colour(index)))
+                    if mask is None:
+                        continue
+                    position = index - group * group_size
+                    icon = icon_masks.get(icon_names[position]) if position < len(icon_names) else None
+                    if icon is not None:
+                        mask = _concat_masks([icon, mask], gap=1)
+                    value_pieces.append((mask, bar_colour(index)))
             if vertical:
                 # labels under the group, values above it, both centred and allowed half the gap on each side
                 clip = (max(margin, g_first - between // 2), margin, min(margin + area_w, g_last + (between - between // 2)), margin + area_h)
