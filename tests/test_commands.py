@@ -162,6 +162,31 @@ def test_render_bars_groups_labels_and_values():
         render_bars(8, 8, [1], show_values=True, value_format="{:d}")
 
 
+def test_render_bars_value_icons():
+    from custom_components.ipixel_color.device.charts import render_bars, render_icon
+
+    # icons are square masks at the band height: cpu a solid chip, ram striped on even rows
+    cpu, ram = render_icon("cpu", 5), render_icon("ram", 5)
+    assert cpu.size == (5, 5) and ram.size == (5, 5)
+    cp, rp = cpu.load(), ram.load()
+    assert cp[2, 2] == 255 and cp[0, 0] == 0, "cpu has a solid body with a clear corner"
+    assert all(rp[x, 0] == 255 for x in range(5)) and rp[0, 1] == 0, "ram is striped on even rows"
+    with pytest.raises(ValueError):
+        render_icon("gpu", 5)
+
+    # with show_values, an icon is drawn in front of each value (in the value colour)
+    common = dict(maximum=100, group_size=2, gap=1, show_values=True, colors=["0000ff", "ffa000"])
+    lit = lambda px: sum(1 for x in range(40) for y in range(0, 6) if px[x, y] != (0, 0, 0))  # noqa: E731
+    plain = render_bars(40, 20, [30, 80], **common).load()
+    icons = render_bars(40, 20, [30, 80], value_icons=["cpu", "ram"], **common).load()
+    assert lit(icons) > lit(plain), "icons add pixels to the value row"
+    blue = [x for x in range(40) for y in range(0, 6) if icons[x, y] == (0, 0, 255)]
+    orange = [x for x in range(40) for y in range(0, 6) if icons[x, y] == (255, 160, 0)]
+    assert blue and orange and min(blue) < min(orange), "cpu icon+value left of the ram icon+value"
+    with pytest.raises(ValueError):
+        render_bars(8, 8, [1], show_values=True, value_icons=["gpu"])
+
+
 def test_native_font_names_resolve_to_bundled_files():
     from custom_components.ipixel_color.runtime import iPIXELRuntime
 
