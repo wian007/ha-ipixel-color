@@ -418,6 +418,23 @@ display_bars:
       example: "cpu, ram"
       selector:
         text:
+    icons:
+      name: Custom icons
+      description: >-
+        Your own icons for value_icons, a mapping of name to a 2D pixel grid (rows
+        of 0/1, or strings split on /). A cell is lit unless it is 0, ., -, _ or
+        blank. Draw them at the label height (5 for the 3x5 font, 7 for 5x7) for a
+        pixel-perfect result; a custom name overrides a built-in one.
+      required: false
+      example: |
+        cpu:
+          - "01110"
+          - "11111"
+          - "11011"
+          - "11111"
+          - "01110"
+      selector:
+        object:
     label_font:
       name: Label font
       description: Pixel font for labels and values

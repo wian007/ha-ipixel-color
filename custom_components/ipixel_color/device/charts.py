@@ -142,6 +142,63 @@ def render_icon(name: str, height: int, width: int | None = None) -> Image.Image
     return mask
 
 
+# A grid cell counts as "off" (unlit) for any of these; everything else is lit.
+_ICON_OFF = {"", "0", ".", "-", "_", " "}
+
+
+def _cell_on(cell: object) -> bool:
+    """Return True when a pixel-grid cell should be lit (1/#/x on, 0/./space off)."""
+    if isinstance(cell, bool):
+        return cell
+    if isinstance(cell, (int, float)):
+        return cell != 0
+    return str(cell).strip() not in _ICON_OFF
+
+
+def icon_mask_from_grid(grid: object) -> Image.Image:
+    """Build an icon mask from a 2D pixel grid you draw yourself.
+
+    ``grid`` is either a list of rows - each row a list of cells (``[0, 1, 1]``)
+    or a string (``"011"``) - or one string whose rows are split on ``/`` or a
+    newline (``"011/110"``). A cell is lit unless it is 0, ``.``, ``-``, ``_`` or
+    blank, so ``#``/``1``/``x`` all draw a pixel. Rows may differ in length; the
+    mask is as wide as the longest. Authoring at the label band height (5 for the
+    3x5 font, 7 for 5x7) keeps it pixel perfect; another height is scaled to fit.
+    """
+    if isinstance(grid, str):
+        rows: list[object] = [row for row in grid.replace("\n", "/").split("/")]
+    else:
+        try:
+            rows = list(grid)  # type: ignore[arg-type]
+        except TypeError as err:
+            raise ValueError("an icon grid must be a list of rows or a string") from err
+    cells = [list(row) if not isinstance(row, (int, float, bool)) else [row] for row in rows]
+    cells = [row for row in cells if len(row) > 0]
+    if not cells:
+        raise ValueError("an icon grid needs at least one row")
+    height = len(cells)
+    width = max(len(row) for row in cells)
+    if width == 0:
+        raise ValueError("an icon grid needs at least one column")
+    if height > 64 or width > 64:
+        raise ValueError("an icon grid may be at most 64x64")
+    mask = Image.new("L", (width, height), 0)
+    px = mask.load()
+    for y, row in enumerate(cells):
+        for x, cell in enumerate(row):
+            if _cell_on(cell):
+                px[x, y] = 255
+    return mask
+
+
+def _fit_icon(mask: Image.Image, height: int) -> Image.Image:
+    """Scale an icon mask to ``height`` (nearest neighbour); keep it as-is when it already fits."""
+    if mask.height == height:
+        return mask
+    width = max(1, round(mask.width * height / mask.height))
+    return mask.resize((width, max(1, height)), Image.Resampling.NEAREST)
+
+
 def _concat_masks(masks: list[Image.Image], gap: int = 1) -> Image.Image:
     """Join masks side by side into one mask (top aligned), so they share a colour."""
     parts = [m for m in masks if m is not None]
@@ -221,6 +278,7 @@ def render_bars_frames(
     show_values: bool = False,
     value_format: str = "{:.0f}",
     value_icons: list[str] | None = None,
+    icons: dict | None = None,
     track: str | None = None,
     star_color: str | None = None,
     status: list[str] | None = None,
@@ -250,8 +308,10 @@ def render_bars_frames(
     chart, right-aligned on the label row of a horizontal one. ``value_icons``
     (one name per bar position in a group, e.g. ``["cpu", "ram"]``) draws a tiny
     icon in front of each value, so the CPU and memory bars of a node are told
-    apart at a glance. Bars and text that do not fit on the canvas are dropped
-    or clipped.
+    apart at a glance. The built-in names are ``cpu`` and ``ram``; ``icons`` adds
+    your own - a mapping of name to a 2D pixel grid you draw yourself (see
+    :func:`icon_mask_from_grid`), and a custom name overrides a built-in one.
+    Bars and text that do not fit on the canvas are dropped or clipped.
 
     ``track`` paints the empty rest of every bar in that colour, so the scale
     stays visible; ``star_color`` makes all stars one tone instead of a mix.
@@ -302,14 +362,20 @@ def render_bars_frames(
         text_rows = font[2]
     text_block = (text_rows + 1) if text_rows else 0
     icon_names = [str(name).strip().lower() for name in (value_icons or [])]
+    custom_icons = {str(name).strip().lower(): icon_mask_from_grid(grid) for name, grid in (icons or {}).items()}
     for name in icon_names:
-        if name and name not in ICONS:
-            raise ValueError(f"value_icons must be made of {', '.join(ICONS)}")
-    icon_masks = (
-        {name: render_icon(name, text_rows) for name in set(icon_names) if name}
-        if icon_names and text_rows
-        else {}
-    )
+        if name and name not in custom_icons and name not in ICONS:
+            raise ValueError(
+                f"value_icons: unknown icon {name!r} - use one of {', '.join(ICONS)} or define it in icons"
+            )
+    icon_masks: dict[str, Image.Image] = {}
+    if icon_names and text_rows:
+        for name in set(icon_names):
+            if not name:
+                continue
+            icon_masks[name] = (
+                _fit_icon(custom_icons[name], text_rows) if name in custom_icons else render_icon(name, text_rows)
+            )
     vertical = orientation == "vertical"
     count = len(values)
     groups = -(-count // group_size)
