@@ -187,6 +187,39 @@ def test_render_bars_value_icons():
         render_bars(8, 8, [1], show_values=True, value_icons=["gpu"])
 
 
+def test_render_bars_custom_icon_grids():
+    from custom_components.ipixel_color.device.charts import icon_mask_from_grid, render_bars
+
+    # a grid as a list of rows (ints or strings) and as one slash-separated string are equal
+    heart = ["01010", "11111", "11111", "01110", "00100"]
+    m = icon_mask_from_grid(heart)
+    assert m.size == (5, 5)
+    px = m.load()
+    assert px[0, 0] == 0 and px[1, 0] == 255 and all(px[x, 1] == 255 for x in range(5))
+    assert [[1 if px[x, y] else 0 for x in range(5)] for y in range(5)] == [
+        [0, 1, 0, 1, 0], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [0, 1, 1, 1, 0], [0, 0, 1, 0, 0]
+    ]
+    # cells off: 0 . - _ and blank; on: anything else. ragged rows pad to the widest
+    sparse = icon_mask_from_grid(["#..", "1"]).load()
+    assert sparse[0, 0] == 255 and sparse[1, 0] == 0 and sparse[0, 1] == 255
+    assert icon_mask_from_grid("010/101").size == (3, 2)
+    assert icon_mask_from_grid([[0, 1], [1, 0]]).load()[1, 0] == 255
+
+    for bad in ([], "", [[]]):
+        with pytest.raises(ValueError):
+            icon_mask_from_grid(bad)
+
+    # a custom icon is usable via value_icons and overrides a built-in name
+    disk = ["11111", "10001", "10001", "10001", "11111"]
+    common = dict(maximum=100, group_size=2, gap=1, show_values=True, colors=["0000ff", "ffa000"])
+    out = render_bars(40, 20, [30, 80], value_icons=["disk", "ram"], icons={"disk": disk}, **common).load()
+    blue = [x for x in range(40) for y in range(0, 6) if out[x, y] == (0, 0, 255)]
+    assert blue, "custom disk icon + value drawn in the bar colour"
+    # an unknown icon name (no built-in, not defined in icons) is rejected
+    with pytest.raises(ValueError):
+        render_bars(8, 8, [1], show_values=True, value_icons=["disk"])
+
+
 def test_native_font_names_resolve_to_bundled_files():
     from custom_components.ipixel_color.runtime import iPIXELRuntime
 

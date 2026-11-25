@@ -344,6 +344,15 @@ async def handle_display_image(runtime: iPIXELRuntime, call: ServiceCall) -> Non
         await _show()
 
 
+def _icon_grids(value: Any) -> dict | None:
+    """Validate the custom-icons mapping (name -> 2D pixel grid) from the service call."""
+    if value in (None, ""):
+        return None
+    if not isinstance(value, dict):
+        raise ServiceValidationError("icons must be a mapping of name to a pixel grid")
+    return value
+
+
 def _str_list(value: Any) -> list[str]:
     if value in (None, ""):
         return []
@@ -436,6 +445,7 @@ async def handle_display_bars(runtime: iPIXELRuntime, call: ServiceCall) -> None
         show_values=_bool(data.get("show_values"), False),
         value_format=str(data.get("value_format") or "{:.0f}"),
         value_icons=_str_list(data.get("value_icons")) or None,
+        icons=_icon_grids(data.get("icons")),
         track=_color_hex(data["track_color"], "14213d") if data.get("track_color") not in (None, "") else None,
         star_color=_color_hex(data["star_color"], "e5e5e5") if data.get("star_color") not in (None, "") else None,
         status=status,
